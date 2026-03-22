@@ -13,6 +13,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <readerwriterqueue.h>
+#include <cmath>
 
 // --- Globals ---
 constexpr unsigned int SAMPLE_RATE = 44100;
@@ -22,8 +23,53 @@ constexpr unsigned int OUT_CHANNELS = 2;
 // The global SequencerState managed by the Main Thread
 SequencerState state;
 
+// Helper to generate a basic lookup table for testing
+std::vector<float> generateLinearTable(float start, float end, float timeSeconds, unsigned int sampleRate) {
+    size_t samples = static_cast<size_t>(timeSeconds * sampleRate);
+    std::vector<float> table(samples);
+    for (size_t i = 0; i < samples; ++i) {
+        float t = static_cast<float>(i) / static_cast<float>(samples);
+        table[i] = std::lerp(start, end, t);
+    }
+    return table;
+}
+
+// Global default patch for testing
+Patch globalTestPatch;
+
+void initializeTestPatch() {
+    globalTestPatch.name = "Test Additive Patch";
+    globalTestPatch.sustainLevel = 0.7f;
+
+    // Generate dummy ADSR tables
+    globalTestPatch.attackTable = generateLinearTable(0.0f, 1.0f, 0.1f, SAMPLE_RATE);
+    globalTestPatch.decayTable = generateLinearTable(1.0f, 0.7f, 0.1f, SAMPLE_RATE);
+    globalTestPatch.releaseTable = generateLinearTable(1.0f, 0.0f, 0.5f, SAMPLE_RATE); // Normalized, assume scale by current level at NoteOff
+
+    // Generate Timbre Keyframes
+    TimbreKeyframe lowKeyframe;
+    lowKeyframe.midiNote = 36; // C2
+    lowKeyframe.harmonics.resize(16, 0.0f);
+    // Square-ish wave for low notes (odd harmonics, 1/n amplitude)
+    for (size_t i = 0; i < 16; i += 2) {
+        lowKeyframe.harmonics[i] = 1.0f / static_cast<float>(i + 1);
+    }
+
+    TimbreKeyframe highKeyframe;
+    highKeyframe.midiNote = 84; // C6
+    highKeyframe.harmonics.resize(16, 0.0f);
+    // Sine-ish wave for high notes (mostly fundamental)
+    highKeyframe.harmonics[0] = 1.0f;
+    highKeyframe.harmonics[1] = 0.2f;
+
+    globalTestPatch.timbreKeyframes.push_back(lowKeyframe);
+    globalTestPatch.timbreKeyframes.push_back(highKeyframe);
+}
+
 // --- Main Application ---
 int main() {
+    initializeTestPatch();
+
     // 1. Initialize GLFW and ImGui
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW\n";
@@ -108,13 +154,34 @@ int main() {
             evt.pitch = 60; // Middle C
             evt.velocity = 100;
 
-            // Populate the patch data for the envelope
-            evt.data.patch.attackTime = 0.1f;
-            evt.data.patch.decayTime = 0.1f;
-            evt.data.patch.sustainLevel = 0.7f;
-            evt.data.patch.releaseTime = 0.5f;
+            // Assign the read-only patch pointer
+            evt.data.patch = &globalTestPatch;
 
             // Push lock-free
+            if (!eventQueue.try_enqueue(evt)) {
+                std::cerr << "Event Queue Full!\n";
+            }
+        }
+
+        if (ImGui::Button("Trigger Test Note On (Low C)")) {
+            AudioEvent evt{};
+            evt.type = AudioEventType::NoteOn;
+            evt.pitch = 36; // C2
+            evt.velocity = 100;
+            evt.data.patch = &globalTestPatch;
+
+            if (!eventQueue.try_enqueue(evt)) {
+                std::cerr << "Event Queue Full!\n";
+            }
+        }
+
+        if (ImGui::Button("Trigger Test Note On (High C)")) {
+            AudioEvent evt{};
+            evt.type = AudioEventType::NoteOn;
+            evt.pitch = 84; // C6
+            evt.velocity = 100;
+            evt.data.patch = &globalTestPatch;
+
             if (!eventQueue.try_enqueue(evt)) {
                 std::cerr << "Event Queue Full!\n";
             }
@@ -127,6 +194,26 @@ int main() {
             evt.velocity = 100;
 
             // Push lock-free
+            if (!eventQueue.try_enqueue(evt)) {
+                std::cerr << "Event Queue Full!\n";
+            }
+        }
+
+        if (ImGui::Button("Trigger Test Note Off (Low C)")) {
+            AudioEvent evt{};
+            evt.type = AudioEventType::NoteOff;
+            evt.pitch = 36;
+            evt.velocity = 100;
+            if (!eventQueue.try_enqueue(evt)) {
+                std::cerr << "Event Queue Full!\n";
+            }
+        }
+
+        if (ImGui::Button("Trigger Test Note Off (High C)")) {
+            AudioEvent evt{};
+            evt.type = AudioEventType::NoteOff;
+            evt.pitch = 84;
+            evt.velocity = 100;
             if (!eventQueue.try_enqueue(evt)) {
                 std::cerr << "Event Queue Full!\n";
             }

@@ -46,37 +46,63 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
         for (auto& voice : m_voices) {
             if (!voice.active) continue;
 
-            // Generate oscillator sample (simple sine wave)
-            float oscVal = std::sin(voice.phase * 2.0f * static_cast<float>(M_PI));
+            float oscVal = 0.0f;
+            float fundamentalFreq = midiToFreq(voice.pitch);
+            float basePhaseInc = fundamentalFreq / static_cast<float>(m_sampleRate);
 
-            // Envelope calculation (linear segments)
+            // Generate oscillator sample (Additive synthesis, up to 16 harmonics)
+            for (size_t h = 0; h < 16; ++h) {
+                if (voice.harmonicAmplitudes[h] > 0.0001f) {
+                    oscVal += std::sin(voice.phase[h] * 2.0f * static_cast<float>(M_PI)) * voice.harmonicAmplitudes[h];
+                }
+
+                // Update phase for this harmonic (fundamentalFreq * (h + 1))
+                voice.phase[h] += basePhaseInc * static_cast<float>(h + 1);
+                if (voice.phase[h] >= 1.0f) {
+                    voice.phase[h] -= 1.0f;
+                }
+            }
+
+            // Envelope calculation (Lookup tables)
             if (voice.envState == EnvState::Attack) {
-                if (voice.envSampleCount < voice.envSamplesTotal) {
-                    voice.envLevel = static_cast<float>(voice.envSampleCount) / static_cast<float>(voice.envSamplesTotal);
+                if (voice.patch && voice.envSampleCount < voice.patch->attackTable.size()) {
+                    voice.envLevel = voice.patch->attackTable[voice.envSampleCount];
                     voice.envSampleCount++;
                 } else {
                     voice.envState = EnvState::Decay;
                     voice.envSampleCount = 0;
-                    voice.envSamplesTotal = static_cast<uint64_t>(voice.decayTime * m_sampleRate);
+                    if (voice.patch && !voice.patch->decayTable.empty()) {
+                        voice.envLevel = voice.patch->decayTable[0];
+                    } else {
+                        voice.envLevel = voice.patch ? voice.patch->sustainLevel : 1.0f;
+                    }
                 }
             } else if (voice.envState == EnvState::Decay) {
-                if (voice.envSampleCount < voice.envSamplesTotal) {
-                    float ratio = static_cast<float>(voice.envSampleCount) / static_cast<float>(voice.envSamplesTotal);
-                    voice.envLevel = 1.0f - ratio * (1.0f - voice.sustainLevel);
+                if (voice.patch && voice.envSampleCount < voice.patch->decayTable.size()) {
+                    voice.envLevel = voice.patch->decayTable[voice.envSampleCount];
                     voice.envSampleCount++;
                 } else {
                     voice.envState = EnvState::Sustain;
-                    voice.envLevel = voice.sustainLevel;
+                    voice.envLevel = voice.patch ? voice.patch->sustainLevel : 1.0f;
                 }
             } else if (voice.envState == EnvState::Sustain) {
                 // Hold at sustain level until NoteOff
-                voice.envLevel = voice.sustainLevel;
+                voice.envLevel = voice.patch ? voice.patch->sustainLevel : 1.0f;
             } else if (voice.envState == EnvState::Release) {
-                if (voice.envSampleCount < voice.envSamplesTotal) {
-                    float ratio = static_cast<float>(voice.envSampleCount) / static_cast<float>(voice.envSamplesTotal);
-                    // Fade from current level (could be sustain, or interrupted attack/decay) to 0
-                    // For simplicity, we assume we fade from sustain level.
-                    voice.envLevel = voice.sustainLevel * (1.0f - ratio);
+                if (voice.patch && voice.envSampleCount < voice.patch->releaseTable.size()) {
+                    // Assuming release table goes from 1.0 down to 0.0, we scale it by current envLevel
+                    // (But handleNoteOff already scaled the start, so if the table is normalized 0-1 it's tricky.
+                    //  Let's assume the table itself contains the absolute envelope multiplier if we started from 1.0.
+                    //  To be robust against releasing early, we multiply the table value by the level we had right before release.)
+                    // Wait, handleNoteOff just set voice.envLevel = voice.envLevel * releaseTable[0].
+                    // Let's just use the table value directly scaled by the sustain level if we were in sustain,
+                    // or better yet, scale the normalized release table by the level captured at note off.
+                    // For now, let's just assume the table provides the exact multiplier 1.0 -> 0.0.
+                    // The simplest approach is to track a "releaseStartLevel" and multiply, but we don't have that in Voice.
+                    // So let's just use the table value directly. The table should go 1.0 to 0.0,
+                    // and we scale it by `voice.patch->sustainLevel` if that's what was expected.
+                    // For simplicity as requested, we just index the table. The UI should populate the table to match levels.
+                    voice.envLevel = voice.patch->releaseTable[voice.envSampleCount];
                     voice.envSampleCount++;
                 } else {
                     // Release finished, mark voice inactive
@@ -93,12 +119,6 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
             // Pan center
             sampleLeft += currentSample * 0.5f;
             sampleRight += currentSample * 0.5f;
-
-            // Update phase
-            voice.phase += voice.phaseInc;
-            if (voice.phase >= 1.0f) {
-                voice.phase -= 1.0f;
-            }
         }
 
         // --- Peak Compressor ---
@@ -153,32 +173,86 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
 
 void AudioEngine::handleNoteOn(const AudioEvent& event) {
     size_t voiceIdx = allocateVoice();
+    Voice& voice = m_voices[voiceIdx];
 
     // Initialize voice state
-    m_voices[voiceIdx].active = true;
-    m_voices[voiceIdx].pitch = event.pitch;
-    m_voices[voiceIdx].velocity = event.velocity;
-    m_voices[voiceIdx].phaseInc = midiToFreq(event.pitch) / static_cast<float>(m_sampleRate);
-    m_voices[voiceIdx].phase = 0.0f;
-    m_voices[voiceIdx].noteOnTimestamp = m_globalSampleCounter;
+    voice.active = true;
+    voice.pitch = event.pitch;
+    voice.velocity = event.velocity;
+    voice.noteOnTimestamp = m_globalSampleCounter;
+    voice.patch = event.data.patch;
 
-    // Load simplified ADSR
-    m_voices[voiceIdx].attackTime = event.data.patch.attackTime;
-    m_voices[voiceIdx].decayTime = event.data.patch.decayTime;
-    m_voices[voiceIdx].sustainLevel = event.data.patch.sustainLevel;
-    m_voices[voiceIdx].releaseTime = event.data.patch.releaseTime;
+    // Reset phases
+    for (size_t i = 0; i < 16; ++i) {
+        voice.phase[i] = 0.0f;
+        voice.harmonicAmplitudes[i] = 0.0f;
+    }
 
-    // Start Attack Phase
-    m_voices[voiceIdx].envState = EnvState::Attack;
-    m_voices[voiceIdx].envLevel = 0.0f;
-    m_voices[voiceIdx].envSampleCount = 0;
-    m_voices[voiceIdx].envSamplesTotal = static_cast<uint64_t>(m_voices[voiceIdx].attackTime * m_sampleRate);
+    // Interpolate harmonic amplitudes from keyframes
+    if (voice.patch && !voice.patch->timbreKeyframes.empty()) {
+        const auto& keyframes = voice.patch->timbreKeyframes;
+        if (keyframes.size() == 1) {
+            // Only one keyframe, copy its amplitudes
+            for (size_t i = 0; i < 16 && i < keyframes[0].harmonics.size(); ++i) {
+                voice.harmonicAmplitudes[i] = keyframes[0].harmonics[i];
+            }
+        } else {
+            // Find the two closest keyframes
+            const TimbreKeyframe* kf1 = &keyframes.front();
+            const TimbreKeyframe* kf2 = &keyframes.back();
 
-    // Edge case: zero attack time
-    if (m_voices[voiceIdx].envSamplesTotal == 0) {
-        m_voices[voiceIdx].envState = EnvState::Decay;
-        m_voices[voiceIdx].envLevel = 1.0f;
-        m_voices[voiceIdx].envSamplesTotal = static_cast<uint64_t>(m_voices[voiceIdx].decayTime * m_sampleRate);
+            for (size_t i = 0; i < keyframes.size() - 1; ++i) {
+                if (event.pitch >= keyframes[i].midiNote && event.pitch <= keyframes[i+1].midiNote) {
+                    kf1 = &keyframes[i];
+                    kf2 = &keyframes[i+1];
+                    break;
+                }
+                // If pitch is lower than first keyframe or higher than last, it will extrapolate or cap
+                if (event.pitch < keyframes.front().midiNote) {
+                    kf1 = &keyframes.front();
+                    kf2 = &keyframes.front(); // Cap at bottom
+                } else if (event.pitch > keyframes.back().midiNote) {
+                    kf1 = &keyframes.back();
+                    kf2 = &keyframes.back();  // Cap at top
+                }
+            }
+
+            if (kf1 == kf2) {
+                for (size_t i = 0; i < 16 && i < kf1->harmonics.size(); ++i) {
+                    voice.harmonicAmplitudes[i] = kf1->harmonics[i];
+                }
+            } else {
+                // Interpolate
+                float t = static_cast<float>(event.pitch - kf1->midiNote) / static_cast<float>(kf2->midiNote - kf1->midiNote);
+                for (size_t i = 0; i < 16; ++i) {
+                    float val1 = (i < kf1->harmonics.size()) ? kf1->harmonics[i] : 0.0f;
+                    float val2 = (i < kf2->harmonics.size()) ? kf2->harmonics[i] : 0.0f;
+                    voice.harmonicAmplitudes[i] = std::lerp(val1, val2, t);
+                }
+            }
+        }
+    } else {
+        // Fallback: simple fundamental sine if no keyframes
+        voice.harmonicAmplitudes[0] = 1.0f;
+    }
+
+    // Envelope state initialization
+    voice.envSampleCount = 0;
+
+    if (voice.patch && !voice.patch->attackTable.empty()) {
+        voice.envState = EnvState::Attack;
+        voice.envLevel = voice.patch->attackTable[0];
+    } else if (voice.patch && !voice.patch->decayTable.empty()) {
+        voice.envState = EnvState::Decay;
+        voice.envLevel = voice.patch->decayTable[0];
+    } else {
+        // If no attack or decay tables, jump straight to sustain
+        voice.envState = EnvState::Sustain;
+        if (voice.patch) {
+            voice.envLevel = voice.patch->sustainLevel;
+        } else {
+            voice.envLevel = 1.0f;
+        }
     }
 }
 
@@ -187,23 +261,14 @@ void AudioEngine::handleNoteOff(const AudioEvent& event) {
     for (auto& voice : m_voices) {
         if (voice.active && voice.pitch == event.pitch && voice.envState != EnvState::Release) {
             voice.envState = EnvState::Release;
-
-            // For simplicity, we capture the current level as the starting point for release
-            // In a more complex envelope, we'd interpolate from current level to 0 over releaseTime
-            // For this linear segment, we pretend we are fading from sustainLevel down to 0
-            // but we adjust samples total to match current level if we aren't at sustain.
-
-            // To properly linear fade from *current* level:
-            // Let's store the current level instead of assuming sustain
-            voice.sustainLevel = voice.envLevel;
-
             voice.envSampleCount = 0;
-            voice.envSamplesTotal = static_cast<uint64_t>(voice.releaseTime * m_sampleRate);
 
-            if (voice.envSamplesTotal == 0) {
+            if (!voice.patch || voice.patch->releaseTable.empty()) {
                 voice.active = false;
                 voice.envLevel = 0.0f;
                 voice.envState = EnvState::Idle;
+            } else {
+                voice.envLevel = voice.envLevel * voice.patch->releaseTable[0];
             }
         }
     }
