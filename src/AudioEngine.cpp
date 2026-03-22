@@ -34,6 +34,20 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
             handleNoteOff(event);
         } else if (event.type == AudioEventType::ParameterChange) {
             handleParameterChange(event);
+        } else if (event.type == AudioEventType::PatchUpdate) {
+            if (event.data.patch) {
+                if (m_activePatch) {
+                    m_patchGarbageBin.push_back(std::unique_ptr<const Patch>(m_activePatch));
+                }
+                m_activePatch = event.data.patch;
+
+                // Also update any active voices using the old patch to the new one seamlessly
+                for (auto& voice : m_voices) {
+                    if (voice.active && voice.patch) {
+                        voice.patch = m_activePatch;
+                    }
+                }
+            }
         }
     }
 
@@ -180,7 +194,7 @@ void AudioEngine::handleNoteOn(const AudioEvent& event) {
     voice.pitch = event.pitch;
     voice.velocity = event.velocity;
     voice.noteOnTimestamp = m_globalSampleCounter;
-    voice.patch = event.data.patch;
+    voice.patch = event.data.patch ? event.data.patch : m_activePatch;
 
     // Reset phases
     for (size_t i = 0; i < 16; ++i) {

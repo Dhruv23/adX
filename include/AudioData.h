@@ -78,7 +78,8 @@ struct SequencerState {
 enum class AudioEventType : uint8_t {
     NoteOn,
     NoteOff,
-    ParameterChange
+    ParameterChange,
+    PatchUpdate
 };
 
 // Represents a single event passed from Main -> Audio Thread via lock-free queue
@@ -92,8 +93,9 @@ struct AudioEvent {
 
     // If it's a ParameterChange, this could hold an ID and a new float value.
     // If NoteOn, it might need pointers to the read-only tables for the allocated voice.
+    // If PatchUpdate, it holds a pointer to a new Patch object for the audio thread to take ownership of.
     union Data {
-        // Pointer to the thread-safe, read-only Patch object for this note
+        // Pointer to the thread-safe, read-only Patch object
         const Patch* patch;
 
         struct {

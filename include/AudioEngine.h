@@ -75,4 +75,10 @@ private:
     // Engine state
     std::array<Voice, 64> m_voices;
     CompressorState m_compressor;
+
+    // The active patch used for new notes
+    const Patch* m_activePatch = nullptr;
+
+    // Garbage collection bin for replaced patches to prevent data races during live editing
+    std::vector<std::unique_ptr<const Patch>> m_patchGarbageBin;
 };
