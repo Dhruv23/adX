@@ -22,17 +22,28 @@ enum class EnvState {
     Release
 };
 
+// Represents the harmonic profile for a specific MIDI note
+struct TimbreKeyframe {
+    uint8_t midiNote = 60;
+    std::vector<float> harmonics; // Up to 16 harmonics
+};
+
 // Represents a Synth configuration
 struct Patch {
     std::string name;
 
-    // Core parameters (example for a basic additive synth or simple subtractive)
-    float attackTime = 0.1f;
-    float decayTime = 0.1f;
-    float sustainLevel = 0.7f;
-    float releaseTime = 0.5f;
+    // Pre-calculated tables for envelope phases
+    std::vector<float> attackTable;
+    std::vector<float> decayTable;
+    std::vector<float> releaseTable;
 
-    // Pointers to pre-calculated tables or read-only resources
+    // Level to hold at during sustain
+    float sustainLevel = 0.7f;
+
+    // Keyframes for interpolating harmonic amplitudes across the keyboard
+    std::vector<TimbreKeyframe> timbreKeyframes;
+
+    // Pointers to pre-calculated tables or read-only resources (kept for legacy/future use)
     const EnvelopeData* envTable = nullptr;
     const WavetableData* waveTable = nullptr;
 };
@@ -82,22 +93,8 @@ struct AudioEvent {
     // If it's a ParameterChange, this could hold an ID and a new float value.
     // If NoteOn, it might need pointers to the read-only tables for the allocated voice.
     union Data {
-        struct {
-            const EnvelopeData* envTable;
-            const WavetableData* waveTable;
-            float attackTime;
-            float decayTime;
-            float sustainLevel;
-            float releaseTime;
-        } noteData;
-
-        // Simplified patch data passed in NoteOn
-        struct {
-            float attackTime;
-            float decayTime;
-            float sustainLevel;
-            float releaseTime;
-        } patch;
+        // Pointer to the thread-safe, read-only Patch object for this note
+        const Patch* patch;
 
         struct {
             uint32_t paramId;

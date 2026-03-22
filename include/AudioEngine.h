@@ -11,21 +11,17 @@ struct Voice {
     uint8_t pitch = 0;
     uint8_t velocity = 0;
 
-    // DSP state
-    float phase = 0.0f;
-    float phaseInc = 0.0f; // Phase increment per sample
+    // DSP state: 16 harmonics
+    std::array<float, 16> phase{};
+    std::array<float, 16> harmonicAmplitudes{};
 
     // Envelope state
     EnvState envState = EnvState::Idle;
     float envLevel = 0.0f;
-    uint64_t envSamplesTotal = 0; // Total length of current phase in samples
     uint64_t envSampleCount = 0;  // Current sample count in phase
 
-    // Temporary copy of patch parameters for this voice
-    float attackTime = 0.0f;
-    float decayTime = 0.0f;
-    float sustainLevel = 0.0f;
-    float releaseTime = 0.0f;
+    // Reference to the active patch (read-only)
+    const Patch* patch = nullptr;
 
     // A timestamp to implement voice stealing (lowest number = oldest)
     uint64_t noteOnTimestamp = 0;
