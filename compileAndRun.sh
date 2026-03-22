@@ -4,7 +4,6 @@
 set -e
 
 # --- CONFIGURATION ---
-# Matches the add_executable() target in your CMakeLists.txt
 EXECUTABLE_NAME="AudioSequencer" 
 
 echo "🛠️ Configuring project with CMake..."
@@ -23,7 +22,6 @@ echo "🚀 Running $EXECUTABLE_NAME..."
 echo "--------------------------------------------------"
 
 # --- SMART EXECUTION ---
-# Handles both single-config (Linux/macOS Makefiles) and multi-config (Windows MSVC) layouts
 if [ -f "./$EXECUTABLE_NAME" ]; then
     ./"$EXECUTABLE_NAME"
 elif [ -f "./Debug/$EXECUTABLE_NAME.exe" ]; then
