@@ -1,5 +1,7 @@
 #include "AudioData.h"
 
+#include "AudioEngine.h"
+
 #include <iostream>
 #include <chrono>
 #include <thread>
@@ -17,47 +19,8 @@ constexpr unsigned int SAMPLE_RATE = 44100;
 constexpr unsigned int BUFFER_FRAMES = 512;
 constexpr unsigned int OUT_CHANNELS = 2;
 
-// The lock-free queue: Single Producer (Main), Single Consumer (Audio)
-moodycamel::ReaderWriterQueue<AudioEvent> eventQueue(1024);
-
 // The global SequencerState managed by the Main Thread
 SequencerState state;
-
-// --- Audio Callback (Strictly Lock-Free and Wait-Free) ---
-int audioCallback(void* outputBuffer, void* inputBuffer, unsigned int nFrames,
-                  double streamTime, RtAudioStreamStatus status, void* userData) {
-    (void)inputBuffer;
-    (void)streamTime;
-    (void)status;
-    (void)userData;
-
-    float* out = static_cast<float*>(outputBuffer);
-
-    // 1. Drain the lock-free queue for any incoming events from the Main Thread
-    AudioEvent event;
-    while (eventQueue.try_dequeue(event)) {
-        if (event.type == AudioEventType::NoteOn) {
-            // Handle Note On (e.g., mark a pre-allocated voice as active)
-        } else if (event.type == AudioEventType::NoteOff) {
-            // Handle Note Off (e.g., put voice into release phase)
-        } else if (event.type == AudioEventType::ParameterChange) {
-            // Update a parameter for active voices
-        }
-    }
-
-    // 2. Process Audio (Currently Silent)
-    // We would loop through active voices and sum their output.
-    for (unsigned int i = 0; i < nFrames; ++i) {
-        float sampleLeft = 0.0f;
-        float sampleRight = 0.0f;
-
-        // Output to interleaved channels
-        *out++ = sampleLeft;
-        *out++ = sampleRight;
-    }
-
-    return 0; // Continue stream
-}
 
 // --- Main Application ---
 int main() {
@@ -106,11 +69,15 @@ int main() {
     parameters.nChannels = OUT_CHANNELS;
     parameters.firstChannel = 0;
 
+    // Create the lock-free queue and AudioEngine
+    moodycamel::ReaderWriterQueue<AudioEvent> eventQueue(1024);
+    AudioEngine engine(eventQueue, SAMPLE_RATE);
+
     unsigned int bufferFrames = BUFFER_FRAMES;
 
     if (!deviceIds.empty()) {
         if (dac.openStream(&parameters, nullptr, RTAUDIO_FLOAT32,
-                       SAMPLE_RATE, &bufferFrames, &audioCallback, nullptr) != 0) {
+                       SAMPLE_RATE, &bufferFrames, &AudioEngine::audioCallback, &engine) != 0) {
             std::cerr << "RtAudio error: failed to open stream.\n";
         } else if (dac.startStream() != 0) {
             std::cerr << "RtAudio error: failed to start stream.\n";
@@ -135,17 +102,29 @@ int main() {
         ImGui::Text("Playhead: %.2f Beats", state.playheadPositionBeats.load());
 
         // Example: Sending a test Note On event from Main Thread to Audio Thread
-        if (ImGui::Button("Trigger Test Note")) {
-            AudioEvent evt;
+        if (ImGui::Button("Trigger Test Note On (Middle C)")) {
+            AudioEvent evt{};
             evt.type = AudioEventType::NoteOn;
             evt.pitch = 60; // Middle C
             evt.velocity = 100;
-            evt.data.noteData.attackTime = 0.1f;
-            evt.data.noteData.decayTime = 0.1f;
-            evt.data.noteData.sustainLevel = 0.7f;
-            evt.data.noteData.releaseTime = 0.5f;
-            evt.data.noteData.envTable = nullptr;
-            evt.data.noteData.waveTable = nullptr;
+
+            // Populate the patch data for the envelope
+            evt.data.patch.attackTime = 0.1f;
+            evt.data.patch.decayTime = 0.1f;
+            evt.data.patch.sustainLevel = 0.7f;
+            evt.data.patch.releaseTime = 0.5f;
+
+            // Push lock-free
+            if (!eventQueue.try_enqueue(evt)) {
+                std::cerr << "Event Queue Full!\n";
+            }
+        }
+
+        if (ImGui::Button("Trigger Test Note Off (Middle C)")) {
+            AudioEvent evt{};
+            evt.type = AudioEventType::NoteOff;
+            evt.pitch = 60; // Middle C
+            evt.velocity = 100;
 
             // Push lock-free
             if (!eventQueue.try_enqueue(evt)) {

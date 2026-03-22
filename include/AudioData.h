@@ -13,6 +13,15 @@ struct WavetableData;
 
 // --- Data Structures ---
 
+// Envelope States
+enum class EnvState {
+    Idle,
+    Attack,
+    Decay,
+    Sustain,
+    Release
+};
+
 // Represents a Synth configuration
 struct Patch {
     std::string name;
@@ -81,6 +90,14 @@ struct AudioEvent {
             float sustainLevel;
             float releaseTime;
         } noteData;
+
+        // Simplified patch data passed in NoteOn
+        struct {
+            float attackTime;
+            float decayTime;
+            float sustainLevel;
+            float releaseTime;
+        } patch;
 
         struct {
             uint32_t paramId;
