@@ -62,7 +62,7 @@ private:
     size_t allocateVoice();
 
     // Utility DSP Math
-    static float midiToFreq(uint8_t midiNote);
+    float midiToFreq(uint8_t midiNote) const;
     void calculateCompressorCoefficients(unsigned int sampleRate);
 
     // References to externally provided queue
@@ -85,6 +85,10 @@ private:
     float m_bpm = 120.0f;
     double m_currentSamplePosition = 0.0;
     const Track* m_activeSequence = nullptr;
+
+    // Global parameters
+    float m_masterVolume = 0.75f;
+    float m_tuning = 440.0f;
 
     // Garbage collection bin for replaced patches to prevent data races during live editing
     std::vector<std::unique_ptr<const Patch>> m_patchGarbageBin;

@@ -69,6 +69,10 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
             }
         } else if (event.type == AudioEventType::BpmChange) {
             m_bpm = event.data.bpmState.bpm;
+        } else if (event.type == AudioEventType::MasterVolChange) {
+            m_masterVolume = event.data.masterVol.volume;
+        } else if (event.type == AudioEventType::GlobalTuningChange) {
+            m_tuning = event.data.globalTuning.tuning;
         } else if (event.type == AudioEventType::SequenceUpdate) {
             if (event.data.track) {
                 if (m_activeSequence) {
@@ -282,6 +286,10 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
         sampleLeft *= m_compressor.currentGainReduction;
         sampleRight *= m_compressor.currentGainReduction;
 
+        // Apply master volume
+        sampleLeft *= m_masterVolume;
+        sampleRight *= m_masterVolume;
+
         // --- Hard Clamp ---
         sampleLeft = std::clamp(sampleLeft, -1.0f, 1.0f);
         sampleRight = std::clamp(sampleRight, -1.0f, 1.0f);
@@ -453,8 +461,8 @@ size_t AudioEngine::allocateVoice() {
     return oldestIdx;
 }
 
-float AudioEngine::midiToFreq(uint8_t midiNote) {
-    return 440.0f * std::pow(2.0f, (static_cast<float>(midiNote) - 69.0f) / 12.0f);
+float AudioEngine::midiToFreq(uint8_t midiNote) const {
+    return m_tuning * std::pow(2.0f, (static_cast<float>(midiNote) - 69.0f) / 12.0f);
 }
 
 void AudioEngine::calculateCompressorCoefficients(unsigned int sampleRate) {

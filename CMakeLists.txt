@@ -84,6 +84,7 @@ add_executable(AudioSequencer
     src/main.cpp
     src/AudioEngine.cpp
     src/SequencerUI.cpp
+    src/AdxParser.cpp
 )
 
 target_include_directories(AudioSequencer PRIVATE include)

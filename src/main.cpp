@@ -1,6 +1,7 @@
 #include "AudioData.h"
 #include "AudioEngine.h"
 #include "SequencerUI.h"
+#include "AdxParser.h"
 
 #include <iostream>
 #include <chrono>
@@ -150,6 +151,9 @@ void initializeTestPatch() {
 
 // Call this whenever an envelope handle or duration changes
 void updateDraftPatchEnvelopes() {
+    draftPatch.attackMs = attackMs;
+    draftPatch.decayMs = decayMs;
+    draftPatch.releaseMs = releaseMs;
     draftPatch.sustainLevel = sustainLvl;
 
     // Y values: 0.0 is top (value 1.0), 1.0 is bottom (value 0.0) in UI space.
@@ -292,9 +296,72 @@ int main() {
         }
 
         ImGui::SameLine();
+        ImGui::SameLine();
         ImGui::Text(" | AUDIO ENGINE: %s | PLAYHEAD: %.2f BEATS",
                     dac.isStreamRunning() ? "RUNNING" : "STOPPED",
                     state.playheadPositionBeats.load(std::memory_order_relaxed));
+
+        ImGui::SameLine(ImGui::GetWindowWidth() - 400);
+        static char filepath[256] = "project.adx";
+        ImGui::SetNextItemWidth(200.0f);
+        ImGui::InputText("##File", filepath, IM_ARRAYSIZE(filepath));
+
+        ImGui::SameLine();
+        if (ImGui::Button("LOAD")) {
+            std::string firstPatchName;
+            if (AdxParser::LoadProject(filepath, state, firstPatchName)) {
+                // Synchronize UI if patches were loaded
+                if (!firstPatchName.empty() && state.patches.count(firstPatchName)) {
+                    auto& firstPatch = state.patches[firstPatchName];
+                    draftPatch = firstPatch;
+
+                    // Update UI state from patch
+                    attackMs = firstPatch.attackMs;
+                    decayMs = firstPatch.decayMs;
+                    releaseMs = firstPatch.releaseMs;
+                    sustainLvl = firstPatch.sustainLevel;
+
+                    updateDraftPatchEnvelopes();
+
+                    // Send patch update
+                    AudioEvent patchEvt{};
+                    patchEvt.type = AudioEventType::PatchUpdate;
+                    patchEvt.data.patch = new Patch(draftPatch);
+                    eventQueue.try_enqueue(patchEvt);
+                }
+
+                // Send global updates
+                AudioEvent volEvt{};
+                volEvt.type = AudioEventType::MasterVolChange;
+                volEvt.data.masterVol.volume = state.masterVolume.load();
+                eventQueue.try_enqueue(volEvt);
+
+                AudioEvent tuningEvt{};
+                tuningEvt.type = AudioEventType::GlobalTuningChange;
+                tuningEvt.data.globalTuning.tuning = state.tuning.load();
+                eventQueue.try_enqueue(tuningEvt);
+
+                AudioEvent bpmEvt{};
+                bpmEvt.type = AudioEventType::BpmChange;
+                bpmEvt.data.bpmState.bpm = state.bpm.load();
+                eventQueue.try_enqueue(bpmEvt);
+
+                // Send track update if available
+                if (!state.tracks.empty()) {
+                    AudioEvent trackEvt{};
+                    trackEvt.type = AudioEventType::SequenceUpdate;
+                    trackEvt.data.track = new Track(state.tracks[0]);
+                    eventQueue.try_enqueue(trackEvt);
+                }
+            }
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("SAVE AS NEW")) {
+            // Update the state's patch before saving
+            state.patches[draftPatch.name] = draftPatch;
+            AdxParser::SaveProject(filepath, state);
+        }
 
         ImGui::EndGroup();
 
