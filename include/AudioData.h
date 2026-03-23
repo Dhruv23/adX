@@ -32,6 +32,11 @@ struct TimbreKeyframe {
 struct Patch {
     std::string name;
 
+    // Raw envelope ms (for saving/loading .adx)
+    float attackMs = 100.0f;
+    float decayMs = 100.0f;
+    float releaseMs = 500.0f;
+
     // Pre-calculated tables for envelope phases
     std::vector<float> attackTable;
     std::vector<float> decayTable;
@@ -72,6 +77,10 @@ struct SequencerState {
     std::atomic<float> playheadPositionBeats{0.0f};
     std::atomic<bool> isPlaying{false};
     std::atomic<float> bpm{120.0f};
+
+    // Global parameters
+    std::atomic<float> masterVolume{0.75f};
+    std::atomic<float> tuning{440.0f};
 };
 
 // --- Thread Synchronization ---
@@ -84,7 +93,9 @@ enum class AudioEventType : uint8_t {
     PatchUpdate,
     PlayStateChange,
     BpmChange,
-    SequenceUpdate
+    SequenceUpdate,
+    MasterVolChange,
+    GlobalTuningChange
 };
 
 // Represents a single event passed from Main -> Audio Thread via lock-free queue
@@ -119,6 +130,14 @@ struct AudioEvent {
         struct {
             float bpm;
         } bpmState;
+
+        struct {
+            float volume;
+        } masterVol;
+
+        struct {
+            float tuning;
+        } globalTuning;
     } data;
 };
 
