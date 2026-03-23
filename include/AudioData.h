@@ -70,6 +70,8 @@ struct SequencerState {
     // Shared between Main and Audio threads
     // The main thread might reset it, the audio thread increments it
     std::atomic<float> playheadPositionBeats{0.0f};
+    std::atomic<bool> isPlaying{false};
+    std::atomic<float> bpm{120.0f};
 };
 
 // --- Thread Synchronization ---
@@ -79,7 +81,10 @@ enum class AudioEventType : uint8_t {
     NoteOn,
     NoteOff,
     ParameterChange,
-    PatchUpdate
+    PatchUpdate,
+    PlayStateChange,
+    BpmChange,
+    SequenceUpdate
 };
 
 // Represents a single event passed from Main -> Audio Thread via lock-free queue
@@ -94,14 +99,26 @@ struct AudioEvent {
     // If it's a ParameterChange, this could hold an ID and a new float value.
     // If NoteOn, it might need pointers to the read-only tables for the allocated voice.
     // If PatchUpdate, it holds a pointer to a new Patch object for the audio thread to take ownership of.
+    // If SequenceUpdate, it holds a pointer to a new Track object.
     union Data {
         // Pointer to the thread-safe, read-only Patch object
         const Patch* patch;
+
+        // Pointer to the thread-safe, read-only Track object for sequence updates
+        const Track* track;
 
         struct {
             uint32_t paramId;
             float value;
         } paramData;
+
+        struct {
+            bool isPlaying;
+        } playState;
+
+        struct {
+            float bpm;
+        } bpmState;
     } data;
 };
 

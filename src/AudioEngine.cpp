@@ -7,8 +7,8 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-AudioEngine::AudioEngine(moodycamel::ReaderWriterQueue<AudioEvent>& eventQueue, unsigned int sampleRate)
-    : m_eventQueue(eventQueue), m_sampleRate(sampleRate), m_globalSampleCounter(0) {
+AudioEngine::AudioEngine(moodycamel::ReaderWriterQueue<AudioEvent>& eventQueue, unsigned int sampleRate, std::atomic<float>& playheadPositionBeats)
+    : m_eventQueue(eventQueue), m_playheadPositionBeats(playheadPositionBeats), m_sampleRate(sampleRate), m_globalSampleCounter(0) {
     calculateCompressorCoefficients(sampleRate);
 }
 
@@ -48,11 +48,122 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
                     }
                 }
             }
+        } else if (event.type == AudioEventType::PlayStateChange) {
+            m_isPlaying = event.data.playState.isPlaying;
+            if (!m_isPlaying) {
+                // When stopped, reset playhead and kill all active sequence voices
+                m_currentSamplePosition = 0.0;
+                for (auto& voice : m_voices) {
+                    if (voice.active) { // Optionally only kill sequence voices, but usually stop kills all
+                        voice.envState = EnvState::Release;
+                        voice.envSampleCount = 0;
+                        if (!voice.patch || voice.patch->releaseTable.empty()) {
+                            voice.active = false;
+                            voice.envLevel = 0.0f;
+                            voice.envState = EnvState::Idle;
+                        } else {
+                            voice.envLevel = voice.envLevel * voice.patch->releaseTable[0];
+                        }
+                    }
+                }
+            }
+        } else if (event.type == AudioEventType::BpmChange) {
+            m_bpm = event.data.bpmState.bpm;
+        } else if (event.type == AudioEventType::SequenceUpdate) {
+            if (event.data.track) {
+                if (m_activeSequence) {
+                    m_sequenceGarbageBin.push_back(std::unique_ptr<const Track>(m_activeSequence));
+                }
+                m_activeSequence = event.data.track;
+
+                // When sequence changes, to be safe, cut active sequence notes to prevent stuck notes
+                // For a more robust approach, we could tag voices triggered by the sequence, but
+                // for simplicity we'll just send all notes to release to prevent infinite hangs.
+                for (auto& voice : m_voices) {
+                    if (voice.active && voice.envState != EnvState::Release) {
+                        voice.envState = EnvState::Release;
+                        voice.envSampleCount = 0;
+                        if (!voice.patch || voice.patch->releaseTable.empty()) {
+                            voice.active = false;
+                            voice.envLevel = 0.0f;
+                            voice.envState = EnvState::Idle;
+                        } else {
+                            voice.envLevel = voice.envLevel * voice.patch->releaseTable[0];
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    // Calculate samples per beat for sequence playback
+    double samplesPerBeat = (m_sampleRate * 60.0) / m_bpm;
+
+    // --- Sequencer Event Pre-calculation ---
+    // Instead of evaluating floats per-sample, we find all NoteOn/NoteOff events
+    // that occur within this entire audio block [m_currentSamplePosition, m_currentSamplePosition + nFrames)
+    struct ScheduledEvent {
+        unsigned int sampleOffset;
+        bool isNoteOn;
+        uint8_t pitch;
+        uint8_t velocity;
+    };
+    std::vector<ScheduledEvent> scheduledEvents;
+
+    if (m_isPlaying && m_activeSequence) {
+        double blockStartBeat = m_currentSamplePosition / samplesPerBeat;
+        double blockEndBeat = (m_currentSamplePosition + nFrames) / samplesPerBeat;
+
+        for (const auto& note : m_activeSequence->notes) {
+            double noteStartBeat = note.startBeat;
+            double noteEndBeat = note.startBeat + note.lengthBeats;
+
+            // Check Note On
+            if (noteStartBeat >= blockStartBeat && noteStartBeat < blockEndBeat) {
+                double beatOffset = noteStartBeat - blockStartBeat;
+                unsigned int sampleOffset = static_cast<unsigned int>(beatOffset * samplesPerBeat);
+                if (sampleOffset < nFrames) {
+                    scheduledEvents.push_back({sampleOffset, true, note.pitch, note.velocity});
+                }
+            }
+
+            // Check Note Off
+            if (noteEndBeat >= blockStartBeat && noteEndBeat < blockEndBeat) {
+                double beatOffset = noteEndBeat - blockStartBeat;
+                unsigned int sampleOffset = static_cast<unsigned int>(beatOffset * samplesPerBeat);
+                if (sampleOffset < nFrames) {
+                    scheduledEvents.push_back({sampleOffset, false, note.pitch, note.velocity});
+                }
+            }
+        }
+
+        // Advance global position by block size
+        m_currentSamplePosition += nFrames;
     }
 
     // 2. Process Audio
     for (unsigned int i = 0; i < nFrames; ++i) {
+
+        // Dispatch scheduled events for this specific sample
+        for (const auto& ev : scheduledEvents) {
+            if (ev.sampleOffset == i) {
+                if (ev.isNoteOn) {
+                    AudioEvent onEvt{};
+                    onEvt.type = AudioEventType::NoteOn;
+                    onEvt.pitch = ev.pitch;
+                    onEvt.velocity = ev.velocity;
+                    onEvt.data.patch = nullptr;
+                    handleNoteOn(onEvt);
+                } else {
+                    AudioEvent offEvt{};
+                    offEvt.type = AudioEventType::NoteOff;
+                    offEvt.pitch = ev.pitch;
+                    offEvt.velocity = ev.velocity;
+                    handleNoteOff(offEvt);
+                }
+            }
+        }
+
         float sampleLeft = 0.0f;
         float sampleRight = 0.0f;
 
@@ -180,6 +291,16 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
         *outputBuffer++ = sampleRight;
 
         m_globalSampleCounter++;
+    }
+
+    // After processing the block, update the global playhead position
+    // if the sequencer is playing. We'll use relaxed memory ordering
+    // because this is for the UI to read loosely, not for strict sync.
+    if (m_isPlaying) {
+        float currentBeatFloat = static_cast<float>(m_currentSamplePosition / samplesPerBeat);
+        m_playheadPositionBeats.store(currentBeatFloat, std::memory_order_relaxed);
+    } else {
+        m_playheadPositionBeats.store(0.0f, std::memory_order_relaxed);
     }
 
     return 0; // Continue stream
