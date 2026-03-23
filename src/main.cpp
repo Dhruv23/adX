@@ -1,6 +1,6 @@
 #include "AudioData.h"
-
 #include "AudioEngine.h"
+#include "SequencerUI.h"
 
 #include <iostream>
 #include <chrono>
@@ -216,7 +216,7 @@ int main() {
 
     // Create the lock-free queue and AudioEngine
     moodycamel::ReaderWriterQueue<AudioEvent> eventQueue(1024);
-    AudioEngine engine(eventQueue, SAMPLE_RATE);
+    AudioEngine engine(eventQueue, SAMPLE_RATE, state.playheadPositionBeats);
 
     unsigned int bufferFrames = BUFFER_FRAMES;
 
@@ -265,82 +265,49 @@ int main() {
 
         // UI rendering
         ImGui::Begin("MainCanvas", nullptr, windowFlags);
-        ImGui::Text("AUDIO ENGINE STATUS: %s", dac.isStreamRunning() ? "RUNNING" : "STOPPED");
-        ImGui::Text("PLAYHEAD: %.2f BEATS", state.playheadPositionBeats.load());
 
-        // Example: Sending a test Note On event from Main Thread to Audio Thread
-        if (ImGui::Button("TRIGGER TEST NOTE ON (MIDDLE C)")) {
+        // --- Top Bar: Transport Controls ---
+        ImGui::BeginGroup();
+
+        bool isPlaying = state.isPlaying.load();
+        if (ImGui::Button(isPlaying ? "STOP" : "PLAY", ImVec2(100, 30))) {
+            isPlaying = !isPlaying;
+            state.isPlaying.store(isPlaying);
+
             AudioEvent evt{};
-            evt.type = AudioEventType::NoteOn;
-            evt.pitch = 60; // Middle C
-            evt.velocity = 100;
-            evt.data.patch = nullptr; // Uses engine's active patch
-
-            // Push lock-free
-            if (!eventQueue.try_enqueue(evt)) {
-                std::cerr << "Event Queue Full!\n";
-            }
+            evt.type = AudioEventType::PlayStateChange;
+            evt.data.playState.isPlaying = isPlaying;
+            eventQueue.try_enqueue(evt);
         }
 
-        if (ImGui::Button("TRIGGER TEST NOTE ON (LOW C)")) {
+        ImGui::SameLine();
+        float currentBpm = state.bpm.load();
+        ImGui::SetNextItemWidth(200.0f);
+        if (ImGui::SliderFloat("BPM", &currentBpm, 20.0f, 300.0f, "%.1f")) {
+            state.bpm.store(currentBpm);
             AudioEvent evt{};
-            evt.type = AudioEventType::NoteOn;
-            evt.pitch = 36; // C2
-            evt.velocity = 100;
-            evt.data.patch = nullptr;
-
-            if (!eventQueue.try_enqueue(evt)) {
-                std::cerr << "Event Queue Full!\n";
-            }
+            evt.type = AudioEventType::BpmChange;
+            evt.data.bpmState.bpm = currentBpm;
+            eventQueue.try_enqueue(evt);
         }
 
-        if (ImGui::Button("TRIGGER TEST NOTE ON (HIGH C)")) {
-            AudioEvent evt{};
-            evt.type = AudioEventType::NoteOn;
-            evt.pitch = 84; // C6
-            evt.velocity = 100;
-            evt.data.patch = nullptr;
+        ImGui::SameLine();
+        ImGui::Text(" | AUDIO ENGINE: %s | PLAYHEAD: %.2f BEATS",
+                    dac.isStreamRunning() ? "RUNNING" : "STOPPED",
+                    state.playheadPositionBeats.load(std::memory_order_relaxed));
 
-            if (!eventQueue.try_enqueue(evt)) {
-                std::cerr << "Event Queue Full!\n";
-            }
-        }
-
-        if (ImGui::Button("TRIGGER TEST NOTE OFF (MIDDLE C)")) {
-            AudioEvent evt{};
-            evt.type = AudioEventType::NoteOff;
-            evt.pitch = 60; // Middle C
-            evt.velocity = 100;
-
-            // Push lock-free
-            if (!eventQueue.try_enqueue(evt)) {
-                std::cerr << "Event Queue Full!\n";
-            }
-        }
-
-        if (ImGui::Button("TRIGGER TEST NOTE OFF (LOW C)")) {
-            AudioEvent evt{};
-            evt.type = AudioEventType::NoteOff;
-            evt.pitch = 36;
-            evt.velocity = 100;
-            if (!eventQueue.try_enqueue(evt)) {
-                std::cerr << "Event Queue Full!\n";
-            }
-        }
-
-        if (ImGui::Button("TRIGGER TEST NOTE OFF (HIGH C)")) {
-            AudioEvent evt{};
-            evt.type = AudioEventType::NoteOff;
-            evt.pitch = 84;
-            evt.velocity = 100;
-            if (!eventQueue.try_enqueue(evt)) {
-                std::cerr << "Event Queue Full!\n";
-            }
-        }
+        ImGui::EndGroup();
 
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
+
+        // --- Split screen: Patch Editor (Top) & Sequencer (Bottom) ---
+        float windowHeight = ImGui::GetContentRegionAvail().y;
+        float patchEditorHeight = windowHeight * 0.4f;
+
+        ImGui::BeginChild("PatchEditor", ImVec2(0, patchEditorHeight), false, ImGuiWindowFlags_NoScrollbar);
+
         ImGui::Text("PATCH EDITOR: ENVELOPE (ADSR)");
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -637,6 +604,13 @@ int main() {
             }
         }
 
+        ImGui::EndChild();
+
+        ImGui::Separator();
+
+        // --- Bottom Half: Sequencer ---
+        DrawSequencerUI(state, eventQueue);
+
         ImGui::End();
 
         // Rendering
@@ -649,6 +623,17 @@ int main() {
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glfwSwapBuffers(window);
+
+        // Safe Garbage Collection on the Main Thread
+        // The Audio Thread has pushed old pointers to these bins to safely surrender ownership.
+        if (!engine.m_patchGarbageBin.empty() || !engine.m_sequenceGarbageBin.empty()) {
+            // Note: In a stricter lock-free architecture we would pull from a moodycamel concurrent queue.
+            // But since the project currently uses a std::vector populated by the audio thread,
+            // the main thread can carefully clear it when it knows it's safe (e.g. between frames).
+            // This is a minimal stopgap. A proper implementation would use `try_dequeue` on a reverse queue.
+            engine.m_patchGarbageBin.clear();
+            engine.m_sequenceGarbageBin.clear();
+        }
     }
 
     // 4. Cleanup

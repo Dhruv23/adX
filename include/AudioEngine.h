@@ -42,7 +42,7 @@ struct CompressorState {
 
 class AudioEngine {
 public:
-    AudioEngine(moodycamel::ReaderWriterQueue<AudioEvent>& eventQueue, unsigned int sampleRate);
+    AudioEngine(moodycamel::ReaderWriterQueue<AudioEvent>& eventQueue, unsigned int sampleRate, std::atomic<float>& playheadPositionBeats);
     ~AudioEngine() = default;
 
     // The static callback passed to RtAudio
@@ -67,6 +67,7 @@ private:
 
     // References to externally provided queue
     moodycamel::ReaderWriterQueue<AudioEvent>& m_eventQueue;
+    std::atomic<float>& m_playheadPositionBeats;
 
     // Audio context
     unsigned int m_sampleRate;
@@ -79,6 +80,18 @@ private:
     // The active patch used for new notes
     const Patch* m_activePatch = nullptr;
 
+    // Sequencer state
+    bool m_isPlaying = false;
+    float m_bpm = 120.0f;
+    double m_currentSamplePosition = 0.0;
+    const Track* m_activeSequence = nullptr;
+
     // Garbage collection bin for replaced patches to prevent data races during live editing
     std::vector<std::unique_ptr<const Patch>> m_patchGarbageBin;
+
+    // Garbage collection bin for replaced sequences
+    std::vector<std::unique_ptr<const Track>> m_sequenceGarbageBin;
+
+    // Allow main function to access garbage bins for cleanup
+    friend int main();
 };

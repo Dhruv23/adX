@@ -83,6 +83,7 @@ target_include_directories(ReaderWriterQueue INTERFACE ${readerwriterqueue_SOURC
 add_executable(AudioSequencer
     src/main.cpp
     src/AudioEngine.cpp
+    src/SequencerUI.cpp
 )
 
 target_include_directories(AudioSequencer PRIVATE include)
