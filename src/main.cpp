@@ -2,6 +2,7 @@
 #include "AudioEngine.h"
 #include "SequencerUI.h"
 #include "AdxParser.h"
+#include <portable-file-dialogs.h>
 
 #include <iostream>
 #include <chrono>
@@ -308,8 +309,10 @@ int main() {
 
         ImGui::SameLine();
         if (ImGui::Button("LOAD")) {
-            std::string firstPatchName;
-            if (AdxParser::LoadProject(filepath, state, firstPatchName)) {
+            auto sel = pfd::open_file("Open ADX Project", ".", {"ADX Files", "*.adx", "All Files", "*"}).result();
+            if (!sel.empty()) {
+                std::string firstPatchName;
+                if (AdxParser::LoadProject(sel[0], state, firstPatchName)) {
                 // Synchronize UI if patches were loaded
                 if (!firstPatchName.empty() && state.patches.count(firstPatchName)) {
                     auto& firstPatch = state.patches[firstPatchName];
@@ -347,11 +350,12 @@ int main() {
                 eventQueue.try_enqueue(bpmEvt);
 
                 // Send track update if available
-                if (!state.tracks.empty()) {
-                    AudioEvent trackEvt{};
-                    trackEvt.type = AudioEventType::SequenceUpdate;
-                    trackEvt.data.track = new Track(state.tracks[0]);
-                    eventQueue.try_enqueue(trackEvt);
+                    if (!state.tracks.empty()) {
+                        AudioEvent trackEvt{};
+                        trackEvt.type = AudioEventType::SequenceUpdate;
+                        trackEvt.data.track = new Track(state.tracks[0]);
+                        eventQueue.try_enqueue(trackEvt);
+                    }
                 }
             }
         }
