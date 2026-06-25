@@ -18,6 +18,10 @@
 #include <cmath>
 #include <algorithm>
 
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 // --- Custom Styling Constants ---
 const ImU32 COLOR_ATTACK = IM_COL32(255, 60, 60, 255);
 const ImU32 COLOR_DECAY = IM_COL32(255, 200, 50, 255);

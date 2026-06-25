@@ -100,3 +100,12 @@ if(APPLE)
 elseif(UNIX AND NOT APPLE)
     target_link_libraries(AudioSequencer PRIVATE asound pthread m dl)
 endif()
+
+
+if(WIN32)
+    add_custom_command(TARGET AudioSequencer POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:glfw>"
+        "$<TARGET_FILE_DIR:AudioSequencer>"
+    )
+endif()
