@@ -140,5 +140,5 @@ private:
     std::vector<std::unique_ptr<const std::vector<Track>>> m_sequenceGarbageBin;
 
     // Allow main function to access garbage bins for cleanup
-    friend int main();
+    friend int main(int, char**);
 };

@@ -442,8 +442,69 @@ void CheckForHotReload(moodycamel::ReaderWriterQueue<AudioEvent>& eventQueue)
     }
 }
 
+// Shared by the LOAD button and the command-line startup path: parses the
+// .adx into the global state, syncs the draft patch/envelope UI, mirrors
+// everything to the audio thread, and starts hot-reload watching the file.
+static bool LoadProjectAndSync(const std::string& path, moodycamel::ReaderWriterQueue<AudioEvent>& eventQueue)
+{
+    std::string firstPatchName;
+    if (!AdxParser::LoadProject(path, state, firstPatchName))
+    {
+        return false;
+    }
+
+    // Synchronize UI if patches were loaded
+    if (!firstPatchName.empty() && state.patches.count(firstPatchName))
+    {
+        auto &firstPatch = state.patches[firstPatchName];
+        draftPatch = firstPatch;
+
+        // Update UI state from patch
+        attackMs = firstPatch.attackMs;
+        decayMs = firstPatch.decayMs;
+        releaseMs = firstPatch.releaseMs;
+        sustainLvl = firstPatch.sustainLevel;
+
+        updateDraftPatchEnvelopes();
+
+        // Send patch update
+        DispatchPatchUpdate(eventQueue, draftPatch);
+    }
+
+    // Send global updates
+    AudioEvent volEvt{};
+    volEvt.type = AudioEventType::MasterVolChange;
+    volEvt.data.masterVol.volume = state.masterVolume.load();
+    eventQueue.try_enqueue(volEvt);
+
+    AudioEvent tuningEvt{};
+    tuningEvt.type = AudioEventType::GlobalTuningChange;
+    tuningEvt.data.globalTuning.tuning = state.tuning.load();
+    eventQueue.try_enqueue(tuningEvt);
+
+    AudioEvent bpmEvt{};
+    bpmEvt.type = AudioEventType::BpmChange;
+    bpmEvt.data.bpmState.bpm = state.bpm.load();
+    eventQueue.try_enqueue(bpmEvt);
+
+    // Master FX (delay/reverb/sidechain/drive) from [GLOBAL]
+    DispatchAllMasterFx(eventQueue, state.masterFx);
+
+    // Send track update if available
+    if (!state.tracks.empty())
+    {
+        DispatchTrackUpdate(eventQueue, state.tracks);
+    }
+
+    // Start watching this file for external changes (live-coding hot reload)
+    g_loadedProjectPath = path;
+    std::error_code ec;
+    g_lastKnownWriteTime = std::filesystem::last_write_time(g_loadedProjectPath, ec);
+    return true;
+}
+
 // --- Main Application ---
-int main()
+int main(int argc, char** argv)
 {
     initializeTestPatch();
 
@@ -530,6 +591,19 @@ int main()
         if (!eventQueue.try_enqueue(patchUpdateEvt))
         {
             delete patchUpdateEvt.data.patch;
+        }
+    }
+
+    // Command-line project load: `AudioSequencer.exe path/to/project.adx`
+    if (argc > 1)
+    {
+        if (LoadProjectAndSync(argv[1], eventQueue))
+        {
+            std::cout << "Loaded project from command line: " << argv[1] << "\n";
+        }
+        else
+        {
+            std::cerr << "Failed to load project from command line: " << argv[1] << "\n";
         }
     }
 
@@ -638,57 +712,7 @@ int main()
             auto sel = pfd::open_file("Open ADX Project", ".", {"ADX Files", "*.adx", "All Files", "*"}).result();
             if (!sel.empty())
             {
-                std::string firstPatchName;
-                if (AdxParser::LoadProject(sel[0], state, firstPatchName))
-                {
-                    // Synchronize UI if patches were loaded
-                    if (!firstPatchName.empty() && state.patches.count(firstPatchName))
-                    {
-                        auto &firstPatch = state.patches[firstPatchName];
-                        draftPatch = firstPatch;
-
-                        // Update UI state from patch
-                        attackMs = firstPatch.attackMs;
-                        decayMs = firstPatch.decayMs;
-                        releaseMs = firstPatch.releaseMs;
-                        sustainLvl = firstPatch.sustainLevel;
-
-                        updateDraftPatchEnvelopes();
-
-                        // Send patch update
-                        DispatchPatchUpdate(eventQueue, draftPatch);
-                    }
-
-                    // Send global updates
-                    AudioEvent volEvt{};
-                    volEvt.type = AudioEventType::MasterVolChange;
-                    volEvt.data.masterVol.volume = state.masterVolume.load();
-                    eventQueue.try_enqueue(volEvt);
-
-                    AudioEvent tuningEvt{};
-                    tuningEvt.type = AudioEventType::GlobalTuningChange;
-                    tuningEvt.data.globalTuning.tuning = state.tuning.load();
-                    eventQueue.try_enqueue(tuningEvt);
-
-                    AudioEvent bpmEvt{};
-                    bpmEvt.type = AudioEventType::BpmChange;
-                    bpmEvt.data.bpmState.bpm = state.bpm.load();
-                    eventQueue.try_enqueue(bpmEvt);
-
-                    // Master FX (delay/reverb/sidechain/drive) from [GLOBAL]
-                    DispatchAllMasterFx(eventQueue, state.masterFx);
-
-                    // Send track update if available
-                    if (!state.tracks.empty())
-                    {
-                        DispatchTrackUpdate(eventQueue, state.tracks);
-                    }
-
-                    // Start watching this file for external changes (live-coding hot reload)
-                    g_loadedProjectPath = sel[0];
-                    std::error_code ec;
-                    g_lastKnownWriteTime = std::filesystem::last_write_time(g_loadedProjectPath, ec);
-                }
+                LoadProjectAndSync(sel[0], eventQueue);
             }
         }
 
