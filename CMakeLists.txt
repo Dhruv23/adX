@@ -76,16 +76,67 @@ add_library(PortableFileDialogs INTERFACE)
 # The file is downloaded as 'portable-file-dialogs.h' inside the _deps folder
 target_include_directories(PortableFileDialogs INTERFACE ${portable_file_dialogs_SOURCE_DIR})
 
+# --- 6. miniaudio (decode-only; RtAudio already owns device I/O) ---
+FetchContent_Declare(miniaudio
+    URL https://raw.githubusercontent.com/mackron/miniaudio/master/miniaudio.h
+    DOWNLOAD_NO_EXTRACT TRUE
+)
+FetchContent_MakeAvailable(miniaudio)
+add_library(miniaudio INTERFACE)
+target_include_directories(miniaudio INTERFACE ${miniaudio_SOURCE_DIR})
+
+# --- 7. RubberBand (single-file amalgamation; no meson, no external FFT dep) ---
+FetchContent_Declare(rubberband
+    GIT_REPOSITORY https://github.com/breakfastquay/rubberband.git
+    GIT_TAG v4.0.0
+)
+FetchContent_MakeAvailable(rubberband)
+add_library(rubberband STATIC ${rubberband_SOURCE_DIR}/single/RubberBandSingle.cpp)
+target_include_directories(rubberband PUBLIC ${rubberband_SOURCE_DIR})
+if(WIN32)
+    # sysutils.cpp/Thread.h pull in <windows.h> without NOMINMAX, which clobbers
+    # std::min/std::max used elsewhere in the amalgamation (same class of bug as
+    # portable-file-dialogs.h in Phase 1) - inject it via the compiler command
+    # line so it's defined before any header is parsed, regardless of include order.
+    target_compile_definitions(rubberband PRIVATE NOMINMAX)
+endif()
+
+# --- 8. ONNX Runtime (prebuilt binary; building from source is impractical here) ---
+FetchContent_Declare(onnxruntime
+    URL https://github.com/microsoft/onnxruntime/releases/download/v1.27.1/onnxruntime-win-x64-1.27.1.zip
+)
+FetchContent_MakeAvailable(onnxruntime)
+add_library(onnxruntime SHARED IMPORTED GLOBAL)
+set_target_properties(onnxruntime PROPERTIES
+    IMPORTED_LOCATION "${onnxruntime_SOURCE_DIR}/lib/onnxruntime.dll"
+    IMPORTED_IMPLIB "${onnxruntime_SOURCE_DIR}/lib/onnxruntime.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${onnxruntime_SOURCE_DIR}/include"
+)
+
+# --- 9. basic-pitch ONNX model (single file, same pattern as miniaudio.h) ---
+FetchContent_Declare(basicpitch_model
+    URL https://raw.githubusercontent.com/spotify/basic-pitch/main/basic_pitch/saved_models/icassp_2022/nmp.onnx
+    DOWNLOAD_NO_EXTRACT TRUE
+)
+FetchContent_MakeAvailable(basicpitch_model)
+
 # --- Main Executable ---
 add_executable(AudioSequencer
     src/main.cpp
     src/AudioEngine.cpp
     src/SequencerUI.cpp
     src/AdxParser.cpp
+    src/miniaudio_impl.cpp
+    src/AudioFileLoader.cpp
+    src/AudioClipProcessor.cpp
+    src/MelodyExtractor.cpp
+    src/AudioEffects.cpp
+    src/BpmDetector.cpp
+    src/SampleBrowser.cpp
 )
 target_include_directories(AudioSequencer PRIVATE include)
 target_link_libraries(AudioSequencer PRIVATE
-    rtaudio glfw ImGui ReaderWriterQueue PortableFileDialogs
+    rtaudio glfw ImGui ReaderWriterQueue PortableFileDialogs miniaudio rubberband onnxruntime
 )
 
 if(APPLE)
@@ -106,6 +157,17 @@ if(WIN32)
     add_custom_command(TARGET AudioSequencer POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:glfw>"
+        "$<TARGET_FILE_DIR:AudioSequencer>"
+    )
+    add_custom_command(TARGET AudioSequencer POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${onnxruntime_SOURCE_DIR}/lib/onnxruntime.dll"
+        "${onnxruntime_SOURCE_DIR}/lib/onnxruntime_providers_shared.dll"
+        "$<TARGET_FILE_DIR:AudioSequencer>"
+    )
+    add_custom_command(TARGET AudioSequencer POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${basicpitch_model_SOURCE_DIR}/nmp.onnx"
         "$<TARGET_FILE_DIR:AudioSequencer>"
     )
 endif()

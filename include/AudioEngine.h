@@ -5,11 +5,19 @@
 #include <readerwriterqueue.h>
 #include <RtAudio.h>
 
+// Maximum number of tracks that get their own effect bus in process().
+// Tracks beyond this cap still play, folded onto the last bus.
+constexpr size_t kMaxEngineTracks = 16;
+
 // Represents a single active polyphonic voice
 struct Voice {
     bool active = false;
     uint8_t pitch = 0;
     uint8_t velocity = 0;
+
+    // Which track bus this voice sums into (sequence-scheduled notes carry
+    // their source track; live/queue NoteOns land on bus 0).
+    int trackIndex = 0;
 
     // DSP state: 16 harmonics
     std::array<float, 16> phase{};
@@ -54,7 +62,7 @@ private:
     int process(float* outputBuffer, unsigned int nFrames);
 
     // Event handling
-    void handleNoteOn(const AudioEvent& event);
+    void handleNoteOn(const AudioEvent& event, int trackIndex = 0);
     void handleNoteOff(const AudioEvent& event);
     void handleParameterChange(const AudioEvent& event);
 
@@ -84,7 +92,7 @@ private:
     bool m_isPlaying = false;
     float m_bpm = 120.0f;
     double m_currentSamplePosition = 0.0;
-    const Track* m_activeSequence = nullptr;
+    const std::vector<Track>* m_activeTracks = nullptr;
 
     // Global parameters
     float m_masterVolume = 0.75f;
@@ -94,7 +102,7 @@ private:
     std::vector<std::unique_ptr<const Patch>> m_patchGarbageBin;
 
     // Garbage collection bin for replaced sequences
-    std::vector<std::unique_ptr<const Track>> m_sequenceGarbageBin;
+    std::vector<std::unique_ptr<const std::vector<Track>>> m_sequenceGarbageBin;
 
     // Allow main function to access garbage bins for cleanup
     friend int main();

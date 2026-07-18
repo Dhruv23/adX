@@ -1,4 +1,5 @@
 #include "AudioEngine.h"
+#include "AudioEffect.h"
 #include <cmath>
 #include <algorithm>
 #include <iostream>
@@ -74,11 +75,11 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
         } else if (event.type == AudioEventType::GlobalTuningChange) {
             m_tuning = event.data.globalTuning.tuning;
         } else if (event.type == AudioEventType::SequenceUpdate) {
-            if (event.data.track) {
-                if (m_activeSequence) {
-                    m_sequenceGarbageBin.push_back(std::unique_ptr<const Track>(m_activeSequence));
+            if (event.data.tracks) {
+                if (m_activeTracks) {
+                    m_sequenceGarbageBin.push_back(std::unique_ptr<const std::vector<Track>>(m_activeTracks));
                 }
-                m_activeSequence = event.data.track;
+                m_activeTracks = event.data.tracks;
 
                 // When sequence changes, to be safe, cut active sequence notes to prevent stuck notes
                 // For a more robust approach, we could tag voices triggered by the sequence, but
@@ -103,6 +104,12 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
     // Calculate samples per beat for sequence playback
     double samplesPerBeat = (m_sampleRate * 60.0) / m_bpm;
 
+    // Absolute sample position at the start of this block, captured before
+    // m_currentSamplePosition is advanced below. Audio clips are placed in
+    // absolute seconds (not beats), so this is what lets the per-sample loop
+    // test clip overlap with plain index arithmetic.
+    double blockStartSample = m_currentSamplePosition;
+
     // --- Sequencer Event Pre-calculation ---
     // Instead of evaluating floats per-sample, we find all NoteOn/NoteOff events
     // that occur within this entire audio block [m_currentSamplePosition, m_currentSamplePosition + nFrames)
@@ -111,38 +118,78 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
         bool isNoteOn;
         uint8_t pitch;
         uint8_t velocity;
+        int trackIndex; // which per-track bus the resulting voice sums into
     };
     std::vector<ScheduledEvent> scheduledEvents;
 
-    if (m_isPlaying && m_activeSequence) {
+    // NOTE: notes from every track are merged into one scheduledEvents list and
+    // play through one shared m_voices pool / m_activePatch (deliberate scope
+    // boundary — tracks share a patch and voice pool, see Phase 4's plan).
+    // handleNoteOff() below matches purely by MIDI pitch, with no track tag, so
+    // two tracks sounding the same pitch at once can cross-release each other's
+    // voice. Accepted consequence of the shared-voice-pool design, not a bug.
+    if (m_isPlaying && m_activeTracks) {
         double blockStartBeat = m_currentSamplePosition / samplesPerBeat;
         double blockEndBeat = (m_currentSamplePosition + nFrames) / samplesPerBeat;
 
-        for (const auto& note : m_activeSequence->notes) {
-            double noteStartBeat = note.startBeat;
-            double noteEndBeat = note.startBeat + note.lengthBeats;
+        for (size_t trackIdx = 0; trackIdx < m_activeTracks->size(); ++trackIdx) {
+            const auto& track = (*m_activeTracks)[trackIdx];
+            int busIdx = static_cast<int>(std::min(trackIdx, kMaxEngineTracks - 1));
+            for (const auto& note : track.notes) {
+                double noteStartBeat = note.startBeat;
+                double noteEndBeat = note.startBeat + note.lengthBeats;
 
-            // Check Note On
-            if (noteStartBeat >= blockStartBeat && noteStartBeat < blockEndBeat) {
-                double beatOffset = noteStartBeat - blockStartBeat;
-                unsigned int sampleOffset = static_cast<unsigned int>(beatOffset * samplesPerBeat);
-                if (sampleOffset < nFrames) {
-                    scheduledEvents.push_back({sampleOffset, true, note.pitch, note.velocity});
+                // Check Note On
+                if (noteStartBeat >= blockStartBeat && noteStartBeat < blockEndBeat) {
+                    double beatOffset = noteStartBeat - blockStartBeat;
+                    unsigned int sampleOffset = static_cast<unsigned int>(beatOffset * samplesPerBeat);
+                    if (sampleOffset < nFrames) {
+                        scheduledEvents.push_back({sampleOffset, true, note.pitch, note.velocity, busIdx});
+                    }
                 }
-            }
 
-            // Check Note Off
-            if (noteEndBeat >= blockStartBeat && noteEndBeat < blockEndBeat) {
-                double beatOffset = noteEndBeat - blockStartBeat;
-                unsigned int sampleOffset = static_cast<unsigned int>(beatOffset * samplesPerBeat);
-                if (sampleOffset < nFrames) {
-                    scheduledEvents.push_back({sampleOffset, false, note.pitch, note.velocity});
+                // Check Note Off
+                if (noteEndBeat >= blockStartBeat && noteEndBeat < blockEndBeat) {
+                    double beatOffset = noteEndBeat - blockStartBeat;
+                    unsigned int sampleOffset = static_cast<unsigned int>(beatOffset * samplesPerBeat);
+                    if (sampleOffset < nFrames) {
+                        scheduledEvents.push_back({sampleOffset, false, note.pitch, note.velocity, busIdx});
+                    }
                 }
             }
         }
 
         // Advance global position by block size
         m_currentSamplePosition += nFrames;
+    }
+
+    // --- Audio Clip Pre-calculation ---
+    // Mirrors the note-scheduling precalculation above: clipStartSample/
+    // clipFrameCount are invariant per clip within this block (in fact for the
+    // clip's whole lifetime), so compute them once per block instead of on
+    // every one of the nFrames samples. Also skips clips that can't possibly
+    // overlap this block at all, rather than testing that per-sample too.
+    struct ActiveClipRef {
+        const std::vector<float>* pcmData;
+        double clipStartSample;
+        size_t clipFrameCount;
+        unsigned int channels;
+        int trackIndex;
+    };
+    std::vector<ActiveClipRef> activeClips;
+    if (m_isPlaying && m_activeTracks) {
+        double blockEndSample = blockStartSample + nFrames;
+        for (size_t trackIdx = 0; trackIdx < m_activeTracks->size(); ++trackIdx) {
+            const auto& track = (*m_activeTracks)[trackIdx];
+            int busIdx = static_cast<int>(std::min(trackIdx, kMaxEngineTracks - 1));
+            for (const auto& clip : track.audioClips) {
+                double clipStartSample = static_cast<double>(clip.startTimeSeconds) * m_sampleRate;
+                size_t clipFrameCount = clip.pcmData->size() / clip.channels;
+                if (clipStartSample >= blockEndSample) continue; // starts after this block
+                if (clipStartSample + static_cast<double>(clipFrameCount) <= blockStartSample) continue; // ended before this block
+                activeClips.push_back({clip.pcmData.get(), clipStartSample, clipFrameCount, clip.channels, busIdx});
+            }
+        }
     }
 
     // 2. Process Audio
@@ -157,7 +204,7 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
                     onEvt.pitch = ev.pitch;
                     onEvt.velocity = ev.velocity;
                     onEvt.data.patch = nullptr;
-                    handleNoteOn(onEvt);
+                    handleNoteOn(onEvt, ev.trackIndex);
                 } else {
                     AudioEvent offEvt{};
                     offEvt.type = AudioEventType::NoteOff;
@@ -167,6 +214,12 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
                 }
             }
         }
+
+        // Per-track buses (Phase 5): voices and clips sum into their own
+        // track's bus, each bus runs its insert-effect chain, and the results
+        // are mixed into the master below. Plain stack arrays — no allocation.
+        float busL[kMaxEngineTracks] = {};
+        float busR[kMaxEngineTracks] = {};
 
         float sampleLeft = 0.0f;
         float sampleRight = 0.0f;
@@ -245,9 +298,49 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
             float velNorm = static_cast<float>(voice.velocity) / 127.0f;
             float currentSample = oscVal * voice.envLevel * velNorm;
 
-            // Pan center
-            sampleLeft += currentSample * 0.5f;
-            sampleRight += currentSample * 0.5f;
+            // Pan center, into this voice's track bus
+            int busIdx = std::clamp(voice.trackIndex, 0, static_cast<int>(kMaxEngineTracks) - 1);
+            busL[busIdx] += currentSample * 0.5f;
+            busR[busIdx] += currentSample * 0.5f;
+        }
+
+        // Summation: Mix in any active audio clips (pre-decoded PCM, purely
+        // read-only index arithmetic here — no allocation, no locks, no I/O).
+        // activeClips/clipStartSample/clipFrameCount were precomputed once per
+        // block above, not recomputed on every sample.
+        {
+            double absoluteSample = blockStartSample + i;
+            for (const auto& clip : activeClips) {
+                double clipFrameOffsetD = absoluteSample - clip.clipStartSample;
+                if (clipFrameOffsetD < 0.0) continue;
+
+                size_t clipFrameOffset = static_cast<size_t>(clipFrameOffsetD);
+                if (clipFrameOffset >= clip.clipFrameCount) continue;
+
+                busL[clip.trackIndex] += (*clip.pcmData)[clipFrameOffset * clip.channels + 0];
+                busR[clip.trackIndex] += (*clip.pcmData)[clipFrameOffset * clip.channels + 1];
+            }
+        }
+
+        // Run each track bus through its insert-effect chain, then mix into
+        // the master. Effects run every sample regardless of bus activity so
+        // reverb tails ring out after their source stops. Traversal is
+        // read-only over shared_ptrs the audio thread's track list owns.
+        if (m_activeTracks && !m_activeTracks->empty()) {
+            size_t busCount = std::min(m_activeTracks->size(), kMaxEngineTracks);
+            for (size_t t = 0; t < busCount; ++t) {
+                float l = busL[t];
+                float r = busR[t];
+                for (const auto& fx : (*m_activeTracks)[t].effects) {
+                    if (fx) fx->processSample(l, r);
+                }
+                sampleLeft += l;
+                sampleRight += r;
+            }
+        } else {
+            // No track list yet (live/queue voices only) — bus 0 passes through
+            sampleLeft += busL[0];
+            sampleRight += busR[0];
         }
 
         // --- Peak Compressor ---
@@ -314,7 +407,7 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
     return 0; // Continue stream
 }
 
-void AudioEngine::handleNoteOn(const AudioEvent& event) {
+void AudioEngine::handleNoteOn(const AudioEvent& event, int trackIndex) {
     size_t voiceIdx = allocateVoice();
     Voice& voice = m_voices[voiceIdx];
 
@@ -322,6 +415,7 @@ void AudioEngine::handleNoteOn(const AudioEvent& event) {
     voice.active = true;
     voice.pitch = event.pitch;
     voice.velocity = event.velocity;
+    voice.trackIndex = trackIndex;
     voice.noteOnTimestamp = m_globalSampleCounter;
     voice.patch = event.data.patch ? event.data.patch : m_activePatch;
 

@@ -1,4 +1,7 @@
 #include "AdxParser.h"
+#include "AudioFileLoader.h"
+#include "AudioClipProcessor.h"
+#include "AudioEffect.h"
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -161,6 +164,9 @@ bool AdxParser::LoadProject(const std::string& filepath, SequencerState& state, 
             if (!state.tracks.empty()) {
                 Track& t = state.tracks.back();
                 // Format: Note StartBeat Duration Velocity
+                // or:     CLIP FilePath StartTimeSeconds [PitchShiftSemitones TimeStretchFactor]
+                // (FilePath must not contain spaces; the trailing pitch/stretch pair is
+                // optional for backward compatibility with pre-Phase-3 .adx files)
                 auto tokens = split(line, ' ');
                 // Filter empty tokens
                 std::vector<std::string_view> cleanTokens;
@@ -168,7 +174,48 @@ bool AdxParser::LoadProject(const std::string& filepath, SequencerState& state, 
                     if (!tk.empty()) cleanTokens.push_back(tk);
                 }
 
-                if (cleanTokens.size() == 4) {
+                if (!cleanTokens.empty() && cleanTokens[0] == "EFFECT") {
+                    // Format: EFFECT Reverb Mix RoomSize Damping
+                    //         EFFECT Distortion Drive Mix
+                    try {
+                        if (cleanTokens.size() == 5 && cleanTokens[1] == "Reverb") {
+                            t.effects.push_back(std::make_shared<ReverbEffect>(
+                                std::stof(std::string(cleanTokens[2])),
+                                std::stof(std::string(cleanTokens[3])),
+                                std::stof(std::string(cleanTokens[4]))));
+                        } else if (cleanTokens.size() == 4 && cleanTokens[1] == "Distortion") {
+                            t.effects.push_back(std::make_shared<DistortionEffect>(
+                                std::stof(std::string(cleanTokens[2])),
+                                std::stof(std::string(cleanTokens[3]))));
+                        } else {
+                            std::cerr << "AdxParser Warning: Unknown EFFECT on line " << lineNumber << std::endl;
+                        }
+                    } catch (const std::exception&) {
+                        std::cerr << "AdxParser Warning: Malformed EFFECT on line " << lineNumber << std::endl;
+                    }
+                } else if (!cleanTokens.empty() && cleanTokens[0] == "CLIP") {
+                    if (cleanTokens.size() == 3 || cleanTokens.size() == 5) {
+                        try {
+                            std::string filePath(cleanTokens[1]);
+                            float startTimeSeconds = std::stof(std::string(cleanTokens[2]));
+                            auto clip = AudioFileLoader::LoadAudioClip(filePath, startTimeSeconds);
+                            if (clip) {
+                                if (cleanTokens.size() == 5) {
+                                    clip->pitchShiftSemitones = std::stof(std::string(cleanTokens[3]));
+                                    clip->timeStretchFactor = std::stof(std::string(cleanTokens[4]));
+                                    AudioClipProcessor::ReprocessClip(*clip);
+                                }
+                                t.audioClips.push_back(std::move(*clip));
+                            } else {
+                                std::cerr << "AdxParser Warning: Could not load audio clip on line " << lineNumber << std::endl;
+                            }
+                        } catch (const std::exception& e) {
+                            std::cerr << "AdxParser Warning: Malformed CLIP on line " << lineNumber << std::endl;
+                        }
+                    } else {
+                        std::cerr << "AdxParser Warning: Malformed CLIP format on line " << lineNumber << std::endl;
+                    }
+                } else if (cleanTokens.size() == 4) {
                     try {
                         Note n;
                         n.pitch = NoteNameToMidi(cleanTokens[0]);
@@ -231,6 +278,28 @@ bool AdxParser::SaveProject(const std::string& filepath, const SequencerState& s
                  << std::fixed << std::setprecision(2) << note.startBeat << " "
                  << note.lengthBeats << " "
                  << (note.velocity / 127.0f) << "\n";
+        }
+        if (!track.audioClips.empty()) {
+            file << "# Format: CLIP FilePath StartTimeSeconds PitchShiftSemitones TimeStretchFactor\n";
+            for (const auto& clip : track.audioClips) {
+                file << "CLIP " << clip.filePath << " "
+                     << std::fixed << std::setprecision(3) << clip.startTimeSeconds << " "
+                     << clip.pitchShiftSemitones << " "
+                     << clip.timeStretchFactor << "\n";
+            }
+        }
+        if (!track.effects.empty()) {
+            file << "# Format: EFFECT Reverb Mix RoomSize Damping | EFFECT Distortion Drive Mix\n";
+            for (const auto& fx : track.effects) {
+                if (!fx) continue;
+                if (const auto* rev = dynamic_cast<const ReverbEffect*>(fx.get())) {
+                    file << "EFFECT Reverb " << std::fixed << std::setprecision(3)
+                         << rev->mix.load() << " " << rev->roomSize.load() << " " << rev->damping.load() << "\n";
+                } else if (const auto* dist = dynamic_cast<const DistortionEffect*>(fx.get())) {
+                    file << "EFFECT Distortion " << std::fixed << std::setprecision(3)
+                         << dist->drive.load() << " " << dist->mix.load() << "\n";
+                }
+            }
         }
         file << "\n";
     }

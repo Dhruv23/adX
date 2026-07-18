@@ -1,13 +1,17 @@
 #include "AudioData.h"
 #include "AudioEngine.h"
 #include "SequencerUI.h"
+#include "SampleBrowser.h"
 #include "AdxParser.h"
+#include "MelodyExtractor.h"
 #include <portable-file-dialogs.h>
 
 #include <iostream>
 #include <chrono>
 #include <thread>
 #include <atomic>
+#include <filesystem>
+#include <system_error>
 
 #include <RtAudio.h>
 #include <GLFW/glfw3.h>
@@ -54,7 +58,7 @@ void SetupImGuiStyle()
 }
 
 // --- Globals ---
-constexpr unsigned int SAMPLE_RATE = 44100;
+constexpr unsigned int SAMPLE_RATE = kEngineSampleRate;
 constexpr unsigned int BUFFER_FRAMES = 512;
 constexpr unsigned int OUT_CHANNELS = 2;
 
@@ -154,6 +158,45 @@ float releaseMs = 500.0f;
 float sustainLvl = 0.7f;
 Patch draftPatch;
 
+// Live-coding hot reload: which project file to watch, and its last known
+// write time (empty/default until a project is LOADed or SAVEd).
+std::string g_loadedProjectPath;
+std::filesystem::file_time_type g_lastKnownWriteTime{};
+
+// ML melody extraction: runs on a background std::thread (potentially
+// multi-second full-song ONNX inference, unlike Phase 3's quick per-clip
+// reprocessing) with a simple atomic-flag handoff back to the Main Thread.
+// resultNotes/success are written by the worker before done=true, and only
+// read on the Main Thread after observing done==true — the atomic store/load
+// pair establishes the happens-before relationship, no mutex needed.
+struct MelodyExtractionJob {
+    std::atomic<bool> running{false};
+    std::atomic<bool> done{false};
+    bool success = false;
+    std::vector<Note> resultNotes;
+    // Captured at job-start (not completion) so a LOAD/hot-reload that swaps
+    // draftPatch/state.patches while extraction runs in the background can't
+    // make the finished job stamp the new track with a patch name that no
+    // longer exists in the (now different) project.
+    std::string patchName;
+};
+MelodyExtractionJob g_melodyJob;
+MelodyExtractor g_melodyExtractor;
+
+static void DispatchPatchUpdate(moodycamel::ReaderWriterQueue<AudioEvent>& eventQueue, const Patch& patch) {
+    AudioEvent evt{};
+    evt.type = AudioEventType::PatchUpdate;
+    evt.data.patch = new Patch(patch);
+    if (!eventQueue.try_enqueue(evt)) delete evt.data.patch;
+}
+
+static void DispatchTrackUpdate(moodycamel::ReaderWriterQueue<AudioEvent>& eventQueue, const std::vector<Track>& tracks) {
+    AudioEvent evt{};
+    evt.type = AudioEventType::SequenceUpdate;
+    evt.data.tracks = new std::vector<Track>(tracks);
+    if (!eventQueue.try_enqueue(evt)) delete evt.data.tracks;
+}
+
 void initializeTestPatch()
 {
     draftPatch.name = "Additive Patch";
@@ -187,6 +230,87 @@ void updateDraftPatchEnvelopes()
     draftPatch.attackTable = scaleTableToTime(attackShape, attackMs, SAMPLE_RATE);
     draftPatch.decayTable = scaleTableToTime(decayShape, decayMs, SAMPLE_RATE);
     draftPatch.releaseTable = scaleTableToTime(releaseShape, releaseMs, SAMPLE_RATE);
+}
+
+// Polls g_loadedProjectPath for changes (Main Thread only) and, if it changed
+// on disk, reparses it into a temporary SequencerState, diffs that against the
+// live state, and dispatches only what actually changed (Strudel-style live
+// coding: edit the .adx file in a text editor, save, hear it update without
+// stopping playback). All tracks participate; only the single active/draft
+// patch does (tracks share one synth patch — see Phase 4's plan for why).
+void CheckForHotReload(moodycamel::ReaderWriterQueue<AudioEvent>& eventQueue)
+{
+    if (g_loadedProjectPath.empty()) return;
+
+    std::error_code ec;
+    auto writeTime = std::filesystem::last_write_time(g_loadedProjectPath, ec);
+    if (ec || writeTime == g_lastKnownWriteTime) return;
+    g_lastKnownWriteTime = writeTime;
+
+    SequencerState tempState;
+    std::string tempFirstPatchName;
+    if (!AdxParser::LoadProject(g_loadedProjectPath, tempState, tempFirstPatchName))
+    {
+        std::cerr << "Hot-reload: failed to parse " << g_loadedProjectPath << ", keeping previous state\n";
+        return; // e.g. mid-write; will retry once the file settles and mtime changes again
+    }
+    std::cerr << "Hot-reload: " << g_loadedProjectPath << " changed, applying updates\n";
+
+    if (tempState.bpm.load() != state.bpm.load())
+    {
+        state.bpm.store(tempState.bpm.load());
+        AudioEvent evt{};
+        evt.type = AudioEventType::BpmChange;
+        evt.data.bpmState.bpm = state.bpm.load();
+        eventQueue.try_enqueue(evt);
+    }
+    if (tempState.masterVolume.load() != state.masterVolume.load())
+    {
+        state.masterVolume.store(tempState.masterVolume.load());
+        AudioEvent evt{};
+        evt.type = AudioEventType::MasterVolChange;
+        evt.data.masterVol.volume = state.masterVolume.load();
+        eventQueue.try_enqueue(evt);
+    }
+    if (tempState.tuning.load() != state.tuning.load())
+    {
+        state.tuning.store(tempState.tuning.load());
+        AudioEvent evt{};
+        evt.type = AudioEventType::GlobalTuningChange;
+        evt.data.globalTuning.tuning = state.tuning.load();
+        eventQueue.try_enqueue(evt);
+    }
+
+    // Patch: only the one actually wired into the UI/engine (matches the single-draft-patch model)
+    if (!tempFirstPatchName.empty() && tempState.patches.count(tempFirstPatchName))
+    {
+        const Patch& newPatch = tempState.patches[tempFirstPatchName];
+        if (newPatch.name != draftPatch.name || !(newPatch == draftPatch))
+        {
+            draftPatch = newPatch;
+            attackMs = newPatch.attackMs;
+            decayMs = newPatch.decayMs;
+            releaseMs = newPatch.releaseMs;
+            sustainLvl = newPatch.sustainLevel;
+            updateDraftPatchEnvelopes();
+            DispatchPatchUpdate(eventQueue, draftPatch);
+        }
+    }
+
+    // All tracks now participate (Part A of Phase 4 made multi-track real) — Track's
+    // operator== already composes into vector<Track>::operator==, so this is a
+    // straightforward whole-list comparison, no more single-track special-casing.
+    bool tracksChanged = !(tempState.tracks == state.tracks);
+
+    // Mirror the file's full patches/tracks into state (same effect manual LOAD already
+    // has by parsing directly into state) so subsequent SAVE and future diffs stay accurate.
+    state.patches = tempState.patches;
+    state.tracks = tempState.tracks;
+
+    if (tracksChanged)
+    {
+        DispatchTrackUpdate(eventQueue, state.tracks);
+    }
 }
 
 // --- Main Application ---
@@ -285,6 +409,40 @@ int main()
     {
         glfwPollEvents();
 
+        // Live-coding hot reload: poll the loaded project file for external
+        // changes at most every ~500ms (cheap enough to not gate on more, but
+        // no need to stat() every single frame either).
+        static auto s_lastPollTime = std::chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
+        if (now - s_lastPollTime >= std::chrono::milliseconds(500))
+        {
+            s_lastPollTime = now;
+            CheckForHotReload(eventQueue);
+        }
+
+        // Apply a finished melody-extraction job, if any. running/done are both
+        // still true here only once the background thread has fully finished
+        // (see the "Extract Melody..." button handler below).
+        if (g_melodyJob.running.load() && g_melodyJob.done.load())
+        {
+            if (g_melodyJob.success)
+            {
+                Track newTrack;
+                newTrack.patchName = g_melodyJob.patchName;
+                newTrack.notes = std::move(g_melodyJob.resultNotes);
+                state.tracks.push_back(newTrack);
+                SelectTrack(static_cast<int>(state.tracks.size()) - 1);
+                DispatchTrackUpdate(eventQueue, state.tracks);
+            }
+            else
+            {
+                std::cerr << "Melody extraction failed (see prior errors).\n";
+            }
+            g_melodyJob.resultNotes.clear();
+            g_melodyJob.running.store(false);
+            g_melodyJob.done.store(false);
+        }
+
         // Start ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -337,7 +495,10 @@ int main()
                     dac.isStreamRunning() ? "RUNNING" : "STOPPED",
                     state.playheadPositionBeats.load(std::memory_order_relaxed));
 
-        ImGui::SameLine(ImGui::GetWindowWidth() - 400);
+        // Reserved width for InputText + LOAD + SAVE AS NEW + EXTRACT MELODY...;
+        // widened from 400 when the EXTRACT MELODY... button was added, which
+        // no longer fit in the original budget and was clipped at the window edge.
+        ImGui::SameLine(ImGui::GetWindowWidth() - 600);
         static char filepath[256] = "project.adx";
         ImGui::SetNextItemWidth(200.0f);
         ImGui::InputText("##File", filepath, IM_ARRAYSIZE(filepath));
@@ -366,10 +527,7 @@ int main()
                         updateDraftPatchEnvelopes();
 
                         // Send patch update
-                        AudioEvent patchEvt{};
-                        patchEvt.type = AudioEventType::PatchUpdate;
-                        patchEvt.data.patch = new Patch(draftPatch);
-                        eventQueue.try_enqueue(patchEvt);
+                        DispatchPatchUpdate(eventQueue, draftPatch);
                     }
 
                     // Send global updates
@@ -391,11 +549,13 @@ int main()
                     // Send track update if available
                     if (!state.tracks.empty())
                     {
-                        AudioEvent trackEvt{};
-                        trackEvt.type = AudioEventType::SequenceUpdate;
-                        trackEvt.data.track = new Track(state.tracks[0]);
-                        eventQueue.try_enqueue(trackEvt);
+                        DispatchTrackUpdate(eventQueue, state.tracks);
                     }
+
+                    // Start watching this file for external changes (live-coding hot reload)
+                    g_loadedProjectPath = sel[0];
+                    std::error_code ec;
+                    g_lastKnownWriteTime = std::filesystem::last_write_time(g_loadedProjectPath, ec);
                 }
             }
         }
@@ -405,8 +565,37 @@ int main()
         {
             // Update the state's patch before saving
             state.patches[draftPatch.name] = draftPatch;
-            AdxParser::SaveProject(filepath, state);
+            if (AdxParser::SaveProject(filepath, state))
+            {
+                // Keep watching whatever we just wrote (live-coding hot reload)
+                g_loadedProjectPath = filepath;
+                std::error_code ec;
+                g_lastKnownWriteTime = std::filesystem::last_write_time(g_loadedProjectPath, ec);
+            }
         }
+
+        ImGui::SameLine();
+        bool extractionRunning = g_melodyJob.running.load();
+        ImGui::BeginDisabled(extractionRunning);
+        if (ImGui::Button(extractionRunning ? "EXTRACTING..." : "EXTRACT MELODY..."))
+        {
+            auto sel = pfd::open_file("Extract Melody From Song", ".", {"Audio Files", "*.wav *.mp3", "All Files", "*"}).result();
+            if (!sel.empty())
+            {
+                std::string path = sel[0];
+                float bpm = state.bpm.load();
+                g_melodyJob.patchName = draftPatch.name; // captured now, not at completion — see MelodyExtractionJob's comment
+                g_melodyJob.running.store(true);
+                g_melodyJob.done.store(false);
+                std::thread([path, bpm]() {
+                    auto result = g_melodyExtractor.ExtractMelody(path, bpm);
+                    g_melodyJob.success = result.has_value();
+                    if (result) g_melodyJob.resultNotes = std::move(*result);
+                    g_melodyJob.done.store(true);
+                }).detach();
+            }
+        }
+        ImGui::EndDisabled();
 
         ImGui::EndGroup();
 
@@ -764,6 +953,9 @@ int main()
         DrawSequencerUI(state, eventQueue);
 
         ImGui::End();
+
+        // --- Sample Browser (Phase 5): separate floating window ---
+        DrawSampleBrowser(state, eventQueue);
 
         // Rendering
         ImGui::Render();
