@@ -1,0 +1,42 @@
+# STAKILLAZ suite demo: synthesized hardstyle kick (drive + sub + pitch
+# drop) on a 150 BPM four-on-the-floor, sidechain pumping the master, with
+# sampled kicks layered on a second track. Load and press PLAY.
+
+[GLOBAL]
+BPM=150
+MASTER_VOL=0.8
+TUNING=440
+DELAY=350, 0.35, 0
+REVERB=0.5, 0.6, 0.08
+SIDECHAIN=1, 0.7, 100
+MASTER_DRIVE=6
+
+[PATCH Hardstyle Kick]
+ENVELOPE=0.001, 0.35, 0.0, 0.06
+HARMONICS=1.0, 0.7, 0.5, 0.4, 0.3, 0.25, 0.2, 0.15, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+DRIVE=12
+FILTER=20000, 0, 0
+SUB=0.9, 0, 36, 45
+
+[TRACK Hardstyle Kick]
+# Four-on-the-floor synthesized kicks (Track 1 = the sidechain key)
+C2 0.0 0.5 1.0
+C2 1.0 0.5 1.0
+C2 2.0 0.5 1.0
+C2 3.0 0.5 1.0
+C2 4.0 0.5 1.0
+C2 5.0 0.5 1.0
+C2 6.0 0.5 1.0
+C2 7.0 0.5 1.0
+# Offbeat screech stabs an octave+fifth up
+G4 0.5 0.25 0.7
+G4 1.5 0.25 0.7
+G4 2.5 0.25 0.7
+G4 3.5 0.25 0.7
+
+[TRACK Samples]
+# Sampled kicks layered every other beat, one pitched, one reversed chop
+EFFECT Distortion 6.0 0.8
+CLIP samples/kick_C3.wav 1.600 0.0 1.0
+CLIP samples/kick_C3.wav 2.400 0.0 1.0
+CLIP samples/kick_Ds3.wav 3.200 -3.0 1.0 R

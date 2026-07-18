@@ -58,15 +58,44 @@ struct Patch {
     const EnvelopeData* envTable = nullptr;
     const WavetableData* waveTable = nullptr;
 
+    // --- C418 suite: per-voice one-pole low-pass filter with LFO cutoff
+    // modulation (warm, slowly-evolving "Dreiton" pads). Defaults = bypass.
+    float filterCutoffHz = 20000.0f; // >= kFilterBypassHz means no filtering
+    float filterLfoRateHz = 0.0f;    // cutoff modulation speed
+    float filterLfoDepth = 0.0f;     // 0..1, fraction of cutoff swept by the LFO
+
+    // --- STAKILLAZ suite: waveshaper drive and 808-style sub oscillator with
+    // a pitch-drop transient (hardstyle kick "tok"). Defaults = clean/off.
+    float drive = 0.0f;              // 0 = bypass; ~30 = blown out
+    float subOscLevel = 0.0f;        // 0..1, summed after the harmonic stack
+    int subOscWave = 0;              // 0 = sine, 1 = triangle
+    float pitchDropSemitones = 0.0f; // 0 = off; e.g. 36 = start 3 octaves up
+    float pitchDropMs = 50.0f;       // exponential decay time constant
+
     // Compares only the fields the .adx format actually stores — NOT
     // attackTable/decayTable/releaseTable, which are rebuilt from ImGui
     // Bezier-curve control points that have no on-disk representation.
     bool operator==(const Patch& other) const {
         return attackMs == other.attackMs && decayMs == other.decayMs &&
                releaseMs == other.releaseMs && sustainLevel == other.sustainLevel &&
-               timbreKeyframes == other.timbreKeyframes;
+               timbreKeyframes == other.timbreKeyframes &&
+               filterCutoffHz == other.filterCutoffHz && filterLfoRateHz == other.filterLfoRateHz &&
+               filterLfoDepth == other.filterLfoDepth && drive == other.drive &&
+               subOscLevel == other.subOscLevel && subOscWave == other.subOscWave &&
+               pitchDropSemitones == other.pitchDropSemitones && pitchDropMs == other.pitchDropMs;
     }
 };
+
+// Cutoffs at/above this are treated as "no filter" by the engine.
+constexpr float kFilterBypassHz = 19000.0f;
+
+// Factory library of pre-configured patches (C418 + STAKILLAZ suites).
+// Returned patches are fully playable: envelope tables are already built at
+// kEngineSampleRate. Implemented in src/PatchLibrary.cpp.
+namespace PatchLibrary {
+    const std::vector<std::string>& Names();
+    Patch Create(const std::string& name); // falls back to a plain sine patch for unknown names
+}
 
 // Represents a note played in a sequence
 struct Note {
@@ -91,6 +120,7 @@ struct AudioClip {
     unsigned int channels = 2;
     float pitchShiftSemitones = 0.0f; // 0 = unshifted
     float timeStretchFactor = 1.0f;   // 1.0 = original speed
+    bool reversed = false;            // STAKILLAZ suite: play the source backwards
 
     // pcmData/originalPcmData/sampleRate/channels deliberately excluded —
     // deterministic from filePath+pitch+stretch, so comparing by pointer would
@@ -100,7 +130,8 @@ struct AudioClip {
     // edit can change.
     bool operator==(const AudioClip& other) const {
         return filePath == other.filePath && startTimeSeconds == other.startTimeSeconds &&
-               pitchShiftSemitones == other.pitchShiftSemitones && timeStretchFactor == other.timeStretchFactor;
+               pitchShiftSemitones == other.pitchShiftSemitones && timeStretchFactor == other.timeStretchFactor &&
+               reversed == other.reversed;
     }
 };
 
@@ -108,11 +139,24 @@ struct AudioClip {
 // header so AudioData.h stays a lightweight POD-ish data header).
 class AudioEffect;
 
+// C418 suite: track-level arpeggiator. Held/overlapping notes on an
+// arp-enabled track are not played directly — the engine turns the chord
+// sounding at each rateBeats grid step into cascading staccato notes.
+struct ArpSettings {
+    int mode = 0;            // 0 = off, 1 = up, 2 = down, 3 = up-down
+    float rateBeats = 0.25f; // 0.25 = 16th notes
+    int octaves = 1;         // pattern octave span, 1..4
+    float gate = 0.8f;       // note length as a fraction of the step
+
+    bool operator==(const ArpSettings&) const = default;
+};
+
 // A Sequence of notes tied to a patch
 struct Track {
     std::string patchName; // Reference to the Patch
     std::vector<Note> notes;
     std::vector<AudioClip> audioClips;
+    ArpSettings arp;
 
     // Per-track insert chain (Phase 5), run by AudioEngine::process() on this
     // track's bus before mixing into the master. shared_ptr on purpose: the
@@ -128,14 +172,41 @@ struct Track {
 
     bool operator==(const Track& other) const {
         return patchName == other.patchName && notes == other.notes && audioClips == other.audioClips &&
-               effectsEquivalent(other);
+               arp == other.arp && effectsEquivalent(other);
     }
+};
+
+// Master-bus FX parameters (C418 delay/reverb, STAKILLAZ sidechain/drive).
+// This is the Main Thread's authoritative copy for UI + .adx save/load; each
+// field is mirrored to the audio thread via AudioEventType::ParameterChange
+// events carrying an EngineParam id (see below).
+struct MasterFxSettings {
+    // Stereo ping-pong delay
+    float delayTimeMs = 350.0f;
+    float delayFeedback = 0.35f;
+    float delayMix = 0.0f; // 0 = bypass
+
+    // Algorithmic (Freeverb) master reverb
+    float reverbRoom = 0.8f;
+    float reverbDamp = 0.5f;
+    float reverbMix = 0.0f; // 0 = bypass
+
+    // Sidechain pump: Track 1's bus ducks the master
+    float sidechainEnabled = 0.0f; // 0/1
+    float sidechainAmount = 0.6f;  // 0..1 depth
+    float sidechainReleaseMs = 120.0f;
+
+    // Final tanh saturation stage before the compressor
+    float masterDrive = 0.0f; // 0 = bypass
+
+    bool operator==(const MasterFxSettings&) const = default;
 };
 
 // Core state owned and mutated by the Main Thread
 struct SequencerState {
     std::unordered_map<std::string, Patch> patches;
     std::vector<Track> tracks;
+    MasterFxSettings masterFx;
 
     // Shared between Main and Audio threads
     // The main thread might reset it, the audio thread increments it
@@ -161,6 +232,21 @@ enum class AudioEventType : uint8_t {
     SequenceUpdate,
     MasterVolChange,
     GlobalTuningChange
+};
+
+// Parameter ids carried by AudioEventType::ParameterChange (paramData.paramId)
+// to address individual master-FX fields on the audio thread.
+enum class EngineParam : uint32_t {
+    DelayTimeMs = 0,
+    DelayFeedback,
+    DelayMix,
+    ReverbRoom,
+    ReverbDamp,
+    ReverbMix,
+    SidechainEnabled,
+    SidechainAmount,
+    SidechainReleaseMs,
+    MasterDrive,
 };
 
 // Represents a single event passed from Main -> Audio Thread via lock-free queue

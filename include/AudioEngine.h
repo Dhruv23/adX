@@ -1,7 +1,9 @@
 #pragma once
 
 #include "AudioData.h"
+#include "AudioEffect.h"
 #include <array>
+#include <vector>
 #include <readerwriterqueue.h>
 #include <RtAudio.h>
 
@@ -33,6 +35,14 @@ struct Voice {
 
     // A timestamp to implement voice stealing (lowest number = oldest)
     uint64_t noteOnTimestamp = 0;
+
+    // --- C418 suite: per-voice one-pole LPF + cutoff LFO ---
+    float lpfState = 0.0f;
+    float lfoPhase = 0.0f; // 0..1
+
+    // --- STAKILLAZ suite: sub oscillator + pitch-drop transient ---
+    float subPhase = 0.0f;      // 0..1
+    uint64_t ageSamples = 0;    // samples since NoteOn (drives the pitch drop)
 };
 
 // Represents the state of the peak compressor
@@ -46,6 +56,22 @@ struct CompressorState {
 
     // Smoothed gain reduction factor [0.0, 1.0]
     float currentGainReduction = 1.0f;
+
+    // --- STAKILLAZ suite: sidechain input (Track 1's bus ducks the master).
+    // The follower's envelope multiplies the master by 1 - amount*env before
+    // the peak-compression stage — the classic phonk/trashwave pump.
+    bool sidechainEnabled = false;
+    float sidechainAmount = 0.6f;       // 0..1 duck depth
+    float sidechainReleaseCoeff = 0.0f; // one-pole release for the follower
+    float sidechainEnv = 0.0f;          // follower state
+};
+
+// C418 suite: master stereo ping-pong delay. Buffers are allocated once in
+// the AudioEngine constructor (Main Thread) — never in process().
+struct MasterDelayState {
+    std::vector<float> bufferL;
+    std::vector<float> bufferR;
+    size_t writeIndex = 0;
 };
 
 class AudioEngine {
@@ -84,6 +110,15 @@ private:
     // Engine state
     std::array<Voice, 64> m_voices;
     CompressorState m_compressor;
+
+    // --- Master FX chain (C418 delay/reverb, STAKILLAZ drive), applied after
+    // the per-track bus mix and before the sidechain/compressor stages.
+    MasterDelayState m_delay;
+    float m_delayTimeMs = 350.0f;
+    float m_delayFeedback = 0.35f;
+    float m_delayMix = 0.0f;   // 0 = bypass
+    ReverbEffect m_masterReverb{0.0f, 0.8f, 0.5f}; // mix 0 = bypass; params set via events
+    float m_masterDrive = 0.0f; // 0 = bypass
 
     // The active patch used for new notes
     const Patch* m_activePatch = nullptr;

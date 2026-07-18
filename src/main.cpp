@@ -197,6 +197,130 @@ static void DispatchTrackUpdate(moodycamel::ReaderWriterQueue<AudioEvent>& event
     if (!eventQueue.try_enqueue(evt)) delete evt.data.tracks;
 }
 
+static void DispatchEngineParam(moodycamel::ReaderWriterQueue<AudioEvent>& eventQueue, EngineParam id, float value) {
+    AudioEvent evt{};
+    evt.type = AudioEventType::ParameterChange;
+    evt.data.paramData.paramId = static_cast<uint32_t>(id);
+    evt.data.paramData.value = value;
+    eventQueue.try_enqueue(evt);
+}
+
+// Mirrors every MasterFxSettings field to the audio thread (used after LOAD
+// and hot reload; individual UI slider edits send just their own param).
+static void DispatchAllMasterFx(moodycamel::ReaderWriterQueue<AudioEvent>& eventQueue, const MasterFxSettings& fx) {
+    DispatchEngineParam(eventQueue, EngineParam::DelayTimeMs, fx.delayTimeMs);
+    DispatchEngineParam(eventQueue, EngineParam::DelayFeedback, fx.delayFeedback);
+    DispatchEngineParam(eventQueue, EngineParam::DelayMix, fx.delayMix);
+    DispatchEngineParam(eventQueue, EngineParam::ReverbRoom, fx.reverbRoom);
+    DispatchEngineParam(eventQueue, EngineParam::ReverbDamp, fx.reverbDamp);
+    DispatchEngineParam(eventQueue, EngineParam::ReverbMix, fx.reverbMix);
+    DispatchEngineParam(eventQueue, EngineParam::SidechainEnabled, fx.sidechainEnabled);
+    DispatchEngineParam(eventQueue, EngineParam::SidechainAmount, fx.sidechainAmount);
+    DispatchEngineParam(eventQueue, EngineParam::SidechainReleaseMs, fx.sidechainReleaseMs);
+    DispatchEngineParam(eventQueue, EngineParam::MasterDrive, fx.masterDrive);
+}
+
+// C418/STAKILLAZ suites: floating window with the factory patch library and
+// the draft patch's synth-extra parameters (filter/LFO, drive, sub, drop).
+static void DrawPatchSuiteWindow(moodycamel::ReaderWriterQueue<AudioEvent>& eventQueue) {
+    ImGui::SetNextWindowSize(ImVec2(300.0f, 0.0f), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("PATCH SUITE")) {
+        ImGui::End();
+        return;
+    }
+
+    // Factory patch library
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::BeginCombo("##PatchLibrary", "LOAD FACTORY PATCH...")) {
+        for (const auto& name : PatchLibrary::Names()) {
+            if (ImGui::Selectable(name.c_str())) {
+                draftPatch = PatchLibrary::Create(name);
+                // Sync the envelope editor's scalar state; the factory's
+                // pre-built tables are kept until the user edits a curve.
+                attackMs = draftPatch.attackMs;
+                decayMs = draftPatch.decayMs;
+                releaseMs = draftPatch.releaseMs;
+                sustainLvl = draftPatch.sustainLevel;
+                DispatchPatchUpdate(eventQueue, draftPatch);
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::Separator();
+
+    bool extrasChanged = false;
+    auto slider = [&](const char* label, float* v, float lo, float hi, const char* fmt, ImGuiSliderFlags flags = 0) {
+        ImGui::SetNextItemWidth(180.0f);
+        if (ImGui::SliderFloat(label, v, lo, hi, fmt, flags)) extrasChanged = true;
+    };
+
+    ImGui::Text("C418: FILTER");
+    slider("Cutoff", &draftPatch.filterCutoffHz, 100.0f, 20000.0f, "%.0f Hz", ImGuiSliderFlags_Logarithmic);
+    slider("LFO Rate", &draftPatch.filterLfoRateHz, 0.0f, 8.0f, "%.2f Hz");
+    slider("LFO Depth", &draftPatch.filterLfoDepth, 0.0f, 1.0f, "%.2f");
+
+    ImGui::Separator();
+    ImGui::Text("STAKILLAZ: DRIVE / SUB / DROP");
+    slider("Drive", &draftPatch.drive, 0.0f, 30.0f, "%.1f");
+    slider("Sub Level", &draftPatch.subOscLevel, 0.0f, 1.0f, "%.2f");
+    ImGui::SetNextItemWidth(180.0f);
+    if (ImGui::Combo("Sub Wave", &draftPatch.subOscWave, "Sine\0Triangle\0")) extrasChanged = true;
+    slider("Pitch Drop", &draftPatch.pitchDropSemitones, 0.0f, 48.0f, "%.0f st");
+    slider("Drop Time", &draftPatch.pitchDropMs, 5.0f, 500.0f, "%.0f ms");
+
+    if (extrasChanged) {
+        DispatchPatchUpdate(eventQueue, draftPatch);
+    }
+
+    ImGui::End();
+}
+
+// Master-bus FX window (C418 delay/reverb + STAKILLAZ sidechain/drive).
+// Edits update the Main Thread's authoritative copy in state.masterFx and
+// send one ParameterChange event for just the touched field.
+static void DrawMasterFxWindow(moodycamel::ReaderWriterQueue<AudioEvent>& eventQueue) {
+    ImGui::SetNextWindowSize(ImVec2(300.0f, 0.0f), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("MASTER FX")) {
+        ImGui::End();
+        return;
+    }
+    MasterFxSettings& fx = state.masterFx;
+
+    auto slider = [&](const char* label, float* v, float lo, float hi, const char* fmt, EngineParam id, ImGuiSliderFlags flags = 0) {
+        ImGui::SetNextItemWidth(180.0f);
+        if (ImGui::SliderFloat(label, v, lo, hi, fmt, flags)) {
+            DispatchEngineParam(eventQueue, id, *v);
+        }
+    };
+
+    ImGui::Text("PING-PONG DELAY");
+    slider("Time", &fx.delayTimeMs, 1.0f, 1500.0f, "%.0f ms", EngineParam::DelayTimeMs);
+    slider("Feedback", &fx.delayFeedback, 0.0f, 0.95f, "%.2f", EngineParam::DelayFeedback);
+    slider("Mix##delay", &fx.delayMix, 0.0f, 1.0f, "%.2f", EngineParam::DelayMix);
+
+    ImGui::Separator();
+    ImGui::Text("REVERB");
+    slider("Room", &fx.reverbRoom, 0.0f, 1.0f, "%.2f", EngineParam::ReverbRoom);
+    slider("Damping", &fx.reverbDamp, 0.0f, 1.0f, "%.2f", EngineParam::ReverbDamp);
+    slider("Mix##reverb", &fx.reverbMix, 0.0f, 1.0f, "%.2f", EngineParam::ReverbMix);
+
+    ImGui::Separator();
+    ImGui::Text("SIDECHAIN (Track 1 -> Master)");
+    bool scOn = fx.sidechainEnabled >= 0.5f;
+    if (ImGui::Checkbox("Enabled", &scOn)) {
+        fx.sidechainEnabled = scOn ? 1.0f : 0.0f;
+        DispatchEngineParam(eventQueue, EngineParam::SidechainEnabled, fx.sidechainEnabled);
+    }
+    slider("Amount", &fx.sidechainAmount, 0.0f, 1.0f, "%.2f", EngineParam::SidechainAmount);
+    slider("Release", &fx.sidechainReleaseMs, 10.0f, 1000.0f, "%.0f ms", EngineParam::SidechainReleaseMs);
+
+    ImGui::Separator();
+    ImGui::Text("MASTER DRIVE");
+    slider("Drive", &fx.masterDrive, 0.0f, 30.0f, "%.1f", EngineParam::MasterDrive);
+
+    ImGui::End();
+}
+
 void initializeTestPatch()
 {
     draftPatch.name = "Additive Patch";
@@ -279,6 +403,11 @@ void CheckForHotReload(moodycamel::ReaderWriterQueue<AudioEvent>& eventQueue)
         evt.type = AudioEventType::GlobalTuningChange;
         evt.data.globalTuning.tuning = state.tuning.load();
         eventQueue.try_enqueue(evt);
+    }
+    if (!(tempState.masterFx == state.masterFx))
+    {
+        state.masterFx = tempState.masterFx;
+        DispatchAllMasterFx(eventQueue, state.masterFx);
     }
 
     // Patch: only the one actually wired into the UI/engine (matches the single-draft-patch model)
@@ -545,6 +674,9 @@ int main()
                     bpmEvt.type = AudioEventType::BpmChange;
                     bpmEvt.data.bpmState.bpm = state.bpm.load();
                     eventQueue.try_enqueue(bpmEvt);
+
+                    // Master FX (delay/reverb/sidechain/drive) from [GLOBAL]
+                    DispatchAllMasterFx(eventQueue, state.masterFx);
 
                     // Send track update if available
                     if (!state.tracks.empty())
@@ -956,6 +1088,10 @@ int main()
 
         // --- Sample Browser (Phase 5): separate floating window ---
         DrawSampleBrowser(state, eventQueue);
+
+        // --- Genre suites: patch library/extras + master-bus FX windows ---
+        DrawPatchSuiteWindow(eventQueue);
+        DrawMasterFxWindow(eventQueue);
 
         // Rendering
         ImGui::Render();

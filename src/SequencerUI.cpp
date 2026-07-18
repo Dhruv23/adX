@@ -515,6 +515,34 @@ void DrawSequencerUI(SequencerState& state, moodycamel::ReaderWriterQueue<AudioE
             ImGui::TextDisabled("Track %d: %s", s_selectedTrackIndex + 1, track.patchName.c_str());
             ImGui::Separator();
 
+            // --- C418 suite: arpeggiator (held chords become cascading steps) ---
+            {
+                const char* arpModes[] = {"Off", "Up", "Down", "Up-Down"};
+                int mode = track.arp.mode;
+                ImGui::SetNextItemWidth(120.0f);
+                if (ImGui::Combo("Arpeggiator", &mode, arpModes, 4)) {
+                    track.arp.mode = mode;
+                    sequenceChanged = true;
+                }
+                if (track.arp.mode != 0) {
+                    const char* rateLabels[] = {"1/4", "1/8", "1/16"};
+                    const float rateValues[] = {1.0f, 0.5f, 0.25f};
+                    int rateIdx = track.arp.rateBeats >= 0.75f ? 0 : (track.arp.rateBeats >= 0.375f ? 1 : 2);
+                    ImGui::SetNextItemWidth(120.0f);
+                    if (ImGui::Combo("Rate", &rateIdx, rateLabels, 3)) {
+                        track.arp.rateBeats = rateValues[rateIdx];
+                        sequenceChanged = true;
+                    }
+                    ImGui::SetNextItemWidth(120.0f);
+                    ImGui::SliderInt("Octaves", &track.arp.octaves, 1, 4);
+                    if (ImGui::IsItemDeactivatedAfterEdit()) sequenceChanged = true;
+                    ImGui::SetNextItemWidth(120.0f);
+                    ImGui::SliderFloat("Gate", &track.arp.gate, 0.1f, 0.95f, "%.2f");
+                    if (ImGui::IsItemDeactivatedAfterEdit()) sequenceChanged = true;
+                }
+                ImGui::Separator();
+            }
+
             int effectToRemove = -1;
             for (int i = 0; i < static_cast<int>(track.effects.size()); ++i) {
                 auto& fx = track.effects[i];
@@ -580,9 +608,10 @@ void DrawSequencerUI(SequencerState& state, moodycamel::ReaderWriterQueue<AudioE
             ImGui::Text("%s", GetFileBasename(selectedClip.filePath).c_str());
             ImGui::Separator();
 
+            // STAKILLAZ suite: extreme ranges for hyperpop-style repitching
             float pitch = selectedClip.pitchShiftSemitones;
             ImGui::SetNextItemWidth(220.0f);
-            if (ImGui::SliderFloat("Pitch (semitones)", &pitch, -24.0f, 24.0f, "%.1f")) {
+            if (ImGui::SliderFloat("Pitch (semitones)", &pitch, -48.0f, 48.0f, "%.1f")) {
                 selectedClip.pitchShiftSemitones = pitch;
             }
             if (ImGui::IsItemDeactivatedAfterEdit()) {
@@ -592,10 +621,31 @@ void DrawSequencerUI(SequencerState& state, moodycamel::ReaderWriterQueue<AudioE
 
             float stretch = selectedClip.timeStretchFactor;
             ImGui::SetNextItemWidth(220.0f);
-            if (ImGui::SliderFloat("Time Stretch", &stretch, 0.25f, 4.0f, "%.2fx")) {
+            if (ImGui::SliderFloat("Time Stretch", &stretch, 0.1f, 8.0f, "%.2fx", ImGuiSliderFlags_Logarithmic)) {
                 selectedClip.timeStretchFactor = stretch;
             }
             if (ImGui::IsItemDeactivatedAfterEdit()) {
+                AudioClipProcessor::ReprocessClip(selectedClip);
+                sequenceChanged = true;
+            }
+
+            // Quick-chop presets (vocal-chop staples): relative shifts
+            auto chopButton = [&](const char* label, float deltaSemitones) {
+                if (ImGui::SmallButton(label)) {
+                    selectedClip.pitchShiftSemitones =
+                        std::clamp(selectedClip.pitchShiftSemitones + deltaSemitones, -48.0f, 48.0f);
+                    AudioClipProcessor::ReprocessClip(selectedClip);
+                    sequenceChanged = true;
+                }
+            };
+            chopButton("+12", 12.0f); ImGui::SameLine();
+            chopButton("-12", -12.0f); ImGui::SameLine();
+            chopButton("+7", 7.0f); ImGui::SameLine();
+            chopButton("+19", 19.0f); // "chipmunk" octave+fifth
+
+            bool reversed = selectedClip.reversed;
+            if (ImGui::Checkbox("REVERSE", &reversed)) {
+                selectedClip.reversed = reversed;
                 AudioClipProcessor::ReprocessClip(selectedClip);
                 sequenceChanged = true;
             }

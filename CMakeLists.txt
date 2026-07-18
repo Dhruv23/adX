@@ -133,6 +133,7 @@ add_executable(AudioSequencer
     src/AudioEffects.cpp
     src/BpmDetector.cpp
     src/SampleBrowser.cpp
+    src/PatchLibrary.cpp
 )
 target_include_directories(AudioSequencer PRIVATE include)
 target_link_libraries(AudioSequencer PRIVATE

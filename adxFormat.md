@@ -9,6 +9,15 @@ The ADX file format is used for defining audio projects in the adX application. 
   - Example: `MASTER_VOL=0.75`
 - **TUNING**: Tuning frequency (e.g., A4 = 440 Hz).
   - Example: `TUNING=440.0`
+- **DELAY** *(optional)*: Master stereo ping-pong delay: `DELAY=TimeMs, Feedback, Mix` (Mix 0.0 = bypass).
+  - Example: `DELAY=350, 0.35, 0.25`
+- **REVERB** *(optional)*: Master algorithmic reverb: `REVERB=RoomSize, Damping, Mix` (all 0.0–1.0; Mix 0.0 = bypass).
+  - Example: `REVERB=0.8, 0.5, 0.3`
+- **SIDECHAIN** *(optional)*: Track 1's bus ducks the master: `SIDECHAIN=Enabled, Amount, ReleaseMs` (Enabled 0/1).
+  - Example: `SIDECHAIN=1, 0.6, 120`
+- **MASTER_DRIVE** *(optional)*: Final tanh saturation before the compressor (0.0 = bypass, up to 30.0).
+  - Example: `MASTER_DRIVE=8.0`
+- Omitted master-FX keys reset to their defaults (all bypassed) on load.
 
 ## PATCH Section
 - **ENVELOPE**: ADSR envelope values for attack, decay, sustain, and release (0.0 to 1.0).
@@ -17,8 +26,17 @@ The ADX file format is used for defining audio projects in the adX application. 
 - **HARMONICS**: Amplitudes of overtones (16 values).
   - Format: `HARMONICS=Value1, Value2, ..., Value16`
   - Example: `HARMONICS=1.0, 0.5, 0.33, 0.25, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0`
+- **DRIVE** *(optional)*: Per-voice tanh waveshaper drive (0.0 = clean/bypass, up to 30.0).
+  - Example: `DRIVE=12.0`
+- **FILTER** *(optional)*: Per-voice one-pole low-pass with LFO cutoff modulation: `FILTER=CutoffHz, LfoRateHz, LfoDepth`. Cutoffs ≥ 19000 Hz bypass the filter.
+  - Example: `FILTER=2500, 0.1, 0.4`
+- **SUB** *(optional)*: 808-style sub oscillator with pitch-drop transient: `SUB=Level, Wave, DropSemitones, DropMs` (Wave 0 = sine, 1 = triangle; DropSemitones 0 = no drop).
+  - Example: `SUB=0.9, 0, 36, 45`
 
 ## TRACK Section
+- **Arp Entry** *(optional, at most one per track)*: Track-level arpeggiator. When enabled, the track's held/overlapping notes are not played directly — the chord sounding at each grid step becomes one cascading staccato note.
+  - Format: `ARP Mode RateBeats Octaves Gate` (Mode 0 = off, 1 = up, 2 = down, 3 = up-down; RateBeats e.g. `0.25` for 16ths; Octaves 1–4; Gate 0.1–0.95 fraction of the step).
+  - Example: `ARP 1 0.25 2 0.8`
 - **Note Entries**: Define musical notes with specific parameters.
   - Format: `Note StartBeat Duration Velocity`
   - Example:
@@ -29,7 +47,7 @@ The ADX file format is used for defining audio projects in the adX application. 
     C5  3.0  2.0  1.0
     ```
 - **Clip Entries**: Reference a decoded audio file (WAV/MP3) placed on the timeline.
-  - Format: `CLIP FilePath StartTimeSeconds [PitchShiftSemitones TimeStretchFactor]` (the file path must not contain spaces)
+  - Format: `CLIP FilePath StartTimeSeconds [PitchShiftSemitones TimeStretchFactor [R]]` (the file path must not contain spaces; a trailing `R` plays the clip reversed)
   - Position is in absolute seconds from the start of playback, independent of BPM (unlike notes, which are positioned in beats).
   - The trailing pitch/stretch pair is optional on load (older files without it default to `0.0` semitones / `1.0` speed, i.e. unshifted); newly saved files always include it.
   - `PitchShiftSemitones`: semitones to shift the clip's pitch (0 = unshifted, e.g. `12` = one octave up).

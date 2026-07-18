@@ -11,6 +11,14 @@
 AudioEngine::AudioEngine(moodycamel::ReaderWriterQueue<AudioEvent>& eventQueue, unsigned int sampleRate, std::atomic<float>& playheadPositionBeats)
     : m_eventQueue(eventQueue), m_playheadPositionBeats(playheadPositionBeats), m_sampleRate(sampleRate), m_globalSampleCounter(0) {
     calculateCompressorCoefficients(sampleRate);
+
+    // Master delay: 2 seconds of stereo buffer, allocated here on the Main
+    // Thread before the stream starts — process() only indexes into it.
+    m_delay.bufferL.assign(sampleRate * 2, 0.0f);
+    m_delay.bufferR.assign(sampleRate * 2, 0.0f);
+
+    // Sidechain follower release (default 120ms; updated via events)
+    m_compressor.sidechainReleaseCoeff = std::exp(-1.0f / (0.120f * sampleRate));
 }
 
 int AudioEngine::audioCallback(void* outputBuffer, void* inputBuffer, unsigned int nFrames,
@@ -135,6 +143,75 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
         for (size_t trackIdx = 0; trackIdx < m_activeTracks->size(); ++trackIdx) {
             const auto& track = (*m_activeTracks)[trackIdx];
             int busIdx = static_cast<int>(std::min(trackIdx, kMaxEngineTracks - 1));
+
+            // --- C418 suite: track-level arpeggiator ---
+            // Arp-enabled tracks don't schedule their notes directly. Instead,
+            // each step on the rateBeats grid gathers the chord sounding at
+            // the step's onset and emits one staccato note from the pattern.
+            // Everything is derived from the beat clock (stateless per block),
+            // so NoteOffs recompute the SAME chord their NoteOn used and hot
+            // reloads/seeks can't desync the pattern.
+            if (track.arp.mode != 0 && !track.notes.empty()) {
+                double rate = std::max(0.0625f, track.arp.rateBeats);
+                double gateBeats = rate * std::clamp(track.arp.gate, 0.05f, 0.98f);
+                int octaves = std::clamp(track.arp.octaves, 1, 4);
+
+                // Cover steps whose NoteOn OR NoteOff can land inside this block.
+                long firstStep = static_cast<long>(std::floor((blockStartBeat - gateBeats) / rate));
+                long lastStep = static_cast<long>(std::floor(blockEndBeat / rate)) + 1;
+                for (long step = std::max(0L, firstStep); step <= lastStep; ++step) {
+                    double onBeat = step * rate;
+                    double offBeat = onBeat + gateBeats;
+                    bool onInBlock = onBeat >= blockStartBeat && onBeat < blockEndBeat;
+                    bool offInBlock = offBeat >= blockStartBeat && offBeat < blockEndBeat;
+                    if (!onInBlock && !offInBlock) continue;
+
+                    // Chord sounding at the step onset (fixed-size, no allocation)
+                    uint8_t chord[16];
+                    int chordCount = 0;
+                    uint8_t velocity = 100;
+                    for (const auto& note : track.notes) {
+                        if (note.startBeat <= onBeat && onBeat < note.startBeat + note.lengthBeats && chordCount < 16) {
+                            chord[chordCount++] = note.pitch;
+                            velocity = note.velocity;
+                        }
+                    }
+                    if (chordCount == 0) continue;
+
+                    // Insertion sort ascending (tiny N)
+                    for (int a = 1; a < chordCount; ++a) {
+                        uint8_t key = chord[a];
+                        int b = a - 1;
+                        while (b >= 0 && chord[b] > key) { chord[b + 1] = chord[b]; --b; }
+                        chord[b + 1] = key;
+                    }
+
+                    int total = chordCount * octaves;
+                    int idx;
+                    if (track.arp.mode == 2) { // down
+                        idx = total - 1 - static_cast<int>(step % total);
+                    } else if (track.arp.mode == 3) { // up-down
+                        int period = std::max(1, 2 * total - 2);
+                        int k = static_cast<int>(step % period);
+                        idx = k < total ? k : 2 * total - 2 - k;
+                    } else { // up
+                        idx = static_cast<int>(step % total);
+                    }
+                    int pitch = chord[idx % chordCount] + 12 * (idx / chordCount);
+                    uint8_t arpPitch = static_cast<uint8_t>(std::clamp(pitch, 0, 127));
+
+                    if (onInBlock) {
+                        unsigned int off = static_cast<unsigned int>((onBeat - blockStartBeat) * samplesPerBeat);
+                        if (off < nFrames) scheduledEvents.push_back({off, true, arpPitch, velocity, busIdx});
+                    }
+                    if (offInBlock) {
+                        unsigned int off = static_cast<unsigned int>((offBeat - blockStartBeat) * samplesPerBeat);
+                        if (off < nFrames) scheduledEvents.push_back({off, false, arpPitch, velocity, busIdx});
+                    }
+                }
+                continue; // arp replaces direct note scheduling for this track
+            }
+
             for (const auto& note : track.notes) {
                 double noteStartBeat = note.startBeat;
                 double noteEndBeat = note.startBeat + note.lengthBeats;
@@ -230,6 +307,17 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
 
             float oscVal = 0.0f;
             float fundamentalFreq = midiToFreq(voice.pitch);
+
+            // --- STAKILLAZ suite: pitch-drop transient (hardstyle kick / 808
+            // "tok"). Starts pitchDropSemitones above the note and decays
+            // exponentially to the root over ~pitchDropMs. Multiplies the
+            // fundamental of BOTH the harmonic stack and the sub oscillator.
+            if (voice.patch && voice.patch->pitchDropSemitones != 0.0f) {
+                float tauSamples = std::max(1.0f, (voice.patch->pitchDropMs / 1000.0f) * static_cast<float>(m_sampleRate));
+                float dropNow = voice.patch->pitchDropSemitones * std::exp(-static_cast<float>(voice.ageSamples) / tauSamples);
+                fundamentalFreq *= std::pow(2.0f, dropNow / 12.0f);
+            }
+
             float basePhaseInc = fundamentalFreq / static_cast<float>(m_sampleRate);
 
             // Generate oscillator sample (Additive synthesis, up to 16 harmonics)
@@ -244,6 +332,24 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
                     voice.phase[h] -= 1.0f;
                 }
             }
+
+            // --- STAKILLAZ suite: 808-style sub oscillator. Bypasses the
+            // harmonic array entirely — a pure sine/triangle at the (pitch-
+            // dropped) fundamental, summed on top of the harmonic stack.
+            if (voice.patch && voice.patch->subOscLevel > 0.0f) {
+                float subVal;
+                if (voice.patch->subOscWave == 1) {
+                    // Triangle from phase: 4|p-0.5| - 1 gives -1..1
+                    subVal = 4.0f * std::abs(voice.subPhase - 0.5f) - 1.0f;
+                } else {
+                    subVal = std::sin(voice.subPhase * 2.0f * static_cast<float>(M_PI));
+                }
+                oscVal += subVal * voice.patch->subOscLevel;
+                voice.subPhase += basePhaseInc;
+                if (voice.subPhase >= 1.0f) voice.subPhase -= 1.0f;
+            }
+
+            voice.ageSamples++;
 
             // Envelope calculation (Lookup tables)
             if (voice.envState == EnvState::Attack) {
@@ -298,6 +404,30 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
             float velNorm = static_cast<float>(voice.velocity) / 127.0f;
             float currentSample = oscVal * voice.envLevel * velNorm;
 
+            // --- C418 suite: one-pole low-pass filter with LFO-modulated
+            // cutoff (warm, slowly-evolving pads). Bypassed at high cutoffs.
+            if (voice.patch && voice.patch->filterCutoffHz < kFilterBypassHz) {
+                float cutoff = voice.patch->filterCutoffHz;
+                if (voice.patch->filterLfoDepth > 0.0f && voice.patch->filterLfoRateHz > 0.0f) {
+                    cutoff *= 1.0f + voice.patch->filterLfoDepth *
+                              std::sin(voice.lfoPhase * 2.0f * static_cast<float>(M_PI));
+                    voice.lfoPhase += voice.patch->filterLfoRateHz / static_cast<float>(m_sampleRate);
+                    if (voice.lfoPhase >= 1.0f) voice.lfoPhase -= 1.0f;
+                }
+                cutoff = std::clamp(cutoff, 20.0f, 20000.0f);
+                float coeff = 1.0f - std::exp(-2.0f * static_cast<float>(M_PI) * cutoff / static_cast<float>(m_sampleRate));
+                voice.lpfState += coeff * (currentSample - voice.lpfState);
+                currentSample = voice.lpfState;
+            }
+
+            // --- STAKILLAZ suite: per-voice waveshaper drive. tanh-normalized
+            // so drive changes the shape (harder clipping, denser overtones)
+            // without exploding the level.
+            if (voice.patch && voice.patch->drive > 0.0f) {
+                float d = 1.0f + voice.patch->drive;
+                currentSample = std::tanh(currentSample * d) / std::tanh(d);
+            }
+
             // Pan center, into this voice's track bus
             int busIdx = std::clamp(voice.trackIndex, 0, static_cast<int>(kMaxEngineTracks) - 1);
             busL[busIdx] += currentSample * 0.5f;
@@ -326,6 +456,9 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
         // the master. Effects run every sample regardless of bus activity so
         // reverb tails ring out after their source stops. Traversal is
         // read-only over shared_ptrs the audio thread's track list owns.
+        // Post-effect level of Track 1's bus — the STAKILLAZ sidechain key.
+        float sidechainKey = 0.0f;
+
         if (m_activeTracks && !m_activeTracks->empty()) {
             size_t busCount = std::min(m_activeTracks->size(), kMaxEngineTracks);
             for (size_t t = 0; t < busCount; ++t) {
@@ -334,6 +467,7 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
                 for (const auto& fx : (*m_activeTracks)[t].effects) {
                     if (fx) fx->processSample(l, r);
                 }
+                if (t == 0) sidechainKey = std::max(std::abs(l), std::abs(r));
                 sampleLeft += l;
                 sampleRight += r;
             }
@@ -341,6 +475,52 @@ int AudioEngine::process(float* outputBuffer, unsigned int nFrames) {
             // No track list yet (live/queue voices only) — bus 0 passes through
             sampleLeft += busL[0];
             sampleRight += busR[0];
+            sidechainKey = std::max(std::abs(busL[0]), std::abs(busR[0]));
+        }
+
+        // --- Master FX chain (before the peak compressor) ---
+
+        // 1. C418 stereo ping-pong delay: cross-feedback between channels.
+        if (m_delayMix > 0.0f) {
+            size_t bufSize = m_delay.bufferL.size();
+            size_t delaySamples = static_cast<size_t>((m_delayTimeMs / 1000.0f) * m_sampleRate);
+            delaySamples = std::clamp<size_t>(delaySamples, 1, bufSize - 1);
+            size_t readIndex = (m_delay.writeIndex + bufSize - delaySamples) % bufSize;
+
+            float delayedL = m_delay.bufferL[readIndex];
+            float delayedR = m_delay.bufferR[readIndex];
+
+            // Ping-pong: each channel's feedback goes to the OTHER channel
+            m_delay.bufferL[m_delay.writeIndex] = sampleLeft + delayedR * m_delayFeedback;
+            m_delay.bufferR[m_delay.writeIndex] = sampleRight + delayedL * m_delayFeedback;
+            if (++m_delay.writeIndex >= bufSize) m_delay.writeIndex = 0;
+
+            sampleLeft += delayedL * m_delayMix;
+            sampleRight += delayedR * m_delayMix;
+        }
+
+        // 2. C418 master reverb (Freeverb core; mix 0 = bypass inside)
+        if (m_masterReverb.mix.load(std::memory_order_relaxed) > 0.0f) {
+            m_masterReverb.processSample(sampleLeft, sampleRight);
+        }
+
+        // 3. STAKILLAZ sidechain pump: Track 1's bus ducks the master.
+        if (m_compressor.sidechainEnabled) {
+            // Instant attack, one-pole release
+            m_compressor.sidechainEnv = std::max(sidechainKey,
+                m_compressor.sidechainEnv * m_compressor.sidechainReleaseCoeff);
+            float duck = 1.0f - m_compressor.sidechainAmount * std::min(1.0f, m_compressor.sidechainEnv);
+            duck = std::max(0.0f, duck);
+            sampleLeft *= duck;
+            sampleRight *= duck;
+        }
+
+        // 4. STAKILLAZ master drive: final tanh saturation/hard-clip character
+        if (m_masterDrive > 0.0f) {
+            float d = 1.0f + m_masterDrive;
+            float norm = std::tanh(d);
+            sampleLeft = std::tanh(sampleLeft * d) / norm;
+            sampleRight = std::tanh(sampleRight * d) / norm;
         }
 
         // --- Peak Compressor ---
@@ -424,6 +604,12 @@ void AudioEngine::handleNoteOn(const AudioEvent& event, int trackIndex) {
         voice.phase[i] = 0.0f;
         voice.harmonicAmplitudes[i] = 0.0f;
     }
+
+    // Reset per-voice DSP state (LPF, LFO, sub oscillator, pitch-drop clock)
+    voice.lpfState = 0.0f;
+    voice.lfoPhase = 0.0f;
+    voice.subPhase = 0.0f;
+    voice.ageSamples = 0;
 
     // Interpolate harmonic amplitudes from keyframes
     if (voice.patch && !voice.patch->timbreKeyframes.empty()) {
@@ -512,8 +698,41 @@ void AudioEngine::handleNoteOff(const AudioEvent& event) {
 }
 
 void AudioEngine::handleParameterChange(const AudioEvent& event) {
-    (void)event;
-    // Parameter updates will be handled here
+    float value = event.data.paramData.value;
+    switch (static_cast<EngineParam>(event.data.paramData.paramId)) {
+        case EngineParam::DelayTimeMs:
+            m_delayTimeMs = std::clamp(value, 1.0f, 1990.0f);
+            break;
+        case EngineParam::DelayFeedback:
+            m_delayFeedback = std::clamp(value, 0.0f, 0.95f);
+            break;
+        case EngineParam::DelayMix:
+            m_delayMix = std::clamp(value, 0.0f, 1.0f);
+            break;
+        case EngineParam::ReverbRoom:
+            m_masterReverb.roomSize.store(std::clamp(value, 0.0f, 1.0f), std::memory_order_relaxed);
+            break;
+        case EngineParam::ReverbDamp:
+            m_masterReverb.damping.store(std::clamp(value, 0.0f, 1.0f), std::memory_order_relaxed);
+            break;
+        case EngineParam::ReverbMix:
+            m_masterReverb.mix.store(std::clamp(value, 0.0f, 1.0f), std::memory_order_relaxed);
+            break;
+        case EngineParam::SidechainEnabled:
+            m_compressor.sidechainEnabled = value >= 0.5f;
+            break;
+        case EngineParam::SidechainAmount:
+            m_compressor.sidechainAmount = std::clamp(value, 0.0f, 1.0f);
+            break;
+        case EngineParam::SidechainReleaseMs: {
+            float ms = std::clamp(value, 10.0f, 1000.0f);
+            m_compressor.sidechainReleaseCoeff = std::exp(-1.0f / ((ms / 1000.0f) * m_sampleRate));
+            break;
+        }
+        case EngineParam::MasterDrive:
+            m_masterDrive = std::clamp(value, 0.0f, 30.0f);
+            break;
+    }
 }
 
 size_t AudioEngine::allocateVoice() {

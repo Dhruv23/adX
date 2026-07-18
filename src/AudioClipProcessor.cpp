@@ -11,7 +11,7 @@ void ReprocessClip(AudioClip& clip) {
         return;
     }
 
-    bool isIdentity = (clip.pitchShiftSemitones == 0.0f && clip.timeStretchFactor == 1.0f);
+    bool isIdentity = (clip.pitchShiftSemitones == 0.0f && clip.timeStretchFactor == 1.0f && !clip.reversed);
     if (isIdentity) {
         clip.pcmData = clip.originalPcmData; // zero-copy alias, no RubberBand invocation
         return;
@@ -21,12 +21,27 @@ void ReprocessClip(AudioClip& clip) {
     const size_t frameCount = clip.originalPcmData->size() / channels;
     if (frameCount == 0) return;
 
-    // De-interleave into planar per-channel buffers (RubberBand's API wants float* per channel)
+    // De-interleave into planar per-channel buffers (RubberBand's API wants
+    // float* per channel), reversing the frame order first if requested
+    // (STAKILLAZ suite: reversed chops feed RubberBand like any other source).
     std::vector<std::vector<float>> planarIn(channels, std::vector<float>(frameCount));
     for (size_t i = 0; i < frameCount; ++i) {
+        size_t srcFrame = clip.reversed ? (frameCount - 1 - i) : i;
         for (size_t c = 0; c < channels; ++c) {
-            planarIn[c][i] = (*clip.originalPcmData)[i * channels + c];
+            planarIn[c][i] = (*clip.originalPcmData)[srcFrame * channels + c];
         }
+    }
+
+    // Reverse-only: no pitch/stretch work for RubberBand to do.
+    if (clip.pitchShiftSemitones == 0.0f && clip.timeStretchFactor == 1.0f) {
+        auto reversedOut = std::make_shared<std::vector<float>>(frameCount * channels);
+        for (size_t i = 0; i < frameCount; ++i) {
+            for (size_t c = 0; c < channels; ++c) {
+                (*reversedOut)[i * channels + c] = planarIn[c][i];
+            }
+        }
+        clip.pcmData = reversedOut;
+        return;
     }
     std::vector<const float*> inputPtrs(channels);
     for (size_t c = 0; c < channels; ++c) inputPtrs[c] = planarIn[c].data();

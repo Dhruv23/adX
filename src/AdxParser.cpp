@@ -85,6 +85,7 @@ bool AdxParser::LoadProject(const std::string& filepath, SequencerState& state, 
 
     state.patches.clear();
     state.tracks.clear();
+    state.masterFx = MasterFxSettings{}; // files without master-FX keys mean "defaults", not "keep previous"
     outFirstPatchName = "";
 
     std::string lineStr;
@@ -130,6 +131,31 @@ bool AdxParser::LoadProject(const std::string& filepath, SequencerState& state, 
                     if (tokens[0] == "BPM") state.bpm.store(std::stof(std::string(tokens[1])));
                     else if (tokens[0] == "MASTER_VOL") state.masterVolume.store(std::stof(std::string(tokens[1])));
                     else if (tokens[0] == "TUNING") state.tuning.store(std::stof(std::string(tokens[1])));
+                    else if (tokens[0] == "MASTER_DRIVE") state.masterFx.masterDrive = std::stof(std::string(tokens[1]));
+                    else if (tokens[0] == "DELAY") {
+                        auto vals = split(tokens[1], ',');
+                        if (vals.size() >= 3) {
+                            state.masterFx.delayTimeMs = std::stof(std::string(vals[0]));
+                            state.masterFx.delayFeedback = std::stof(std::string(vals[1]));
+                            state.masterFx.delayMix = std::stof(std::string(vals[2]));
+                        }
+                    }
+                    else if (tokens[0] == "REVERB") {
+                        auto vals = split(tokens[1], ',');
+                        if (vals.size() >= 3) {
+                            state.masterFx.reverbRoom = std::stof(std::string(vals[0]));
+                            state.masterFx.reverbDamp = std::stof(std::string(vals[1]));
+                            state.masterFx.reverbMix = std::stof(std::string(vals[2]));
+                        }
+                    }
+                    else if (tokens[0] == "SIDECHAIN") {
+                        auto vals = split(tokens[1], ',');
+                        if (vals.size() >= 3) {
+                            state.masterFx.sidechainEnabled = std::stof(std::string(vals[0]));
+                            state.masterFx.sidechainAmount = std::stof(std::string(vals[1]));
+                            state.masterFx.sidechainReleaseMs = std::stof(std::string(vals[2]));
+                        }
+                    }
                 } catch (const std::exception& e) {
                     std::cerr << "AdxParser Warning: Malformed GLOBAL parameter on line " << lineNumber << std::endl;
                 }
@@ -149,6 +175,29 @@ bool AdxParser::LoadProject(const std::string& filepath, SequencerState& state, 
                         } catch (const std::exception& e) {
                             std::cerr << "AdxParser Warning: Malformed ENVELOPE on line " << lineNumber << std::endl;
                         }
+                    }
+                } else if (tokens[0] == "DRIVE") {
+                    try { p.drive = std::stof(std::string(tokens[1])); } catch (...) {}
+                } else if (tokens[0] == "FILTER") {
+                    // FILTER=CutoffHz, LfoRateHz, LfoDepth
+                    auto vals = split(tokens[1], ',');
+                    if (vals.size() >= 3) {
+                        try {
+                            p.filterCutoffHz = std::stof(std::string(vals[0]));
+                            p.filterLfoRateHz = std::stof(std::string(vals[1]));
+                            p.filterLfoDepth = std::stof(std::string(vals[2]));
+                        } catch (...) {}
+                    }
+                } else if (tokens[0] == "SUB") {
+                    // SUB=Level, Wave, DropSemitones, DropMs
+                    auto vals = split(tokens[1], ',');
+                    if (vals.size() >= 4) {
+                        try {
+                            p.subOscLevel = std::stof(std::string(vals[0]));
+                            p.subOscWave = static_cast<int>(std::stof(std::string(vals[1])));
+                            p.pitchDropSemitones = std::stof(std::string(vals[2]));
+                            p.pitchDropMs = std::stof(std::string(vals[3]));
+                        } catch (...) {}
                     }
                 } else if (tokens[0] == "HARMONICS") {
                     auto vals = split(tokens[1], ',');
@@ -174,7 +223,21 @@ bool AdxParser::LoadProject(const std::string& filepath, SequencerState& state, 
                     if (!tk.empty()) cleanTokens.push_back(tk);
                 }
 
-                if (!cleanTokens.empty() && cleanTokens[0] == "EFFECT") {
+                if (!cleanTokens.empty() && cleanTokens[0] == "ARP") {
+                    // Format: ARP Mode RateBeats Octaves Gate
+                    if (cleanTokens.size() == 5) {
+                        try {
+                            t.arp.mode = std::stoi(std::string(cleanTokens[1]));
+                            t.arp.rateBeats = std::stof(std::string(cleanTokens[2]));
+                            t.arp.octaves = std::stoi(std::string(cleanTokens[3]));
+                            t.arp.gate = std::stof(std::string(cleanTokens[4]));
+                        } catch (const std::exception&) {
+                            std::cerr << "AdxParser Warning: Malformed ARP on line " << lineNumber << std::endl;
+                        }
+                    } else {
+                        std::cerr << "AdxParser Warning: Malformed ARP format on line " << lineNumber << std::endl;
+                    }
+                } else if (!cleanTokens.empty() && cleanTokens[0] == "EFFECT") {
                     // Format: EFFECT Reverb Mix RoomSize Damping
                     //         EFFECT Distortion Drive Mix
                     try {
@@ -194,15 +257,16 @@ bool AdxParser::LoadProject(const std::string& filepath, SequencerState& state, 
                         std::cerr << "AdxParser Warning: Malformed EFFECT on line " << lineNumber << std::endl;
                     }
                 } else if (!cleanTokens.empty() && cleanTokens[0] == "CLIP") {
-                    if (cleanTokens.size() == 3 || cleanTokens.size() == 5) {
+                    if (cleanTokens.size() == 3 || cleanTokens.size() == 5 || cleanTokens.size() == 6) {
                         try {
                             std::string filePath(cleanTokens[1]);
                             float startTimeSeconds = std::stof(std::string(cleanTokens[2]));
                             auto clip = AudioFileLoader::LoadAudioClip(filePath, startTimeSeconds);
                             if (clip) {
-                                if (cleanTokens.size() == 5) {
+                                if (cleanTokens.size() >= 5) {
                                     clip->pitchShiftSemitones = std::stof(std::string(cleanTokens[3]));
                                     clip->timeStretchFactor = std::stof(std::string(cleanTokens[4]));
+                                    clip->reversed = (cleanTokens.size() == 6 && cleanTokens[5] == "R");
                                     AudioClipProcessor::ReprocessClip(*clip);
                                 }
                                 t.audioClips.push_back(std::move(*clip));
@@ -245,7 +309,12 @@ bool AdxParser::SaveProject(const std::string& filepath, const SequencerState& s
     file << "[GLOBAL]\n";
     file << "BPM=" << state.bpm.load() << "\n";
     file << "MASTER_VOL=" << state.masterVolume.load() << "\n";
-    file << "TUNING=" << state.tuning.load() << "\n\n";
+    file << "TUNING=" << state.tuning.load() << "\n";
+    file << "# Master FX: DELAY=TimeMs, Feedback, Mix | REVERB=Room, Damp, Mix | SIDECHAIN=Enabled, Amount, ReleaseMs\n";
+    file << "DELAY=" << state.masterFx.delayTimeMs << ", " << state.masterFx.delayFeedback << ", " << state.masterFx.delayMix << "\n";
+    file << "REVERB=" << state.masterFx.reverbRoom << ", " << state.masterFx.reverbDamp << ", " << state.masterFx.reverbMix << "\n";
+    file << "SIDECHAIN=" << state.masterFx.sidechainEnabled << ", " << state.masterFx.sidechainAmount << ", " << state.masterFx.sidechainReleaseMs << "\n";
+    file << "MASTER_DRIVE=" << state.masterFx.masterDrive << "\n\n";
 
     for (const auto& [name, patch] : state.patches) {
         file << "[PATCH " << name << "]\n";
@@ -267,11 +336,21 @@ bool AdxParser::SaveProject(const std::string& filepath, const SequencerState& s
         } else {
             for (int i=0; i<16; ++i) file << (i==0 ? "1.0" : "0.0") << (i<15 ? ", " : "");
         }
-        file << "\n\n";
+        file << "\n";
+        file << "# Suite params: DRIVE=x | FILTER=CutoffHz, LfoRateHz, LfoDepth | SUB=Level, Wave, DropSemitones, DropMs\n";
+        file << "DRIVE=" << patch.drive << "\n";
+        file << "FILTER=" << patch.filterCutoffHz << ", " << patch.filterLfoRateHz << ", " << patch.filterLfoDepth << "\n";
+        file << "SUB=" << patch.subOscLevel << ", " << patch.subOscWave << ", "
+             << patch.pitchDropSemitones << ", " << patch.pitchDropMs << "\n\n";
     }
 
     for (const auto& track : state.tracks) {
         file << "[TRACK " << track.patchName << "]\n";
+        if (track.arp.mode != 0) {
+            file << "# Format: ARP Mode RateBeats Octaves Gate\n";
+            file << "ARP " << track.arp.mode << " " << track.arp.rateBeats << " "
+                 << track.arp.octaves << " " << track.arp.gate << "\n";
+        }
         file << "# Format: Note StartBeat Duration Velocity\n";
         for (const auto& note : track.notes) {
             file << MidiToNoteName(note.pitch) << " "
@@ -285,7 +364,8 @@ bool AdxParser::SaveProject(const std::string& filepath, const SequencerState& s
                 file << "CLIP " << clip.filePath << " "
                      << std::fixed << std::setprecision(3) << clip.startTimeSeconds << " "
                      << clip.pitchShiftSemitones << " "
-                     << clip.timeStretchFactor << "\n";
+                     << clip.timeStretchFactor
+                     << (clip.reversed ? " R" : "") << "\n";
             }
         }
         if (!track.effects.empty()) {
