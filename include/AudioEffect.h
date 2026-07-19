@@ -31,6 +31,11 @@ public:
     // Same concrete type and same parameter values (used by hot-reload
     // diffing, where a reparsed file always yields fresh instances).
     virtual bool isEquivalent(const AudioEffect& other) const = 0;
+
+    // Fresh instance with the same parameters but pristine DSP state. Used by
+    // offline export rendering, which must never process the SAME instance the
+    // live audio thread is processing (concurrent DSP-state mutation).
+    virtual std::shared_ptr<AudioEffect> clone() const = 0;
 };
 
 // Freeverb-style algorithmic reverb (8 parallel combs + 4 series allpasses
@@ -42,6 +47,9 @@ public:
     void processSample(float& left, float& right) override;
     const char* typeName() const override { return "Reverb"; }
     bool isEquivalent(const AudioEffect& other) const override;
+    std::shared_ptr<AudioEffect> clone() const override {
+        return std::make_shared<ReverbEffect>(mix.load(), roomSize.load(), damping.load());
+    }
 
     std::atomic<float> mix;      // 0 dry .. 1 wet
     std::atomic<float> roomSize; // 0 .. 1
@@ -75,6 +83,9 @@ public:
     void processSample(float& left, float& right) override;
     const char* typeName() const override { return "Distortion"; }
     bool isEquivalent(const AudioEffect& other) const override;
+    std::shared_ptr<AudioEffect> clone() const override {
+        return std::make_shared<DistortionEffect>(drive.load(), mix.load());
+    }
 
     std::atomic<float> drive; // 1 (clean-ish) .. 30 (blown out)
     std::atomic<float> mix;   // 0 dry .. 1 wet

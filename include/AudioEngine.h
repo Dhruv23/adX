@@ -77,7 +77,15 @@ struct MasterDelayState {
 class AudioEngine {
 public:
     AudioEngine(moodycamel::ReaderWriterQueue<AudioEvent>& eventQueue, unsigned int sampleRate, std::atomic<float>& playheadPositionBeats);
-    ~AudioEngine() = default;
+
+    // Releases the active patch/track list (heap objects the engine took
+    // ownership of via PatchUpdate/SequenceUpdate events). Only safe once no
+    // audio callback can run anymore — i.e. after the stream is closed, or on
+    // an offline ExportRenderer engine that was never attached to a stream.
+    ~AudioEngine() {
+        delete m_activePatch;
+        delete m_activeTracks;
+    }
 
     // The static callback passed to RtAudio
     static int audioCallback(void* outputBuffer, void* inputBuffer, unsigned int nFrames,

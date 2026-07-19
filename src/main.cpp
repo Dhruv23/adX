@@ -4,18 +4,24 @@
 #include "SampleBrowser.h"
 #include "AdxParser.h"
 #include "MelodyExtractor.h"
+#include "ExportRenderer.h"
 #include <portable-file-dialogs.h>
 
 #include <iostream>
 #include <chrono>
 #include <thread>
 #include <atomic>
+#include <cctype>
+#include <cstdlib>
 #include <filesystem>
+#include <memory>
+#include <string>
 #include <system_error>
 
 #include <RtAudio.h>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
+#include <imgui_internal.h> // DockBuilder API for the default dock layout
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <readerwriterqueue.h>
@@ -183,6 +189,19 @@ struct MelodyExtractionJob {
 MelodyExtractionJob g_melodyJob;
 MelodyExtractor g_melodyExtractor;
 
+// Offline audio export: same atomic-flag handoff pattern as MelodyExtractionJob.
+// result is written by the worker before done=true and only read on the Main
+// Thread after observing done==true.
+struct ExportJob {
+    std::atomic<bool> running{false};
+    std::atomic<bool> done{false};
+    std::atomic<float> progress{0.0f};
+    ExportRenderer::Result result;
+};
+ExportJob g_exportJob;
+// Last completed export's outcome, shown in the EXPORT window (Main Thread only).
+std::string g_lastExportMessage;
+
 static void DispatchPatchUpdate(moodycamel::ReaderWriterQueue<AudioEvent>& eventQueue, const Patch& patch) {
     AudioEvent evt{};
     evt.type = AudioEventType::PatchUpdate;
@@ -317,6 +336,95 @@ static void DrawMasterFxWindow(moodycamel::ReaderWriterQueue<AudioEvent>& eventQ
     ImGui::Separator();
     ImGui::Text("MASTER DRIVE");
     slider("Drive", &fx.masterDrive, 0.0f, 30.0f, "%.1f", EngineParam::MasterDrive);
+
+    ImGui::End();
+}
+
+// EXPORT window: offline-renders the whole project to disk (WAV 16/24/32f,
+// MP3, FLAC) through a fresh AudioEngine — see ExportRenderer. The render runs
+// on a background std::thread; g_exportJob hands progress/result back to the
+// Main Thread, which applies it in the main loop (same pattern as g_melodyJob).
+static void DrawExportWindow() {
+    ImGui::SetNextWindowSize(ImVec2(320.0f, 0.0f), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("EXPORT")) {
+        ImGui::End();
+        return;
+    }
+
+    static constexpr ExportRenderer::Format kFormats[] = {
+        ExportRenderer::Format::Wav16,
+        ExportRenderer::Format::Wav24,
+        ExportRenderer::Format::WavFloat32,
+        ExportRenderer::Format::Mp3,
+        ExportRenderer::Format::Flac,
+    };
+    static int s_formatIndex = 0;
+    static float s_tailSeconds = 3.0f;
+
+    ImGui::TextUnformatted("FORMAT");
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::BeginCombo("##ExportFormat", ExportRenderer::FormatLabel(kFormats[s_formatIndex]))) {
+        for (int i = 0; i < static_cast<int>(IM_ARRAYSIZE(kFormats)); ++i) {
+            if (ImGui::Selectable(ExportRenderer::FormatLabel(kFormats[i]), i == s_formatIndex)) {
+                s_formatIndex = i;
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    ImGui::SetNextItemWidth(180.0f);
+    ImGui::SliderFloat("Tail", &s_tailSeconds, 0.0f, 15.0f, "%.1f s");
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Silence rendered after the last note so release\nenvelopes and delay/reverb tails are not cut off.");
+    }
+
+    float contentSeconds = ExportRenderer::EstimateContentSeconds(state.tracks, state.bpm.load());
+    ImGui::Text("Length: %.1f s content + %.1f s tail", contentSeconds, s_tailSeconds);
+
+    bool running = g_exportJob.running.load();
+    bool nothingToExport = state.tracks.empty();
+    ImGui::BeginDisabled(running || nothingToExport);
+    if (ImGui::Button(running ? "EXPORTING..." : "EXPORT...", ImVec2(-1.0f, 30.0f))) {
+        ExportRenderer::Format format = kFormats[s_formatIndex];
+        const std::string ext = ExportRenderer::FormatExtension(format);
+        std::string path = pfd::save_file("Export Audio", "export" + ext,
+                                          {ExportRenderer::FormatLabel(format), "*" + ext,
+                                           "All Files", "*"}).result();
+        if (!path.empty()) {
+            // Append the extension if the user typed a bare name.
+            std::string lowered = path;
+            std::transform(lowered.begin(), lowered.end(), lowered.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (lowered.size() < ext.size() ||
+                lowered.compare(lowered.size() - ext.size(), ext.size(), ext) != 0) {
+                path += ext;
+            }
+
+            // Snapshot the live state (deep-copied tracks, cloned effects) so
+            // the background render never races the audio thread or later UI edits.
+            auto request = std::make_shared<ExportRenderer::Request>(
+                ExportRenderer::BuildRequest(state, draftPatch, format, path, s_tailSeconds));
+            g_exportJob.progress.store(0.0f);
+            g_exportJob.done.store(false);
+            g_exportJob.running.store(true);
+            std::thread([request]() {
+                g_exportJob.result = ExportRenderer::Render(*request, &g_exportJob.progress);
+                g_exportJob.done.store(true);
+            }).detach();
+        }
+    }
+    ImGui::EndDisabled();
+    if (nothingToExport && !running) {
+        ImGui::TextDisabled("Nothing to export: the project has no tracks.");
+    }
+
+    if (running) {
+        ImGui::ProgressBar(g_exportJob.progress.load(), ImVec2(-1.0f, 0.0f));
+    } else if (!g_lastExportMessage.empty()) {
+        ImGui::TextWrapped("%s", g_lastExportMessage.c_str());
+    }
 
     ImGui::End();
 }
@@ -503,10 +611,105 @@ static bool LoadProjectAndSync(const std::string& path, moodycamel::ReaderWriter
     return true;
 }
 
+// Default dock layout, built only when imgui.ini has no layout for the
+// dockspace yet (first launch, or after deleting imgui.ini to reset). VS Code
+// arrangement: left sidebar (browser/patches), right sidebar (FX/export),
+// center editor with the sequencer docked underneath. Every window can be
+// dragged out to float, re-snapped elsewhere, or stacked as tabs.
+static void BuildDefaultDockLayout(ImGuiID dockspaceId, ImVec2 size)
+{
+    ImGui::DockBuilderRemoveNode(dockspaceId);
+    ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
+    ImGui::DockBuilderSetNodeSize(dockspaceId, size);
+
+    ImGuiID center = dockspaceId;
+    ImGuiID left   = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left,  0.20f, nullptr, &center);
+    ImGuiID right  = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.27f, nullptr, &center);
+    ImGuiID bottom = ImGui::DockBuilderSplitNode(center, ImGuiDir_Down,  0.52f, nullptr, &center);
+
+    ImGui::DockBuilderDockWindow("SAMPLE BROWSER", left);
+    ImGui::DockBuilderDockWindow("PATCH SUITE",    left);
+    ImGui::DockBuilderDockWindow("MASTER FX",      right);
+    ImGui::DockBuilderDockWindow("TRACK FX",       right);
+    ImGui::DockBuilderDockWindow("EXPORT",         right);
+    ImGui::DockBuilderDockWindow("PATCH EDITOR",   center);
+    ImGui::DockBuilderDockWindow("SEQUENCER",      bottom);
+    ImGui::DockBuilderFinish(dockspaceId);
+}
+
+// Headless export (no window, no audio device):
+//   AudioSequencer.exe project.adx --export out.mp3 [--format wav16|wav24|wav32f|mp3|flac] [--tail seconds]
+// Format defaults from the output extension (.mp3 / .flac / .wav -> 16-bit WAV).
+static int RunHeadlessExport(const std::string& projectPath, const std::string& outputPath,
+                             const std::string& formatName, float tailSeconds)
+{
+    ExportRenderer::Format format = ExportRenderer::Format::Wav16;
+    if (!formatName.empty()) {
+        if      (formatName == "wav16")  format = ExportRenderer::Format::Wav16;
+        else if (formatName == "wav24")  format = ExportRenderer::Format::Wav24;
+        else if (formatName == "wav32f") format = ExportRenderer::Format::WavFloat32;
+        else if (formatName == "mp3")    format = ExportRenderer::Format::Mp3;
+        else if (formatName == "flac")   format = ExportRenderer::Format::Flac;
+        else {
+            std::cerr << "Unknown --format '" << formatName << "' (expected wav16|wav24|wav32f|mp3|flac)\n";
+            return 1;
+        }
+    } else {
+        std::string lowered = outputPath;
+        std::transform(lowered.begin(), lowered.end(), lowered.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if      (lowered.ends_with(".mp3"))  format = ExportRenderer::Format::Mp3;
+        else if (lowered.ends_with(".flac")) format = ExportRenderer::Format::Flac;
+    }
+
+    std::string firstPatchName;
+    if (!AdxParser::LoadProject(projectPath, state, firstPatchName)) {
+        std::cerr << "Failed to load project: " << projectPath << "\n";
+        return 1;
+    }
+    if (!firstPatchName.empty() && state.patches.count(firstPatchName)) {
+        const Patch& firstPatch = state.patches[firstPatchName];
+        draftPatch = firstPatch;
+        attackMs = firstPatch.attackMs;
+        decayMs = firstPatch.decayMs;
+        releaseMs = firstPatch.releaseMs;
+        sustainLvl = firstPatch.sustainLevel;
+    }
+    updateDraftPatchEnvelopes(); // .adx stores ADSR scalars, not tables — rebuild them
+
+    auto request = ExportRenderer::BuildRequest(state, draftPatch, format, outputPath, tailSeconds);
+    std::cout << "Rendering " << ExportRenderer::EstimateContentSeconds(state.tracks, state.bpm.load())
+              << " s of content (+" << tailSeconds << " s tail) to " << outputPath << "...\n";
+    std::atomic<float> progress{0.0f};
+    ExportRenderer::Result result = ExportRenderer::Render(request, &progress);
+    (result.success ? std::cout : std::cerr) << result.message << "\n";
+    return result.success ? 0 : 1;
+}
+
 // --- Main Application ---
 int main(int argc, char** argv)
 {
     initializeTestPatch();
+
+    // Headless export mode: parse flags before touching GLFW/RtAudio.
+    {
+        std::string projectPath, exportPath, formatName;
+        float tailSeconds = 3.0f;
+        for (int i = 1; i < argc; ++i) {
+            std::string arg = argv[i];
+            if (arg == "--export" && i + 1 < argc)      exportPath = argv[++i];
+            else if (arg == "--format" && i + 1 < argc) formatName = argv[++i];
+            else if (arg == "--tail" && i + 1 < argc)   tailSeconds = std::strtof(argv[++i], nullptr);
+            else if (!arg.starts_with("--") && projectPath.empty()) projectPath = arg;
+        }
+        if (!exportPath.empty()) {
+            if (projectPath.empty()) {
+                std::cerr << "--export requires a project file: AudioSequencer.exe project.adx --export out.mp3\n";
+                return 1;
+            }
+            return RunHeadlessExport(projectPath, exportPath, formatName, tailSeconds);
+        }
+    }
 
     // 1. Initialize GLFW and ImGui
     if (!glfwInit())
@@ -537,6 +740,10 @@ int main(int argc, char** argv)
     ImGuiIO &io = ImGui::GetIO();
     (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    // VS Code-style modular UI: every panel is a dockable window the user can
+    // tear off, re-snap, or stack as tabs. Layout persists via imgui.ini.
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.ConfigDockingWithShift = false; // drag title bars to dock directly
 
     ImGui::StyleColorsDark();
     SetupImGuiStyle();
@@ -646,12 +853,25 @@ int main(int argc, char** argv)
             g_melodyJob.done.store(false);
         }
 
+        // Apply a finished export job, if any (same handoff as g_melodyJob).
+        if (g_exportJob.running.load() && g_exportJob.done.load())
+        {
+            g_lastExportMessage = g_exportJob.result.message;
+            if (!g_exportJob.result.success)
+            {
+                std::cerr << "Export failed: " << g_exportJob.result.message << "\n";
+            }
+            g_exportJob.running.store(false);
+            g_exportJob.done.store(false);
+        }
+
         // Start ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // Make the main window fullscreen and borderless
+        // Fullscreen borderless HOST window: holds the transport bar and the
+        // dockspace every other panel snaps into (it is itself not dockable).
         ImGuiViewport *viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -660,7 +880,10 @@ int main(int argc, char** argv)
                                        ImGuiWindowFlags_NoResize |
                                        ImGuiWindowFlags_NoMove |
                                        ImGuiWindowFlags_NoScrollbar |
-                                       ImGuiWindowFlags_NoCollapse;
+                                       ImGuiWindowFlags_NoCollapse |
+                                       ImGuiWindowFlags_NoBringToFrontOnFocus |
+                                       ImGuiWindowFlags_NoNavFocus |
+                                       ImGuiWindowFlags_NoDocking;
 
         // UI rendering
         ImGui::Begin("MainCanvas", nullptr, windowFlags);
@@ -757,13 +980,19 @@ int main(int argc, char** argv)
 
         ImGui::Spacing();
         ImGui::Separator();
-        ImGui::Spacing();
 
-        // --- Split screen: Patch Editor (Top) & Sequencer (Bottom) ---
-        float windowHeight = ImGui::GetContentRegionAvail().y;
-        float patchEditorHeight = windowHeight * 0.4f;
+        // --- Dockspace: everything below the transport bar ---
+        ImGuiID dockspaceId = ImGui::GetID("adXDockSpace");
+        if (ImGui::DockBuilderGetNode(dockspaceId) == nullptr)
+        {
+            BuildDefaultDockLayout(dockspaceId, ImGui::GetContentRegionAvail());
+        }
+        ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f));
+        ImGui::End(); // MainCanvas host
 
-        ImGui::BeginChild("PatchEditor", ImVec2(0, patchEditorHeight), false, ImGuiWindowFlags_NoScrollbar);
+        // --- PATCH EDITOR: dockable window (envelopes + harmonics) ---
+        ImGui::SetNextWindowSize(ImVec2(680.0f, 560.0f), ImGuiCond_FirstUseEver);
+        ImGui::Begin("PATCH EDITOR");
 
         ImGui::Text("PATCH EDITOR: ENVELOPE (ADSR)");
 
@@ -1101,21 +1330,19 @@ int main(int argc, char** argv)
             }
         }
 
-        ImGui::EndChild();
+        ImGui::End(); // PATCH EDITOR
 
-        ImGui::Separator();
-
-        // --- Bottom Half: Sequencer ---
+        // --- SEQUENCER: dockable window ---
+        ImGui::SetNextWindowSize(ImVec2(900.0f, 380.0f), ImGuiCond_FirstUseEver);
+        ImGui::Begin("SEQUENCER");
         DrawSequencerUI(state, eventQueue);
-
         ImGui::End();
 
-        // --- Sample Browser (Phase 5): separate floating window ---
+        // --- Dockable side panels: browser, patch suite, FX, export ---
         DrawSampleBrowser(state, eventQueue);
-
-        // --- Genre suites: patch library/extras + master-bus FX windows ---
         DrawPatchSuiteWindow(eventQueue);
         DrawMasterFxWindow(eventQueue);
+        DrawExportWindow();
 
         // Rendering
         ImGui::Render();

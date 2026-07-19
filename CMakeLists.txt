@@ -120,6 +120,45 @@ FetchContent_Declare(basicpitch_model
 )
 FetchContent_MakeAvailable(basicpitch_model)
 
+# --- 10. shine (fixed-point MP3 encoder; tiny, pure C, no CMake upstream) ---
+FetchContent_Declare(shine
+    GIT_REPOSITORY https://github.com/toots/shine.git
+    GIT_TAG 3.1.1
+)
+FetchContent_MakeAvailable(shine)
+add_library(shine_mp3 STATIC
+    ${shine_SOURCE_DIR}/src/lib/bitstream.c
+    ${shine_SOURCE_DIR}/src/lib/huffman.c
+    ${shine_SOURCE_DIR}/src/lib/l3bitstream.c
+    ${shine_SOURCE_DIR}/src/lib/l3loop.c
+    ${shine_SOURCE_DIR}/src/lib/l3mdct.c
+    ${shine_SOURCE_DIR}/src/lib/l3subband.c
+    ${shine_SOURCE_DIR}/src/lib/layer3.c
+    ${shine_SOURCE_DIR}/src/lib/reservoir.c
+    ${shine_SOURCE_DIR}/src/lib/tables.c
+)
+target_include_directories(shine_mp3 PUBLIC ${shine_SOURCE_DIR}/src/lib)
+if(MSVC)
+    # shine annotates locals with GCC's __attribute__((unused)); MSVC can't
+    # define function-like macros via /D, so force-include a header that
+    # expands the annotation to nothing.
+    target_compile_options(shine_mp3 PRIVATE "/FI${CMAKE_CURRENT_SOURCE_DIR}/cmake/shine_msvc_compat.h")
+endif()
+
+# --- 11. libFLAC (lossless export) ---
+FetchContent_Declare(flac
+    GIT_REPOSITORY https://github.com/xiph/flac.git
+    GIT_TAG 1.4.3
+)
+set(BUILD_CXXLIBS OFF CACHE BOOL "" FORCE)
+set(BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(INSTALL_MANPAGES OFF CACHE BOOL "" FORCE)
+set(WITH_OGG OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(flac)
+
 # --- Main Executable ---
 add_executable(AudioSequencer
     src/main.cpp
@@ -134,10 +173,12 @@ add_executable(AudioSequencer
     src/BpmDetector.cpp
     src/SampleBrowser.cpp
     src/PatchLibrary.cpp
+    src/ExportRenderer.cpp
 )
 target_include_directories(AudioSequencer PRIVATE include)
 target_link_libraries(AudioSequencer PRIVATE
     rtaudio glfw ImGui ReaderWriterQueue PortableFileDialogs miniaudio rubberband onnxruntime
+    shine_mp3 FLAC
 )
 
 if(APPLE)
@@ -169,6 +210,11 @@ if(WIN32)
     add_custom_command(TARGET AudioSequencer POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${basicpitch_model_SOURCE_DIR}/nmp.onnx"
+        "$<TARGET_FILE_DIR:AudioSequencer>"
+    )
+    add_custom_command(TARGET AudioSequencer POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:FLAC>"
         "$<TARGET_FILE_DIR:AudioSequencer>"
     )
 endif()
