@@ -1,3 +1,39 @@
+# --- build output ---
 build/
+out/
+dist/
+*.obj
+*.o
+*.lib
+*.pdb
+*.ilk
+*.exp
+
+# --- archived first-iteration tree -------------------------------------
+# _archive/ itself IS tracked (it is the reference the rewrite ports from),
+# but its 800MB CMake/FetchContent cache and the large reference audio are
+# not worth a git object each.
+_archive/build/
+_archive/assets/*.mp3
+_archive/scratch/*.obj
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- editors / os ---
 .cache/
-HOME - Resonance.mp3
+.vs/
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# --- user-local project state ---
+*.adx.bak

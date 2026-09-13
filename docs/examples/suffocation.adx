@@ -1,0 +1,551 @@
+# =====================================================================
+# suffocation.adx  -  Crystal Castles "Suffocation"
+# From the album (II) [2010], produced by Ethan Kath (co-prod/mix
+# Jacknife Lee), recorded across an Icelandic church, a Canadian cabin
+# and a Detroit garage -- NOT the computer-free (III). That lineage is
+# why the record is huge and reverberant yet grimy: real rooms pushed
+# through aggressive lo-fi FX.
+#
+# Full-native reconstruction blueprint. NO audio samples: every voice is
+# synthesized. Structure/character is an interpretive reconstruction, not
+# a bit-exact transcription of the master.
+#
+# KEY:   F# natural minor  (Camelot 11A)
+# TEMPO: 120 BPM, 4/4
+# LOOP:  F#m - D - A - E   (i - VI - III - VII), 2 bars per chord
+#        (this draft was re-pitched +4 semitones from an earlier D-minor
+#         sketch so the tonal centre now matches the record.)
+#
+# Format is the EXTENDED .adx (see PLAN). Keys are tagged with the phase
+# that makes them audible; until then the parser ignores them and the file
+# still loads as a degraded (additive-only) mix.
+#   [P1] per-track patch/mix   [P2] automation/markers
+#   [P3] noise + resonant filter+env   [P4] formant/vibrato/glide
+#   [P5] unison + bitcrush/chorus/EQ + sends
+# =====================================================================
+
+[GLOBAL]
+BPM=120
+MASTER_VOL=0.8
+TUNING=440
+# Master FX: DELAY=TimeMs,Feedback,Mix | REVERB=Room,Damp,Mix | SIDECHAIN=Enabled,Amount,ReleaseMs
+DELAY=375, 0.42, 0.28         # 375ms = dotted-1/8 at 120 BPM (rolling CC echo)
+REVERB=0.85, 0.4, 0.5
+SIDECHAIN=1, 0.7, 130
+MASTER_DRIVE=3.0
+# [P2] Arrangement markers: MARKER=Beat,Name
+MARKER=0,Intro
+MARKER=32,Verse
+MARKER=64,Chorus
+MARKER=96,Breakdown
+MARKER=112,Chorus2
+MARKER=144,Outro
+
+[PATCH Kick]
+ENVELOPE=0.001, 0.14, 0.0, 0.05
+HARMONICS=1, 0.4, 0.15, 0.05, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+DRIVE=8
+FILTER=20000, 0, 0
+SUB=1.0, 0, 36, 55            # 3-octave drop over 55ms = the 'tok'
+OSC=0, 1, 0, 0                # [P5] 0=additive/sine body
+NOISE=0.25, 0                 # [P3] noise transient for the beater click
+RESFILTER=0, 2200, 0.1, 0.0, 0.0   # [P3] type,cut,res,envAmt,keyTrk
+
+[PATCH SubBass]
+# The BASS: round analog sub with an edge. Saw unison -> low resonant LP
+# -> (track) hard-clip distortion + EQ. More sub than growl, but present.
+ENVELOPE=0.005, 0.12, 0.75, 0.10
+HARMONICS=1, 0.5, 0.333, 0.25, 0.2, 0.167, 0.143, 0.125, 0.111, 0.1, 0.091, 0.083, 0.077, 0.071, 0.067, 0.062
+DRIVE=6
+FILTER=20000, 0, 0
+SUB=0.7, 0, 0, 50
+OSC=1, 3, 14, 0              # [P5] saw, 3-voice unison, 14c detune
+RESFILTER=0, 600, 0.45, 0.5, 0.3   # [P3] LP, moving cutoff
+FILTERENV=0.005, 0.15, 0.2, 0.10   # [P3]
+
+[PATCH Lead]
+# The signature shimmering arpeggio. Detuned supersaw, starts filtered
+# (resfilter closed) and the automation lane opens it into each chorus.
+# Track chain adds bitcrush -> distortion -> chorus -> EQ + delay/reverb sends.
+ENVELOPE=0.002, 0.08, 0.5, 0.12
+HARMONICS=1, 0.5, 0.333, 0.25, 0.2, 0.167, 0.143, 0.125, 0.111, 0.1, 0.091, 0.083, 0.077, 0.071, 0.067, 0.062
+DRIVE=4
+FILTER=20000, 0, 0
+OSC=1, 5, 18, 0             # [P5] 5-voice supersaw
+RESFILTER=0, 180, 0.6, 0.7, 0.4    # [P3] starts closed; automation opens it
+FILTERENV=0.002, 0.12, 0.3, 0.10   # [P3]
+VIBRATO=5.0, 8, 300         # [P4] rateHz, depthCents, delayMs (analog drift)
+
+[PATCH Pad]
+# Melancholic string-machine wash (VP-550 lineage). Wide 7-voice detune,
+# slow attack/long release. Track chain: chorus -> light bitcrush ->
+# reverb -> EQ (tucked under the lead) + reverb send.
+ENVELOPE=1.5, 1.2, 0.8, 2.5
+HARMONICS=1, 0.6, 0.3, 0.15, 0.08, 0.04, 0.02, 0, 0, 0, 0, 0, 0, 0, 0, 0
+FILTER=1200, 0.15, 0.6       # existing per-voice LPF + LFO
+OSC=1, 7, 22, 0            # [P5] 7-voice, very wide
+RESFILTER=0, 1500, 0.2, 0.2, 0.2   # [P3]
+FILTERENV=1.0, 1.5, 0.7, 2.0       # [P3]
+
+[PATCH Vocal]
+# Alice-Glass-as-instrument: saw source carved by a morphing formant bank,
+# vibrato + glide for the wail. Track chain: bitcrush (grit, automated)
+# -> reverb, plus heavy delay + reverb sends. Buried until it collapses.
+ENVELOPE=0.08, 0.20, 0.9, 0.40
+HARMONICS=1, 0.5, 0.333, 0.25, 0.2, 0.167, 0.143, 0.125, 0.111, 0.1, 0.091, 0.083, 0.077, 0.071, 0.067, 0.062
+DRIVE=2
+OSC=1, 3, 10, 0            # [P5] saw source has partials for formants to carve
+RESFILTER=0, 3000, 0.1, 0.0, 0.5   # [P3]
+FORMANT=Ah, Oo, 0.0, 0.9   # [P4] morph vowel Ah->Oo (Morph automated), amount
+VIBRATO=5.5, 12, 250       # [P4]
+GLIDE=60                   # [P4] portamento ms between notes = the wail
+
+[PATCH Snare]
+ENVELOPE=0.001, 0.16, 0.0, 0.09
+HARMONICS=1, 0.7, 0.5, 0.3, 0.2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+DRIVE=5
+NOISE=0.9, 0                 # [P3] main body is white noise
+RESFILTER=1, 1800, 0.5, 0.0, 0.0   # [P3] BP shapes the crack
+
+[PATCH Hat]
+ENVELOPE=0.001, 0.04, 0.0, 0.03
+HARMONICS=0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+NOISE=1.0, 0                 # [P3]
+RESFILTER=2, 8000, 0.3, 0.0, 0.0   # [P3] HP
+
+[TRACK Kick]
+MIX=1.0, 0.0                  # [P1] volume, pan
+EFFECT Distortion 6 1.0
+# Kick is the sidechain source (first track ducks the master bus)
+C1 32.00 0.25 1.00
+C1 34.00 0.25 1.00
+C1 36.00 0.25 1.00
+C1 38.00 0.25 1.00
+C1 40.00 0.25 1.00
+C1 42.00 0.25 1.00
+C1 44.00 0.25 1.00
+C1 46.00 0.25 1.00
+C1 48.00 0.25 1.00
+C1 50.00 0.25 1.00
+C1 52.00 0.25 1.00
+C1 54.00 0.25 1.00
+C1 56.00 0.25 1.00
+C1 58.00 0.25 1.00
+C1 60.00 0.25 1.00
+C1 62.00 0.25 1.00
+C1 64.00 0.25 1.00
+C1 65.00 0.25 1.00
+C1 66.00 0.25 1.00
+C1 67.00 0.25 1.00
+C1 68.00 0.25 1.00
+C1 69.00 0.25 1.00
+C1 70.00 0.25 1.00
+C1 71.00 0.25 1.00
+C1 72.00 0.25 1.00
+C1 73.00 0.25 1.00
+C1 74.00 0.25 1.00
+C1 75.00 0.25 1.00
+C1 76.00 0.25 1.00
+C1 77.00 0.25 1.00
+C1 78.00 0.25 1.00
+C1 79.00 0.25 1.00
+C1 80.00 0.25 1.00
+C1 81.00 0.25 1.00
+C1 82.00 0.25 1.00
+C1 83.00 0.25 1.00
+C1 84.00 0.25 1.00
+C1 85.00 0.25 1.00
+C1 86.00 0.25 1.00
+C1 87.00 0.25 1.00
+C1 88.00 0.25 1.00
+C1 89.00 0.25 1.00
+C1 90.00 0.25 1.00
+C1 91.00 0.25 1.00
+C1 92.00 0.25 1.00
+C1 93.00 0.25 1.00
+C1 94.00 0.25 1.00
+C1 95.00 0.25 1.00
+C1 112.00 0.25 1.00
+C1 113.00 0.25 1.00
+C1 114.00 0.25 1.00
+C1 115.00 0.25 1.00
+C1 116.00 0.25 1.00
+C1 117.00 0.25 1.00
+C1 118.00 0.25 1.00
+C1 119.00 0.25 1.00
+C1 120.00 0.25 1.00
+C1 121.00 0.25 1.00
+C1 122.00 0.25 1.00
+C1 123.00 0.25 1.00
+C1 124.00 0.25 1.00
+C1 125.00 0.25 1.00
+C1 126.00 0.25 1.00
+C1 127.00 0.25 1.00
+C1 128.00 0.25 1.00
+C1 129.00 0.25 1.00
+C1 130.00 0.25 1.00
+C1 131.00 0.25 1.00
+C1 132.00 0.25 1.00
+C1 133.00 0.25 1.00
+C1 134.00 0.25 1.00
+C1 135.00 0.25 1.00
+C1 136.00 0.25 1.00
+C1 137.00 0.25 1.00
+C1 138.00 0.25 1.00
+C1 139.00 0.25 1.00
+C1 140.00 0.25 1.00
+C1 141.00 0.25 1.00
+C1 142.00 0.25 1.00
+C1 143.00 0.25 1.00
+
+[TRACK SubBass]
+MIX=0.9, 0.0
+ARP 1 0.25 1 0.6             # up, 16th, 1 octave, 60% gate = the roll
+EFFECT Distortion 12 0.9      # hard-clip edge
+EFFECT EQ 4 0 -2              # [P5] boost sub, shave fizz -> saw+clip+EQ bass
+EFFECT Bitcrush 10 14000 0.3   # [P5] light grit, keeps low end defined
+F#2 32.00 8.00 0.85
+C#3 32.00 8.00 0.85
+D2 40.00 8.00 0.85
+A2 40.00 8.00 0.85
+A2 48.00 8.00 0.85
+E3 48.00 8.00 0.85
+E2 56.00 8.00 0.85
+B2 56.00 8.00 0.85
+F#2 64.00 8.00 0.85
+C#3 64.00 8.00 0.85
+D2 72.00 8.00 0.85
+A2 72.00 8.00 0.85
+A2 80.00 8.00 0.85
+E3 80.00 8.00 0.85
+E2 88.00 8.00 0.85
+B2 88.00 8.00 0.85
+F#2 96.00 8.00 0.85
+C#3 96.00 8.00 0.85
+D2 104.00 8.00 0.85
+A2 104.00 8.00 0.85
+A2 112.00 8.00 0.85
+E3 112.00 8.00 0.85
+E2 120.00 8.00 0.85
+B2 120.00 8.00 0.85
+F#2 128.00 8.00 0.85
+C#3 128.00 8.00 0.85
+D2 136.00 8.00 0.85
+A2 136.00 8.00 0.85
+A2 144.00 8.00 0.85
+E3 144.00 8.00 0.85
+E2 152.00 8.00 0.85
+B2 152.00 8.00 0.85
+
+[TRACK Lead]
+MIX=0.7, -0.1
+ARP 1 0.25 2 0.5            # up, 16th, 2 octaves
+EFFECT Bitcrush 12 18000 0.25   # [P5] chip grit
+EFFECT Distortion 4 0.6         # moderate drive (the CC move)
+EFFECT Chorus 0.8 0.4 0.5       # [P5] shimmer + width
+EFFECT EQ -5 0 2                # [P5] low-cut so it floats above the bass
+SEND=Delay, 0.4              # [P5] aux send to master delay
+SEND=Reverb, 0.5             # [P5] pushed near breakup
+F#4 0.00 8.00 0.70
+A4 0.00 8.00 0.70
+C#5 0.00 8.00 0.70
+D4 8.00 8.00 0.70
+F#4 8.00 8.00 0.70
+A4 8.00 8.00 0.70
+A4 16.00 8.00 0.70
+C#5 16.00 8.00 0.70
+E5 16.00 8.00 0.70
+E4 24.00 8.00 0.70
+G#4 24.00 8.00 0.70
+B4 24.00 8.00 0.70
+F#4 32.00 8.00 0.70
+A4 32.00 8.00 0.70
+C#5 32.00 8.00 0.70
+D4 40.00 8.00 0.70
+F#4 40.00 8.00 0.70
+A4 40.00 8.00 0.70
+A4 48.00 8.00 0.70
+C#5 48.00 8.00 0.70
+E5 48.00 8.00 0.70
+E4 56.00 8.00 0.70
+G#4 56.00 8.00 0.70
+B4 56.00 8.00 0.70
+F#4 64.00 8.00 0.70
+A4 64.00 8.00 0.70
+C#5 64.00 8.00 0.70
+D4 72.00 8.00 0.70
+F#4 72.00 8.00 0.70
+A4 72.00 8.00 0.70
+A4 80.00 8.00 0.70
+C#5 80.00 8.00 0.70
+E5 80.00 8.00 0.70
+E4 88.00 8.00 0.70
+G#4 88.00 8.00 0.70
+B4 88.00 8.00 0.70
+F#4 96.00 8.00 0.70
+A4 96.00 8.00 0.70
+C#5 96.00 8.00 0.70
+D4 104.00 8.00 0.70
+F#4 104.00 8.00 0.70
+A4 104.00 8.00 0.70
+A4 112.00 8.00 0.70
+C#5 112.00 8.00 0.70
+E5 112.00 8.00 0.70
+E4 120.00 8.00 0.70
+G#4 120.00 8.00 0.70
+B4 120.00 8.00 0.70
+F#4 128.00 8.00 0.70
+A4 128.00 8.00 0.70
+C#5 128.00 8.00 0.70
+D4 136.00 8.00 0.70
+F#4 136.00 8.00 0.70
+A4 136.00 8.00 0.70
+A4 144.00 8.00 0.70
+C#5 144.00 8.00 0.70
+E5 144.00 8.00 0.70
+E4 152.00 8.00 0.70
+G#4 152.00 8.00 0.70
+B4 152.00 8.00 0.70
+
+[TRACK Pad]
+MIX=0.5, 0.0
+EFFECT Chorus 0.5 0.6 0.6       # [P5] lush ensemble (string-machine)
+EFFECT Bitcrush 12 16000 0.2    # [P5] faint lo-fi haze
+EFFECT Reverb 0.55 0.9 0.4
+EFFECT EQ 2 -2 -3               # [P5] warm low, sit under the lead
+SEND=Reverb, 0.4
+F#3 0.00 8.00 0.55
+A3 0.00 8.00 0.55
+C#4 0.00 8.00 0.55
+F#3 8.00 8.00 0.55
+A3 8.00 8.00 0.55
+D4 8.00 8.00 0.55
+A3 16.00 8.00 0.55
+C#4 16.00 8.00 0.55
+E4 16.00 8.00 0.55
+G#3 24.00 8.00 0.55
+B3 24.00 8.00 0.55
+E4 24.00 8.00 0.55
+F#3 32.00 8.00 0.55
+A3 32.00 8.00 0.55
+C#4 32.00 8.00 0.55
+F#3 40.00 8.00 0.55
+A3 40.00 8.00 0.55
+D4 40.00 8.00 0.55
+A3 48.00 8.00 0.55
+C#4 48.00 8.00 0.55
+E4 48.00 8.00 0.55
+G#3 56.00 8.00 0.55
+B3 56.00 8.00 0.55
+E4 56.00 8.00 0.55
+F#3 64.00 8.00 0.55
+A3 64.00 8.00 0.55
+C#4 64.00 8.00 0.55
+F#3 72.00 8.00 0.55
+A3 72.00 8.00 0.55
+D4 72.00 8.00 0.55
+A3 80.00 8.00 0.55
+C#4 80.00 8.00 0.55
+E4 80.00 8.00 0.55
+G#3 88.00 8.00 0.55
+B3 88.00 8.00 0.55
+E4 88.00 8.00 0.55
+F#3 96.00 8.00 0.55
+A3 96.00 8.00 0.55
+C#4 96.00 8.00 0.55
+F#3 104.00 8.00 0.55
+A3 104.00 8.00 0.55
+D4 104.00 8.00 0.55
+A3 112.00 8.00 0.55
+C#4 112.00 8.00 0.55
+E4 112.00 8.00 0.55
+G#3 120.00 8.00 0.55
+B3 120.00 8.00 0.55
+E4 120.00 8.00 0.55
+F#3 128.00 8.00 0.55
+A3 128.00 8.00 0.55
+C#4 128.00 8.00 0.55
+F#3 136.00 8.00 0.55
+A3 136.00 8.00 0.55
+D4 136.00 8.00 0.55
+A3 144.00 8.00 0.55
+C#4 144.00 8.00 0.55
+E4 144.00 8.00 0.55
+G#3 152.00 8.00 0.55
+B3 152.00 8.00 0.55
+E4 152.00 8.00 0.55
+
+[TRACK Vocal]
+MIX=0.88, 0.05
+EFFECT Bitcrush 10 14000 0.35   # [P5] lo-fi grit (mix automated)
+EFFECT Reverb 0.5 0.85 0.45
+SEND=Delay, 0.5                 # [P5]
+SEND=Reverb, 0.35               # [P5] extra wash
+C#5 32.00 3.00 0.80
+A4 35.00 2.00 0.75
+F#4 37.00 3.00 0.80
+F#5 40.00 3.00 0.85
+E5 43.00 2.00 0.80
+C#5 45.00 3.00 0.80
+E5 48.00 3.00 0.85
+C#5 51.00 2.00 0.78
+A4 53.00 3.00 0.80
+G#4 56.00 4.00 0.80
+B4 60.00 4.00 0.82
+F#5 64.00 4.00 0.90
+C#5 68.00 2.00 0.85
+A5 70.00 2.00 0.92
+A5 72.00 3.00 0.92
+F#5 75.00 3.00 0.88
+D5 78.00 2.00 0.85
+E5 80.00 3.00 0.90
+C#5 83.00 2.00 0.85
+A5 85.00 3.00 0.92
+B4 88.00 4.00 0.85
+G#5 92.00 4.00 0.90
+C#5 98.00 6.00 0.70
+A4 106.00 6.00 0.68
+F#5 112.00 4.00 0.92
+C#5 116.00 2.00 0.86
+A5 118.00 2.00 0.94
+A5 120.00 3.00 0.94
+F#5 123.00 3.00 0.90
+D5 126.00 2.00 0.85
+E5 128.00 3.00 0.90
+C#5 131.00 2.00 0.85
+A5 133.00 3.00 0.92
+B4 136.00 4.00 0.85
+G#5 140.00 4.00 0.90
+C#5 144.00 8.00 0.70
+F#5 152.00 8.00 0.60
+
+[TRACK Snare]
+MIX=0.7, 0.0
+EFFECT Distortion 5 0.6
+EFFECT Reverb 0.4 0.7 0.3
+D3 65.00 0.20 0.85
+D3 67.00 0.20 0.85
+D3 73.00 0.20 0.85
+D3 75.00 0.20 0.85
+D3 81.00 0.20 0.85
+D3 83.00 0.20 0.85
+D3 89.00 0.20 0.85
+D3 91.00 0.20 0.85
+D3 113.00 0.20 0.85
+D3 115.00 0.20 0.85
+D3 121.00 0.20 0.85
+D3 123.00 0.20 0.85
+D3 129.00 0.20 0.85
+D3 131.00 0.20 0.85
+D3 137.00 0.20 0.85
+D3 139.00 0.20 0.85
+
+[TRACK Hat]
+MIX=0.4, 0.12
+EFFECT Bitcrush 6 10000 0.4
+F#5 64.50 0.10 0.50
+F#5 65.50 0.10 0.50
+F#5 66.50 0.10 0.50
+F#5 67.50 0.10 0.50
+F#5 68.50 0.10 0.50
+F#5 69.50 0.10 0.50
+F#5 70.50 0.10 0.50
+F#5 71.50 0.10 0.50
+F#5 72.50 0.10 0.50
+F#5 73.50 0.10 0.50
+F#5 74.50 0.10 0.50
+F#5 75.50 0.10 0.50
+F#5 76.50 0.10 0.50
+F#5 77.50 0.10 0.50
+F#5 78.50 0.10 0.50
+F#5 79.50 0.10 0.50
+F#5 80.50 0.10 0.50
+F#5 81.50 0.10 0.50
+F#5 82.50 0.10 0.50
+F#5 83.50 0.10 0.50
+F#5 84.50 0.10 0.50
+F#5 85.50 0.10 0.50
+F#5 86.50 0.10 0.50
+F#5 87.50 0.10 0.50
+F#5 88.50 0.10 0.50
+F#5 89.50 0.10 0.50
+F#5 90.50 0.10 0.50
+F#5 91.50 0.10 0.50
+F#5 92.50 0.10 0.50
+F#5 93.50 0.10 0.50
+F#5 94.50 0.10 0.50
+F#5 95.50 0.10 0.50
+F#5 112.50 0.10 0.50
+F#5 113.50 0.10 0.50
+F#5 114.50 0.10 0.50
+F#5 115.50 0.10 0.50
+F#5 116.50 0.10 0.50
+F#5 117.50 0.10 0.50
+F#5 118.50 0.10 0.50
+F#5 119.50 0.10 0.50
+F#5 120.50 0.10 0.50
+F#5 121.50 0.10 0.50
+F#5 122.50 0.10 0.50
+F#5 123.50 0.10 0.50
+F#5 124.50 0.10 0.50
+F#5 125.50 0.10 0.50
+F#5 126.50 0.10 0.50
+F#5 127.50 0.10 0.50
+F#5 128.50 0.10 0.50
+F#5 129.50 0.10 0.50
+F#5 130.50 0.10 0.50
+F#5 131.50 0.10 0.50
+F#5 132.50 0.10 0.50
+F#5 133.50 0.10 0.50
+F#5 134.50 0.10 0.50
+F#5 135.50 0.10 0.50
+F#5 136.50 0.10 0.50
+F#5 137.50 0.10 0.50
+F#5 138.50 0.10 0.50
+F#5 139.50 0.10 0.50
+F#5 140.50 0.10 0.50
+F#5 141.50 0.10 0.50
+F#5 142.50 0.10 0.50
+F#5 143.50 0.10 0.50
+
+# =====================================================================
+# [P2] AUTOMATION  -  [AUTOMATION <Track> <target>] then: beat value curve
+# curve: lin | exp | step | smooth. Track MASTER targets master.* fields.
+# =====================================================================
+
+[AUTOMATION Lead patch.resFilterCutoff]
+0 180 exp
+32 900 exp
+64 3200 exp
+96 500 lin
+112 3400 exp
+144 400 exp
+
+[AUTOMATION Pad mix.volume]
+0 0.2 lin
+32 0.5 smooth
+64 0.7 smooth
+144 0 smooth
+
+[AUTOMATION Vocal patch.formantMorph]
+32 0 lin
+64 1 smooth
+96 0.3 lin
+112 1 smooth
+
+[AUTOMATION Vocal effect.Bitcrush.mix]
+32 0.3 step
+96 0.7 step
+112 0.4 step
+
+[AUTOMATION MASTER master.sidechainAmount]
+32 0 step
+64 0.7 step
+96 0 step
+112 0.7 step
+144 0 step
+
+[AUTOMATION MASTER master.reverbMix]
+0 0.55 lin
+96 0.85 smooth
+112 0.45 smooth
