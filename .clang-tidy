@@ -1,0 +1,109 @@
+---
+# The project-wide check set. Every diagnostic is an error (§4.7: there is no
+# warning tier - a warning tier is how iteration one accumulated 9,205 untested
+# lines).
+#
+# The realtime ban list is NOT here. It lives in .clang-tidy-rt and is appended
+# only for files under the realtime paths, because banning std::vector everywhere
+# would be absurd. tools/lint.py owns the path list.
+#
+# Three checks are switched off here and switched back on by .clang-tidy-rt:
+# portability-restrict-system-includes, misc-no-recursion and
+# bugprone-unsafe-functions. All three are correct for realtime code and wrong for
+# everything else - the third is inside bugprone-*, so it has to be subtracted
+# explicitly or its realtime function bans apply to the whole engine, starting
+# with the fprintf in the default assertion handler.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-unsafe-functions,
+  cert-dcl21-cpp,
+  cert-dcl58-cpp,
+  cppcoreguidelines-avoid-non-const-global-variables,
+  cppcoreguidelines-pro-type-cstyle-cast,
+  cppcoreguidelines-pro-type-member-init,
+  cppcoreguidelines-slicing,
+  cppcoreguidelines-special-member-functions,
+  cppcoreguidelines-virtual-class-destructor,
+  misc-*,
+  -misc-include-cleaner,
+  -misc-no-recursion,
+  -misc-non-private-member-variables-in-classes,
+  modernize-*,
+  -modernize-use-std-print,
+  -modernize-use-trailing-return-type,
+  performance-*,
+  portability-*,
+  -portability-restrict-system-includes,
+  readability-*,
+  -readability-function-cognitive-complexity,
+  -readability-identifier-length,
+  -readability-magic-numbers
+
+WarningsAsErrors: '*'
+
+# Only our own headers. Without this, every diagnostic in Catch2, pybind11 and the
+# MSVC standard library would be ours to fix.
+HeaderFilterRegex: '(engine|bindings|tests[/\]cpp)[/\].*'
+
+FormatStyle: file
+
+CheckOptions:
+  # FINAL_PLAN §9's hard limits, made mechanical (phase_0.md §4.5). The 500-line
+  # header limit is the third one and has no linter, so tools/lint.py checks it.
+  readability-function-size.LineThreshold: 150
+
+  # The §4.4 naming convention, enforced rather than reviewed:
+  # PascalCase types · camelCase functions and variables · m_ member prefix ·
+  # k prefix for compile-time constants · SCREAMING_CASE macros.
+  readability-identifier-naming.NamespaceCase: lower_case
+  readability-identifier-naming.ClassCase: CamelCase
+  readability-identifier-naming.StructCase: CamelCase
+  readability-identifier-naming.UnionCase: CamelCase
+  readability-identifier-naming.EnumCase: CamelCase
+  readability-identifier-naming.EnumConstantCase: CamelCase
+  readability-identifier-naming.EnumConstantPrefix: k
+  readability-identifier-naming.TypeAliasCase: CamelCase
+  readability-identifier-naming.TypedefCase: CamelCase
+  readability-identifier-naming.TemplateParameterCase: CamelCase
+  readability-identifier-naming.ConceptCase: CamelCase
+  readability-identifier-naming.FunctionCase: camelBack
+  readability-identifier-naming.VariableCase: camelBack
+  readability-identifier-naming.ParameterCase: camelBack
+  readability-identifier-naming.PublicMemberCase: camelBack
+  readability-identifier-naming.PrivateMemberCase: camelBack
+  readability-identifier-naming.PrivateMemberPrefix: m_
+  readability-identifier-naming.ProtectedMemberCase: camelBack
+  readability-identifier-naming.ProtectedMemberPrefix: m_
+  readability-identifier-naming.ConstexprVariableCase: CamelCase
+  readability-identifier-naming.ConstexprVariablePrefix: k
+  readability-identifier-naming.GlobalConstantCase: CamelCase
+  readability-identifier-naming.GlobalConstantPrefix: k
+  readability-identifier-naming.StaticConstantCase: CamelCase
+  readability-identifier-naming.StaticConstantPrefix: k
+  readability-identifier-naming.MacroDefinitionCase: UPPER_CASE
+
+  # Options for the realtime-only checks. They live here rather than in
+  # .clang-tidy-rt so there is one place to look for check configuration; they are
+  # inert wherever the check itself is off. What each one bans and why is
+  # documented in .clang-tidy-rt.
+  #
+  # Banning the header is how a *type* gets banned: std::vector, std::string,
+  # std::mutex, std::lock_guard, std::shared_ptr and std::function are
+  # unreachable without <vector>, <string>, <mutex>, <memory> and <functional>.
+  # This also catches them transitively - a realtime file that includes an engine
+  # header which includes <vector> is flagged, which is the behaviour we want.
+  portability-restrict-system-includes.Includes: >
+    *,-mutex,-shared_mutex,-condition_variable,-thread,-future,-semaphore,
+    -latch,-barrier,-memory,-memory_resource,-new,-functional,-string,-vector,
+    -deque,-list,-forward_list,-map,-set,-unordered_map,-unordered_set,
+    -iostream,-ostream,-istream,-sstream,-fstream,-iomanip,-exception,
+    -stdexcept,-regex,-filesystem,-valarray,-any,-cstdio,-stdio.h,-cstdlib,
+    -stdlib.h
+
+  # And banning the name is how a *function* gets banned. One line, because the
+  # option is parsed as `regex,replacement,reason` triples separated by
+  # semicolons and a folded block would fold the separators into whitespace.
+  bugprone-unsafe-functions.CustomFunctions: '^::printf$,,realtime code must not do I/O;^::fprintf$,,realtime code must not do I/O;^::puts$,,realtime code must not do I/O;^::fputs$,,realtime code must not do I/O;^::abort$,,realtime code must not terminate the process;^::exit$,,realtime code must not terminate the process;^::rand$,,rand() locks; use a per-voice PRNG;^::srand$,,rand() locks; use a per-voice PRNG;^::system$,,realtime code must not spawn processes'
+...

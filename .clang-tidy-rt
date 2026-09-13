@@ -1,0 +1,41 @@
+---
+# The realtime ban list - the static half of FINAL_PLAN §2.2 Rule 1
+# (phase_0.md §4.6). Phase 1 adds the dynamic half: an allocator hook that fails
+# the test suite if the audio thread allocates.
+#
+# **Scope is defined by RT_PATHS in tools/lint.py, and nowhere else.** That list
+# is the single source of truth for which files these checks apply to; the driver
+# appends the Checks below to the project-wide set for files matching it. Adding a
+# realtime subsystem means adding one entry there.
+#
+# clang-tidy's native mechanism for this is a .clang-tidy file inside each
+# realtime directory, which Phase 0 could not use because none of those
+# directories existed yet.
+#
+# How the two halves of the ban work:
+#
+#   types      banned by banning the header they live in
+#              (portability-restrict-system-includes) - std::vector, std::string,
+#              std::mutex, std::lock_guard, std::shared_ptr, std::function,
+#              std::cout and the rest are unreachable without their header, and
+#              this also catches them transitively through any engine header a
+#              realtime file includes.
+#   functions  banned by name (bugprone-unsafe-functions.CustomFunctions) -
+#              printf and friends, abort, exit, rand, and the sleeps.
+#   new/delete cppcoreguidelines-owning-memory plus the <new> header ban.
+#   malloc     cppcoreguidelines-no-malloc.
+#   throw      bugprone-exception-escape, against the noexcept that every function
+#              reachable from process() carries (phase_0.md §4.2).
+#   unbounded  misc-no-recursion - recursion has no bound the audio thread can
+#              rely on.
+#
+# Check options live in the root .clang-tidy so there is one place to look for
+# check configuration; they are inert wherever the check itself is off.
+Checks: >
+  bugprone-exception-escape,
+  bugprone-unsafe-functions,
+  cppcoreguidelines-no-malloc,
+  cppcoreguidelines-owning-memory,
+  misc-no-recursion,
+  portability-restrict-system-includes
+...

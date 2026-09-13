@@ -37,3 +37,8 @@ Thumbs.db
 
 # --- user-local project state ---
 *.adx.bak
+
+# --- dependency source/build cache (cmake/AdxDependencies.cmake) -------
+# Outside build/ on purpose: deleting a build tree should cost seconds, not a
+# few hundred megabytes of re-download.
+.deps/

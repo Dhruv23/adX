@@ -674,6 +674,12 @@ together are a complete specification of the remaining work. A phase file is
 updated only by the phase that owns it; scope moving between phases is a change
 to *this* file first.
 
+Alongside that family sits exactly one status document, `plans/STATE.md` — a
+ledger, not a plan. It is the per-phase checklist each implementing agent marks
+done, recording what open issues that phase left for the next one to fix. It
+owns no scope and never becomes a place to plan work: §10 below stays the
+permanent record of phase completion, and STATE.md must agree with it.
+
 No other parallel plan documents. The first iteration accumulated five
 (`plan.md`, `live-PLAN.md`, `UI-Refactor.md`, `INTERLEAVED-PLAN.md`,
 `context.md`) with overlapping scope and no ownership rule, and they drifted out
@@ -687,7 +693,7 @@ of sync with each other and with the code.
 |---|---|---|
 | Analysis & archive | **Done** | 2026-09-10. Iteration one analyzed; keepers identified (§3.1); tree moved to `_archive/`; `docs/` established. |
 | Phase plans | **Done** | 2026-09-10. `plans/phase_0.md` … `plans/phase_11.md` written; §5 fully assigned, no gaps. |
-| [0 — Foundation](plans/phase_0.md) | Not started | |
+| [0 — Foundation](plans/phase_0.md) | **In progress** | 2026-09-12. Skeleton built and verified locally: `cmake --preset` / `ctest` 1/1 / `pip install -e ".[dev]"` / `pytest` 3/3 on Debug and Release, and all six lint gates broken and observed to fail. Open: `.github/workflows/ci.yml` has never executed, so §7 Phase 0's "green in CI" is unproven (`plans/STATE.md` P0-6). Three §3–§4 statements in the phase plan were wrong and are corrected in `plans/phase_0.md` §10. |
 | [1 — RT core](plans/phase_1.md) | Not started | The allocator hook's positive-control test gates everything after it. |
 | [2 — Project model, commands, `.adx` v2](plans/phase_2.md) | Not started | |
 | [3 — Audio graph & scheduling](plans/phase_3.md) | Not started | Carries the Phase 11 transport checkpoint. |

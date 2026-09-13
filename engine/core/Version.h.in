@@ -1,0 +1,34 @@
+// Generated from engine/core/Version.h.in by CMake. Do not edit the generated
+// copy under build/generated/ - edit the template.
+//
+// The version has exactly one source of truth: the project(adx VERSION ...) line
+// in the root CMakeLists.txt. It reaches C++ through this file, the wheel through
+// scikit-build-core's regex metadata provider reading that same line, and Python
+// through adx_engine.version(). test_version_agrees fails CI on the first
+// divergence (phase_0.md §3.6).
+//
+// These two functions live in namespace adx rather than adx::core, which is the
+// one deliberate exception to "one nested namespace per engine/ subdirectory"
+// (phase_0.md §3.3): the project's version is a fact about the project, not about
+// the core subsystem, and phase_0.md §2 and §5 name it adx::version().
+#pragma once
+
+#include <string_view>
+
+#define ADX_VERSION_MAJOR @adx_VERSION_MAJOR@
+#define ADX_VERSION_MINOR @adx_VERSION_MINOR@
+#define ADX_VERSION_PATCH @adx_VERSION_PATCH@
+#define ADX_VERSION_STRING "@adx_VERSION@"
+
+/// The short commit CMake was configured at, or "unknown" outside a git checkout.
+#define ADX_GIT_SHA "@ADX_GIT_SHA@"
+
+namespace adx {
+
+/// The project version as "MAJOR.MINOR.PATCH".
+[[nodiscard]] std::string_view version() noexcept;
+
+/// The commit this binary was configured from, or "unknown".
+[[nodiscard]] std::string_view gitSha() noexcept;
+
+}  // namespace adx

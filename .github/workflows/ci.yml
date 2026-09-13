@@ -1,0 +1,99 @@
+name: CI
+
+# The gate (phase_0.md 4.7). Every step is a hard failure. There is no warning
+# tier - a warning tier is how iteration one accumulated 9,205 untested lines.
+#
+# Each gate has been deliberately broken once and observed to turn this workflow
+# red; see plans/STATE.md, Phase 0.
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-x64:
+    name: windows-x64 ${{ matrix.build_type }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - build_type: Debug
+            preset: windows-x64-debug
+          - build_type: Release
+            preset: windows-x64-release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # The presets use the Ninja generator exclusively, because clang-tidy needs a
+      # compile database and the Visual Studio generator does not emit one
+      # (phase_0.md 9). Ninja therefore needs cl already in the environment.
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Cache dependency sources
+        uses: actions/cache@v4
+        with:
+          path: .deps
+          key: deps-${{ runner.os }}-${{ hashFiles('cmake/AdxDependencies.cmake') }}
+          restore-keys: |
+            deps-${{ runner.os }}-
+
+      # 3. Configure and build.
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      # 4. C++ tests.
+      - name: ctest
+        run: ctest --preset ${{ matrix.preset }} --output-on-failure
+
+      # 5. Python package and tests. This also builds the bindings a second time
+      # through scikit-build-core, which is the path a user's `pip install` takes
+      # and therefore the one that has to keep working.
+      - name: Install the Python package
+        run: pip install -e ".[dev]"
+
+      - name: pytest
+        run: pytest
+
+      # 6. Formatting.
+      - name: clang-format
+        run: python tools/lint.py format --check
+
+      # 7. Static analysis, including the realtime ban list on realtime paths.
+      - name: clang-tidy
+        run: python tools/lint.py tidy --build-dir build/${{ matrix.preset }}
+
+      # 8. Python lint. Two steps rather than one: in PowerShell only the last
+      # command in a multi-line `run` decides the step's exit status, so chaining
+      # them would silently swallow a ruff check failure.
+      - name: ruff check
+        run: ruff check app tests/python tools
+
+      - name: ruff format
+        run: ruff format --check app tests/python tools
+
+      # 9. Python types.
+      - name: mypy
+        run: mypy --strict app
+
+      # 10. The one hard limit no linter checks.
+      - name: Header length
+        run: python tools/lint.py headers

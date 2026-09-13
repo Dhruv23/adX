@@ -1,0 +1,28 @@
+# LF in the repository, LF on disk. A .adx file is the project (FINAL_PLAN §6), so
+# its line endings are part of the round-trip guarantee and a CRLF checkout would
+# make "parse -> write -> parse is byte-identical" untestable on Windows.
+* text=auto eol=lf
+
+*.adx text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+*.in text eol=lf
+*.cmake text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+CMakeLists.txt text eol=lf
+
+*.wav binary
+*.mp3 binary
+*.flac binary
+*.ogg binary
+*.aiff binary
+*.mid binary
+*.onnx binary
+*.pyd binary
+*.lib binary
+*.dll binary
+*.exe binary

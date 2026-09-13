@@ -1,0 +1,106 @@
+# One command builds the engine, the bindings and the app together:
+#   pip install -e ".[dev]"
+# See README.md for the other three.
+
+[build-system]
+requires = ["scikit-build-core>=0.10", "pybind11>=2.13"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "adx"
+description = "A music production environment whose project format is a human-readable text file."
+readme = "README.md"
+requires-python = ">=3.12"
+dynamic = ["version"]
+dependencies = [
+    "PySide6>=6.7",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-qt>=4.4",
+    # Every linter is pinned exactly, and pulled from PyPI rather than taken from
+    # whatever the machine happens to have. A linter release that adds a rule
+    # turns CI red on code nobody touched, and clang-format's output changes
+    # between LLVM releases - so an unpinned tool means CI and a developer's
+    # machine disagree about whether the tree is clean, for reasons unrelated to
+    # the tree. Bumping these is a deliberate commit that fixes whatever the new
+    # version found.
+    #
+    # phase_0.md §3.6 floor-pins ruff and mypy (>=0.6, >=1.11); see §10.
+    "ruff==0.16.7",
+    "mypy==2.3.1",
+    "clang-format==20.1.8",
+    "clang-tidy==20.1.0",
+]
+
+[project.scripts]
+adx = "adx.cli:main"
+
+[tool.scikit-build]
+minimum-version = "0.10"
+wheel.packages = ["app/adx"]
+cmake.version = ">=3.26"
+# The wheel build never builds the C++ test binary: scikit-build-core's editable
+# install would otherwise fight a target that also wants Catch2 (phase_0.md §9).
+# C++ tests are built only through the CMake preset path.
+cmake.args = ["-DADX_BUILD_TESTS=OFF"]
+# Kept inside build/ (gitignored) so an editable rebuild is incremental instead of
+# starting from an empty temporary directory every time.
+build-dir = "build/skbuild-{wheel_tag}"
+
+[tool.scikit-build.metadata.version]
+# Reads the same project(adx VERSION ...) line the C++ side is configured from.
+provider = "scikit_build_core.metadata.regex"
+input = "CMakeLists.txt"
+regex = '''(?sm)^project\(adx.*?VERSION\s+(?P<value>[0-9]+\.[0-9]+\.[0-9]+)'''
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests/python"]
+addopts = ["-q", "--strict-markers", "--strict-config"]
+xfail_strict = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["app", "tests/python"]
+
+[tool.ruff.lint]
+select = [
+    "A",    # builtin shadowing
+    "ANN",  # missing annotations - mypy --strict only covers app/, this covers tests too
+    "B",    # bugbear
+    "C4",   # comprehensions
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # import order
+    "N",    # pep8 naming
+    "PT",   # pytest style
+    "RUF",
+    "SIM",
+    "UP",   # pyupgrade
+    "W",
+]
+
+[tool.ruff.lint.isort]
+# adx_engine is first-party despite being a compiled module; grouping it with
+# third-party imports would put the bridge on the wrong side of the boundary.
+known-first-party = ["adx", "adx_engine"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["app"]
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+# adx_engine is a pybind11 extension with no stubs. Everything it returns is
+# therefore Any, so the Python side converts explicitly at the boundary rather
+# than letting Any leak inward - which is why app/adx/__init__.py wraps every
+# engine call in str(). Generated stubs are a Phase 5 concern, when the surface is
+# big enough to be worth maintaining them.
+module = "adx_engine"
+ignore_missing_imports = true

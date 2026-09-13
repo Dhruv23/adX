@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Not started |
+| **Status** | In progress — every local box in §6 observed to pass 2026-09-12; the two CI boxes are outstanding because the workflow has never run. See §10 and [STATE.md](STATE.md). |
 | **Governs** | build system, packaging, CI, lint, test harness, project-wide conventions |
 | **FINAL_PLAN refs** | §2.3, §7 Phase 0, §8, §9 |
 | **Entry criteria** | Repo is in its post-archive state: `FINAL_PLAN.md`, `plans/`, `docs/`, `_archive/`, `.gitignore`. Nothing else. |
@@ -75,6 +75,9 @@ tests/
 .github/workflows/ci.yml          the gate (§4.7)
 ```
 
+> **Corrected in §10:** two files not listed above were required by §4.7 and had
+> to be added — `tools/lint.py` and `.clang-tidy-rt`.
+
 **Nothing else.** No `engine/dsp/`, no `engine/rt/` — a directory is created by
 the phase that first puts a file in it.
 
@@ -135,6 +138,9 @@ hundreds of megabytes:
 ```cmake
 set(FETCHCONTENT_BASE_DIR "${CMAKE_SOURCE_DIR}/.deps" CACHE PATH "")
 ```
+
+> **Corrected in §10:** one shared directory breaks the second build tree. The
+> implemented form is `.deps/<build-tree-name>/`.
 
 Add `.deps/` to `.gitignore` in this phase.
 
@@ -222,7 +228,10 @@ FINAL_PLAN.md owns the "why"; README owns the "how do I run it".
 ### 4.1 Compiler flags
 
 MSVC: `/W4 /WX /permissive- /utf-8 /Zc:preprocessor /Zc:__cplusplus /EHsc /std:c++20`.
-Release adds `/O2 /fp:contract=off`.
+Release adds `/O2`.
+
+> **Corrected in §10:** the flag named here in the original plan,
+> `/fp:contract=off`, does not exist. MSVC's spelling is `/fp:precise`.
 
 **`/fp:fast` is banned project-wide.** It permits reassociation of float
 arithmetic, which breaks the bit-identical offline-vs-realtime guarantee
@@ -313,21 +322,110 @@ not to prove code correct — there is no code yet.
 
 ## 6. Definition of done
 
-- [ ] `cmake --preset windows-x64-debug` configures from a clean clone with no
+Observed on 2026-09-12, Windows 11 x64, MSVC 19.51 (VS 18), Python 3.12.10,
+CMake 4.4.0-rc2, clang-format/clang-tidy 20.1.8/20.1.0.
+
+- [x] `cmake --preset windows-x64-debug` configures from a clean clone with no
       manual steps, under 2 minutes on a warm `.deps/` cache.
-- [ ] The build produces `adx_engine_static.lib`, `adx_engine.pyd`,
+      *Observed: 2.8 s to configure after deleting the whole build tree, 5.4 s to
+      rebuild. A genuinely cold cache adds two shallow git clones.*
+- [x] The build produces `adx_engine_static.lib`, `adx_engine.pyd`,
       `adx_tests.exe`.
-- [ ] `ctest` reports 1/1 passing.
-- [ ] `pip install -e ".[dev]"` succeeds and
+      *Observed: `engine/adx_engine_static.lib`,
+      `bindings/adx_engine.cp312-win_amd64.pyd`, `tests/cpp/adx_tests.exe`.*
+- [x] `ctest` reports 1/1 passing. *Observed on both Debug and Release.*
+- [x] `pip install -e ".[dev]"` succeeds and
       `python -c "import adx_engine; print(adx_engine.version())"` prints the version.
-- [ ] `python -m adx` prints both versions and exits 0.
-- [ ] `pytest` reports 3/3 passing.
+      *Observed: prints `0.1.0`.*
+- [x] `python -m adx` prints both versions and exits 0.
+      *Observed: `adx 0.1.0` / `engine 0.1.0 (d835d5eb0446)`, exit 0.*
+- [x] `pytest` reports 3/3 passing.
 - [ ] All ten CI steps green on Debug and Release.
-- [ ] **Each gate observed to fire.** Deliberately break formatting, a
+      **Outstanding.** The workflow is written but has never executed: nothing has
+      been pushed. `ilammy/msvc-dev-cmd`, the `.deps` cache key and whether `ninja`
+      is on the `windows-latest` image are all unverified. Tracked as **P0-6** in
+      [STATE.md](STATE.md).
+- [x] **Each gate observed to fire.** Deliberately break formatting, a
       clang-tidy check, a ruff rule, and a mypy annotation, confirming CI goes
       red for each, then revert. A gate that has never been seen to fail is not
       a gate — it is a hope.
+      *Observed locally against the same pinned binaries and the same
+      `tools/lint.py` entry points CI invokes — six gates, each broken, each seen
+      to fail, each reverted:*
+      | Gate | Break | Diagnostic |
+      |---|---|---|
+      | clang-format | collapsed whitespace in `Version.cpp` | `formatting differs from .clang-format` |
+      | clang-tidy (project-wide) | namespace-scope mutable `int` | `cppcoreguidelines-avoid-non-const-global-variables` |
+      | clang-tidy (RT ban list) | `#include <vector>` + `return new int` under `engine/rt/` | `portability-restrict-system-includes`, `cppcoreguidelines-owning-memory` |
+      | ruff | unused `import os` | `F401` |
+      | mypy --strict | `-> int` returning `str` | `Incompatible return value type` |
+      | header length | 502-line header | `over 500 lines` |
+      *The RT row also proves the **scoping**, not just the checks: byte-identical
+      probe files were placed under `engine/rt/` and `engine/core/`, and only the
+      `engine/rt/` one drew the two ban-list diagnostics.*
+      **Not yet observed through CI itself** — see the box above.
 - [ ] FINAL_PLAN.md §10 Phase 0 row set to Done with the date.
+      Set to *In progress* rather than Done, because the two boxes above are open.
+
+---
+
+## 10. Corrections made while executing this plan
+
+Recorded here rather than silently applied, because §4 binds every later phase and
+three of its statements were wrong.
+
+**§4.1 — `/fp:contract=off` does not exist.** MSVC rejects it (`command line
+warning D9002: ignoring unknown option`), and so does `/fp:contract-`; there is no
+negative form of `/fp:contract`. The flag that actually disables FMA contraction on
+MSVC 2022 and later is **`/fp:precise`**, which `adx_set_warnings()` now passes
+explicitly. The intent in §4.1 is unchanged and still correct: contraction is
+banned because a contraction that fires in one build and not another changes the
+golden hash. Non-MSVC toolchains get `-ffp-contract=off`.
+
+**§3.4 — a single shared `.deps/` cannot work.** `FETCHCONTENT_BASE_DIR` holds each
+dependency's `-subbuild` and `-build` directory as well as its sources, and those
+carry a `CMakeCache.txt` bound to one binary directory. There are always at least
+two build trees — the preset tree and the one scikit-build-core creates for the
+wheel — so the second configure fails with *"CMakeCache.txt was created for a
+different binary directory"*. This is not theoretical: it is how the first
+`pip install -e ".[dev]"` failed here. The cache is now
+`.deps/<build-tree-name>/`, keyed on the build tree rather than the build type
+(the wheel build is also a Release tree and would otherwise collide with
+`windows-x64-release`). §3.4's actual requirement — deleting `build/` must not
+re-download — is preserved and was measured.
+
+**§4.1 — the language standard cannot be per-target.** §9 is right that
+`adx_set_warnings()` must be per-target so `/WX` never reaches third-party sources,
+but the *standard* is different: Catch2 declares its own sources as `cxx_std_14`,
+so while it compiles `_MSVC_LANG` reads 201402, so it never emits
+`StringMaker<std::string_view>::convert`, so a C++20 test TU that compares a
+`string_view` fails to link with `LNK2019`. `CMAKE_CXX_STANDARD 20` is therefore set
+globally in the root `CMakeLists.txt`, before any dependency is populated. Warnings
+stay per-target; the standard is part of the ABI and cannot.
+
+### Additions to the §2 manifest
+
+`tools/lint.py` — §4.7 step 10 requires a header-length script that §2 does not
+list, and steps 6 and 7 need a driver too: clang-tidy must be filtered to
+first-party files (the compile database also contains Catch2 and pybind11), and the
+RT ban list has to be applied by path. One file with three subcommands rather than
+three scripts.
+
+`.clang-tidy-rt` — §4.6 requires the RT ban list to be path-scoped, and
+clang-tidy's native mechanism for that is a `.clang-tidy` inside each realtime
+directory. None of those directories exists yet, and §2 forbids creating them. So
+the ban list lives in this one file and `tools/lint.py` appends it for files under
+`RT_PATHS`. Phase 1 creates `engine/rt/` and can collapse this back onto the native
+mechanism — tracked as **P0-3** in [STATE.md](STATE.md).
+
+Two dependency-handling details also had to be decided and are recorded in the
+files that make them: `PYBIND11_FINDPYTHON` plus an explicit
+`find_package(Python 3.12)` in `AdxDependencies.cmake` (left to itself, pybind11's
+legacy finder picked the Microsoft Store Python 3.14 stub while pip, pytest and the
+console script were all 3.12 — a `.pyd` that builds and then cannot be imported),
+and exact version pins for clang-format and clang-tidy in the `dev` extra, since
+both tools' behaviour changes between LLVM releases and an unpinned binary means CI
+and a developer's machine disagree about whether the tree is clean.
 
 ---
 

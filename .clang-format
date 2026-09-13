@@ -1,0 +1,25 @@
+---
+# Formatting is settled, not discussed: CI runs clang-format --dry-run --Werror
+# over engine/ bindings/ tests/cpp/ (phase_0.md §4.7 step 6). The binary is pinned
+# to clang-format 20.1.8 through the dev extra in pyproject.toml, because
+# clang-format's output changes between LLVM releases and an unpinned binary means
+# CI and a developer's machine disagree about whether the tree is clean.
+Language: Cpp
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 100
+PointerAlignment: Left
+ReferenceAlignment: Left
+DerivePointerAlignment: false
+IndentPPDirectives: AfterHash
+AccessModifierOffset: -4
+NamespaceIndentation: None
+FixNamespaceComments: true
+SortIncludes: CaseSensitive
+# Preserve, not Regroup: the grouping in a file says something (this project's
+# own headers last, after the standard library and third-party ones), and
+# Regroup would relitigate it on every save.
+IncludeBlocks: Preserve
+AllowShortFunctionsOnASingleLine: Empty
+SpaceAfterTemplateKeyword: false
+...
