@@ -58,6 +58,7 @@ jobs:
         run: cmake --preset ${{ matrix.preset }}
 
       - name: Build
+        id: build
         run: cmake --build --preset ${{ matrix.preset }}
 
       # 4. C++ tests.
@@ -73,27 +74,44 @@ jobs:
       - name: pytest
         run: pytest
 
+      # Steps 6-10 are the lint gates, and they all carry `if: !cancelled()`.
+      #
+      # By default Actions stops a job at the first failing step, which means a run
+      # reports one broken gate and hides the rest - a developer then needs one push
+      # per problem to find out how many there are. These five are independent of each
+      # other, so every one reports on every run. (clang-tidy is the exception: it
+      # reads the compile database, so it is conditioned on the build having
+      # succeeded rather than merely not cancelled.)
+      #
+      # The job still fails if any of them fails. There is no warning tier.
+
       # 6. Formatting.
       - name: clang-format
+        if: ${{ !cancelled() }}
         run: python tools/lint.py format --check
 
       # 7. Static analysis, including the realtime ban list on realtime paths.
       - name: clang-tidy
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: python tools/lint.py tidy --build-dir build/${{ matrix.preset }}
 
       # 8. Python lint. Two steps rather than one: in PowerShell only the last
       # command in a multi-line `run` decides the step's exit status, so chaining
       # them would silently swallow a ruff check failure.
       - name: ruff check
+        if: ${{ !cancelled() }}
         run: ruff check app tests/python tools
 
       - name: ruff format
+        if: ${{ !cancelled() }}
         run: ruff format --check app tests/python tools
 
       # 9. Python types.
       - name: mypy
+        if: ${{ !cancelled() }}
         run: mypy --strict app
 
       # 10. The one hard limit no linter checks.
       - name: Header length
+        if: ${{ !cancelled() }}
         run: python tools/lint.py headers
