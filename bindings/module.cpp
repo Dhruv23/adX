@@ -13,10 +13,13 @@
 
 #include <pybind11/pybind11.h>
 
+#include "bindings/Bindings.h"
 #include "engine/core/Version.h"
 
 PYBIND11_MODULE(adx_engine, m) {
     m.doc() = "Native engine for adX.";
+
+    registerAudioBindings(m);
 
     m.def(
         "version", []() { return std::string(adx::version()); },

@@ -28,6 +28,10 @@ pytest
 `windows-x64-release` and `windows-x64-relwithdebinfo` are the other two presets.
 `python -m adx` prints the app and engine versions.
 
+`ctest` includes the realtime gate, which runs a 60-second audio stream under the
+allocator hook. For a fast inner loop use `ctest --preset windows-x64-debug -LE slow`;
+CI always runs the full set.
+
 > **After changing C++, re-run `pip install -e ".[dev]"` before `pytest`.**
 > The preset builds into `build/windows-x64-*`; the Python extension that
 > `import adx_engine` resolves to is built separately by scikit-build-core into

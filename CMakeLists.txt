@@ -25,6 +25,14 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# adX links one binary. Stated here rather than left to default, because a
+# dependency that calls option(BUILD_SHARED_LIBS "..." ON) creates that cache entry
+# for the *whole* build and every library declared after it becomes a DLL. RtAudio
+# does exactly that, which silently turned Catch2 into Catch2d.dll and left the test
+# executable unable to start (STATUS_DLL_NOT_FOUND) - with no error anywhere in the
+# build.
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "adX links one binary; dependencies are static")
+
 include(AdxOptions)
 include(AdxWarnings)
 include(AdxDependencies)

@@ -37,3 +37,5 @@ adx_set_warnings(adx_engine_static)
 
 # A directory appears here when the phase that owns it puts its first file in it.
 add_subdirectory(core)
+add_subdirectory(rt)
+add_subdirectory(audio)

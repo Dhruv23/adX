@@ -25,4 +25,21 @@ function(adx_add_cpp_test name)
     target_link_libraries(${name} PRIVATE adx::engine Catch2::Catch2WithMain)
     adx_set_warnings(${name})
     catch_discover_tests(${name})
+
+    # Catch2 hides a test tagged [.something] from --list-tests, which is how a slow
+    # test stays out of a developer's inner loop - but it also means
+    # catch_discover_tests never sees it, and a test ctest cannot run is a test that
+    # does not exist. Phase 1's whole gate, null_backend_60s_zero_violations, is one
+    # of these.
+    #
+    # So the hidden sets get one ctest entry each, labelled, and they run by default.
+    # Opt-out, not opt-in: this project's central claim is realtime safety, and a gate
+    # somebody has to remember to ask for is a gate that rots. `ctest -LE slow` is the
+    # fast loop, and it is documented in the README.
+    add_test(NAME ${name}_slow COMMAND ${name} "[.slow]" --allow-running-no-tests)
+    set_tests_properties(${name}_slow PROPERTIES LABELS slow TIMEOUT 600)
+
+    # Skips itself where there is no audio hardware, which is every CI runner.
+    add_test(NAME ${name}_device COMMAND ${name} "[.device]" --allow-running-no-tests)
+    set_tests_properties(${name}_device PROPERTIES LABELS device TIMEOUT 180)
 endfunction()

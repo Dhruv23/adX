@@ -17,6 +17,7 @@ import argparse
 import concurrent.futures
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -208,6 +209,105 @@ def _compile_database_entries(build_dir: Path) -> list[Path]:
     return [seen[key] for key in sorted(seen)]
 
 
+def _banned_system_headers(config: Path) -> set[str]:
+    """The banned <header> list, read from .clang-tidy so there is one copy of it.
+
+    The option is a folded YAML block of comma-separated globs where a leading `-`
+    means disallowed - `*,-mutex,-vector,...`.
+    """
+    lines = config.read_text(encoding="utf-8").splitlines()
+    start = -1
+    for index, line in enumerate(lines):
+        if "portability-restrict-system-includes.Includes:" in line:
+            start = index
+            break
+    if start < 0:
+        raise SystemExit(f"lint: {config} has no portability-restrict-system-includes.Includes")
+
+    indent = len(lines[start]) - len(lines[start].lstrip())
+    collected: list[str] = []
+    for line in lines[start + 1 :]:
+        if not line.strip():
+            break
+        if len(line) - len(line.lstrip()) <= indent:
+            break
+        collected.append(line.strip())
+    banned = {
+        part.strip()[1:] for part in "".join(collected).split(",") if part.strip().startswith("-")
+    }
+    if not banned:
+        raise SystemExit(f"lint: no banned headers parsed from {config}")
+    return banned
+
+
+_INCLUDE_LOCAL = re.compile(r'^\s*#\s*include\s*"([^"]+)"')
+_INCLUDE_SYSTEM = re.compile(r"^\s*#\s*include\s*<([^>]+)>")
+_SUPPRESSION = "portability-restrict-system-includes"
+
+
+def _suppressed_lines(lines: list[str]) -> set[int]:
+    """Line numbers whose diagnostics a NOLINT comment waives.
+
+    Honours the same three spellings clang-tidy does - same-line NOLINT,
+    NOLINTNEXTLINE, and a NOLINTBEGIN/NOLINTEND region - so a file that is already
+    exempt from the clang-tidy check (engine/rt/LockGuardCheck.h's deliberate
+    <mutex>, engine/rt/AllocGuard.cpp's <new>) is exempt from this one too.
+    """
+    suppressed: set[int] = set()
+    in_region = False
+    for index, line in enumerate(lines):
+        if "NOLINTBEGIN" in line and _SUPPRESSION in line:
+            in_region = True
+        if "NOLINTEND" in line and _SUPPRESSION in line:
+            in_region = False
+        if in_region:
+            suppressed.add(index)
+        if "NOLINT" in line and _SUPPRESSION in line:
+            suppressed.add(index)
+            if "NOLINTNEXTLINE" in line:
+                suppressed.add(index + 1)
+    return suppressed
+
+
+def _transitive_banned_includes(banned: set[str]) -> list[tuple[str, str, str]]:
+    """(offending file, banned header, a realtime source that reaches it).
+
+    Keyed on the file that actually contains the bad include, not on every realtime
+    source that reaches it - one header included by twenty realtime files is one
+    defect in one place, and reporting it twenty times buries it.
+
+    clang-tidy's portability-restrict-system-includes only inspects the file being
+    compiled, not the headers it pulls in - verified, not assumed. Without this walk,
+    an engine/core header that included <vector> would hand std::vector to realtime
+    code with nothing to say about it.
+    """
+    findings: dict[tuple[str, str], str] = {}
+    for source in _first_party_cpp_files():
+        source_rel = _relative(source)
+        if not _is_rt_path(source_rel):
+            continue
+
+        seen: set[Path] = set()
+        pending = [source]
+        while pending:
+            current = pending.pop()
+            if current in seen or not current.is_file():
+                continue
+            seen.add(current)
+
+            lines = current.read_text(encoding="utf-8").splitlines()
+            waived = _suppressed_lines(lines)
+            for index, line in enumerate(lines):
+                local = _INCLUDE_LOCAL.match(line)
+                if local:
+                    pending.append(REPO_ROOT / local.group(1))
+                    continue
+                system = _INCLUDE_SYSTEM.match(line)
+                if system and system.group(1) in banned and index not in waived:
+                    findings.setdefault((_relative(current), system.group(1)), source_rel)
+    return sorted((where, banned_header, root) for (where, banned_header), root in findings.items())
+
+
 def cmd_tidy(args: argparse.Namespace) -> int:
     """Run clang-tidy over the first-party half of the compile database.
 
@@ -239,6 +339,18 @@ def cmd_tidy(args: argparse.Namespace) -> int:
     failures = _run_parallel(commands, labels)
     if failures:
         return _fail(f"clang-tidy: {failures} of {len(files)} files have findings")
+
+    reachable = _transitive_banned_includes(_banned_system_headers(REPO_ROOT / ".clang-tidy"))
+    if reachable:
+        for where, banned_header, root in reachable:
+            reached = "" if where == root else f" (reached from {root})"
+            print(f"{where}: banned include <{banned_header}>{reached}", file=sys.stderr)
+        return _fail(
+            f"{len(reachable)} banned system header(s) reachable from realtime code. "
+            "A type banned below the audio callback must not arrive through an engine "
+            "header either."
+        )
+
     print(f"clang-tidy: {len(files)} files clean ({rt_count} under the realtime ban list)")
     return 0
 

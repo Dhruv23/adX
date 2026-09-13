@@ -22,8 +22,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Debug and RelWithDebInfo both carry ADX_ENABLE_RT_GUARD, and phase_1.md §6
+          # requires the realtime gate to pass in both - RelWithDebInfo is where it
+          # runs at optimised speed, which is the configuration a real session
+          # resembles. Release has the guard compiled out by design and is here to
+          # prove the code still builds and runs without it.
           - build_type: Debug
             preset: windows-x64-debug
+          - build_type: RelWithDebInfo
+            preset: windows-x64-relwithdebinfo
           - build_type: Release
             preset: windows-x64-release
 

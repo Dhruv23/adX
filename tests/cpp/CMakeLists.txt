@@ -1,4 +1,11 @@
 adx_add_cpp_test(adx_tests
     SOURCES
         test_smoke.cpp
+        rt/test_alloc_guard.cpp
+        rt/test_spsc_ring.cpp
+        rt/test_overwrite_ring.cpp
+        rt/test_fixed_containers.cpp
+        rt/test_block_arena.cpp
+        rt/test_reaper.cpp
+        rt/test_stream_silence.cpp
 )

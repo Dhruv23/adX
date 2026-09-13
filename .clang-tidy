@@ -7,6 +7,13 @@
 # only for files under the realtime paths, because banning std::vector everywhere
 # would be absurd. tools/lint.py owns the path list.
 #
+# readability-inconsistent-declaration-parameter-name is off because
+# engine/rt/AllocGuard.cpp replaces the global operator new/delete family, and the
+# check compares those definitions against the declarations in MSVC's
+# vcruntime_new.h - whose parameters are named _Block, _Size and friends. Matching
+# them would mean defining reserved identifiers; the diagnostic is reported at the
+# CRT header, so it cannot be silenced locally either.
+#
 # Three checks are switched off here and switched back on by .clang-tidy-rt:
 # portability-restrict-system-includes, misc-no-recursion and
 # bugprone-unsafe-functions. All three are correct for realtime code and wrong for
@@ -39,13 +46,15 @@ Checks: >
   readability-*,
   -readability-function-cognitive-complexity,
   -readability-identifier-length,
+  -readability-inconsistent-declaration-parameter-name,
   -readability-magic-numbers
 
 WarningsAsErrors: '*'
 
 # Only our own headers. Without this, every diagnostic in Catch2, pybind11 and the
-# MSVC standard library would be ours to fix.
-HeaderFilterRegex: '(engine|bindings|tests[/\]cpp)[/\].*'
+# MSVC standard library would be ours to fix. Both separators, because clang-tidy
+# sees whatever the compile database recorded and on Windows that is backslashes.
+HeaderFilterRegex: '(engine|bindings|tests)[/\].*'
 
 FormatStyle: file
 
@@ -90,10 +99,14 @@ CheckOptions:
   # documented in .clang-tidy-rt.
   #
   # Banning the header is how a *type* gets banned: std::vector, std::string,
-  # std::mutex, std::lock_guard, std::shared_ptr and std::function are
-  # unreachable without <vector>, <string>, <mutex>, <memory> and <functional>.
-  # This also catches them transitively - a realtime file that includes an engine
-  # header which includes <vector> is flagged, which is the behaviour we want.
+  # std::mutex, std::lock_guard, std::shared_ptr and std::function are unreachable
+  # without <vector>, <string>, <mutex>, <memory> and <functional>.
+  #
+  # This check only inspects includes in the file being compiled, NOT in the headers
+  # that file pulls in - measured, not assumed. So an engine/core header that
+  # included <vector> would reach realtime code unflagged. tools/lint.py closes that
+  # hole by walking the first-party include graph of every realtime source; this list
+  # is the single source of truth for both.
   portability-restrict-system-includes.Includes: >
     *,-mutex,-shared_mutex,-condition_variable,-thread,-future,-semaphore,
     -latch,-barrier,-memory,-memory_resource,-new,-functional,-string,-vector,

@@ -1,4 +1,7 @@
-pybind11_add_module(adx_engine MODULE module.cpp)
+pybind11_add_module(adx_engine MODULE
+    module.cpp
+    audio.cpp
+)
 target_link_libraries(adx_engine PRIVATE adx::engine)
 adx_set_warnings(adx_engine)
 

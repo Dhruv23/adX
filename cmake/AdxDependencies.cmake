@@ -40,11 +40,28 @@ include(FetchContent)
 # Nothing here tracks a branch. SYSTEM suppresses warnings from headers we do not
 # own, which is the other half of adx_set_warnings() being per-target.
 
+#
+# EXCLUDE_FROM_ALL on every dependency. Without it a dependency's own install()
+# rules run during `cmake --install`, which is the step scikit-build-core uses to
+# assemble the wheel: RtAudio was installing rtaudio.lib and its headers *into the
+# adx wheel* and then failing outright on its config file. A dependency is still
+# built, because our targets link it - it is just not part of `all`, and its install
+# rules are not ours.
 FetchContent_Declare(pybind11
     GIT_REPOSITORY https://github.com/pybind/pybind11.git
     GIT_TAG v2.13.6
     GIT_SHALLOW TRUE
     SYSTEM
+    EXCLUDE_FROM_ALL
+)
+
+# Phase 1: real audio devices. Same tag iteration one used and shipped on.
+FetchContent_Declare(rtaudio
+    GIT_REPOSITORY https://github.com/thestk/rtaudio.git
+    GIT_TAG 6.0.1
+    GIT_SHALLOW TRUE
+    SYSTEM
+    EXCLUDE_FROM_ALL
 )
 
 FetchContent_Declare(Catch2
@@ -52,6 +69,7 @@ FetchContent_Declare(Catch2
     GIT_TAG v3.7.1
     GIT_SHALLOW TRUE
     SYSTEM
+    EXCLUDE_FROM_ALL
 )
 
 # Populated only when the option that needs them is on. The wheel build sets
@@ -81,6 +99,17 @@ if(ADX_BUILD_BINDINGS)
 
     FetchContent_MakeAvailable(pybind11)
 endif()
+
+# Static, and no test programs: adX ships one binary, and RtAudio's test suite is
+# not ours to run. Set before MakeAvailable because they are cache variables the
+# subproject reads at configure time.
+set(RTAUDIO_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(RTAUDIO_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(RTAUDIO_BUILD_PYTHON OFF CACHE BOOL "" FORCE)
+# ASIO is Phase 9. It is a device-API flag on the same backend class, not a new
+# backend, so enabling it later is one line here plus a StreamConfig field.
+set(RTAUDIO_API_ASIO OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(rtaudio)
 
 if(ADX_BUILD_TESTS)
     FetchContent_MakeAvailable(Catch2)
