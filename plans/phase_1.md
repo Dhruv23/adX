@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | In progress — 2026-09-13. Every §6 box observed to pass locally on Debug, RelWithDebInfo and Release, and on real hardware. The one box that names CI is open: the run is stuck queued behind a GitHub incident. See §10. |
+| **Status** | **Done** — 2026-09-13. Every §6 box observed to pass, CI included. See §10 for corrections to this plan. |
 | **Governs** | `engine/rt/`, `engine/audio/`, the realtime-safety gate |
 | **FINAL_PLAN refs** | §2.2 Rule 1, §3.1 (`AudioTap`), §3.2 (GC bin), §3.3 items 1–2, §7 Phase 1, §9 |
 | **Entry criteria** | [phase_0.md](phase_0.md) §6 complete |
@@ -488,10 +488,12 @@ broken hook makes 10,000 tests pass. So:
 Observed on 2026-09-13. 33 ctest tests green on Debug, RelWithDebInfo and Release;
 7 pytest; every lint gate clean.
 
-- [ ] `null_backend_60s_zero_violations` passes **in CI**, Debug and RelWithDebInfo.
-      *Passes locally on Debug, RelWithDebInfo and Release. **Not yet observed in CI**:
-      run 34748598147 has been queued since 08:51 UTC without a runner picking it up,
-      during an open GitHub incident. Tracked as **P1-6** in [STATE.md](STATE.md).*
+- [x] `null_backend_60s_zero_violations` passes **in CI**, Debug and RelWithDebInfo.
+      *Observed: run 34749336344 green on all three matrix jobs — Debug, RelWithDebInfo
+      and Release — at commit 3fef53a. The matrix grew its RelWithDebInfo job for this
+      box: phase_0.md §4.7 specified Debug and Release only, and RelWithDebInfo is where
+      the gate runs at optimised speed, which is the configuration a real session
+      resembles.*
       *Catch2 hides `[.slow]` tests from `--list-tests`, so this gate was written but
       not actually registered with ctest — a test ctest cannot run is a test that does
       not exist. `adx_add_cpp_test` now registers the hidden sets explicitly, they run
@@ -524,7 +526,7 @@ Observed on 2026-09-13. 33 ctest tests green on Debug, RelWithDebInfo and Releas
       `portability-restrict-system-includes` fires on `#include <vector>` in an RT
       **source**, but NOT on the same include in a header that source pulls in — it
       only inspects the file being compiled. See §10.*
-- [x] FINAL_PLAN.md §10 Phase 1 row updated. *Set to In progress rather than Done, because the CI box above is open.*
+- [x] FINAL_PLAN.md §10 Phase 1 row updated.
 
 ---
 

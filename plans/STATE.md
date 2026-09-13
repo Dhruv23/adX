@@ -69,7 +69,7 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | Phase | Size | Status |
 |---|---|---|
 | 0 — Foundation | S | **Done** 2026-09-13 |
-| 1 — RT core | M | In progress — local DoD complete 2026-09-13, CI queued |
+| 1 — RT core | M | **Done** 2026-09-13 |
 | 2 — Project model, commands, `.adx` v2 | L | Not started |
 | 3 — Audio graph & scheduling | L | Not started |
 | 4 — Instruments & effects | XL | Not started |
@@ -111,15 +111,15 @@ link. P0-1 through P0-5 were all closed during the phase; see §10 for what chan
 
 ---
 
-## [ ] Phase 1 — RT core · M
+## [x] Phase 1 — RT core · M
 
 | | |
 |---|---|
 | **Plan** | [phase_1.md](phase_1.md) |
 | **Entry** | Phase 0 §6 complete |
 | **Done when** | [phase_1.md](phase_1.md) §6 |
-| **Status** | In progress (2026-09-13). Every §6 box observed locally; the CI box is open. |
-| **Completed** | — |
+| **Status** | Done (2026-09-13) |
+| **Completed** | 2026-09-13 |
 
 > The allocator hook's positive-control test gates every phase after this one.
 > If it has never been seen to fail, it is not a gate.
@@ -133,17 +133,12 @@ reverted. The hook catches all eight replaceable `operator new` forms, `std::vec
 zero violations; 60 s through real hardware at 48 kHz/256 with zero xruns and zero
 violations.
 
-All of that is local. [phase_1.md](phase_1.md) §6's first box says *in CI*, and that
-has not happened: the run has been queued since 08:51 UTC without a runner, during an
-open GitHub incident. The phase is not Done until it has.
+And in CI: run 34749336344 green on all three matrix jobs at commit 3fef53a. That box
+sat open for an hour while a GitHub incident kept the run queued with no runner; it is
+recorded here because "verified locally" and "green in CI" are different claims and the
+phase was briefly marked done on the wrong one.
 
 **Open issues for Phase 2:**
-
-- **P1-6** · `BLOCKER` for calling Phase 1 done (not for starting Phase 2) · the Phase 1
-  CI run has never executed. Everything in §6 is verified locally on three
-  configurations and on real hardware, but "passes in CI" is a claim about CI. The
-  branch is pushed and the run is queued; nothing is known to be wrong. Fixed when: run
-  34748598147, or its successor on `phase-1-rt-core`, is green on all three matrix jobs.
 
 - **P1-1** · `_CrtSetAllocHook` is not installed, so `malloc`/`realloc`/`free` called
   directly by a C dependency never reaches the violation log — only C++ `operator new`
