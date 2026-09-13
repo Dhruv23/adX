@@ -68,8 +68,8 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 
 | Phase | Size | Status |
 |---|---|---|
-| 0 — Foundation | S | In progress — local DoD complete 2026-09-12, CI unrun |
-| 1 — RT core | M | Not started |
+| 0 — Foundation | S | **Done** 2026-09-13 |
+| 1 — RT core | M | In progress — local DoD complete 2026-09-13, CI queued |
 | 2 — Project model, commands, `.adx` v2 | L | Not started |
 | 3 — Audio graph & scheduling | L | Not started |
 | 4 — Instruments & effects | XL | Not started |
@@ -83,89 +83,31 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 
 ---
 
-## [ ] Phase 0 — Foundation · S
+## [x] Phase 0 — Foundation · S
 
 | | |
 |---|---|
 | **Plan** | [phase_0.md](phase_0.md) |
 | **Entry** | Repo in post-archive state: `FINAL_PLAN.md`, `plans/`, `docs/`, `_archive/`, `.gitignore`. Nothing else. |
 | **Done when** | [phase_0.md](phase_0.md) §6 — every box, including each CI gate *observed to fire* |
-| **Status** | In progress (2026-09-12). Every §6 box observed to pass locally; the two CI boxes are open. |
-| **Completed** | — |
+| **Status** | Done (2026-09-13) |
+| **Completed** | 2026-09-13 |
 
-The skeleton is built and every gate has been broken and seen to fail — locally,
-against the same pinned binaries and the same `tools/lint.py` entry points CI
-invokes. The evidence table is in [phase_0.md](phase_0.md) §6.
+One build command, one install command, one test command, and six gates that have
+each been broken and seen to fail — locally, and five of the six in CI as well
+(`ruff format` only locally; the probe happened to be format-clean and `ruff check`
+caught it first). Evidence table in [phase_0.md](phase_0.md) §6.
 
-What is **not** done is CI itself: `.github/workflows/ci.yml` has never executed,
-because nothing has been pushed. §6 asks for "all ten CI steps green on Debug and
-Release" and for each gate to be seen going red *in CI*, and neither can be
-claimed from a local run. That is **P0-6**, and it is the one box between this
-phase and Done.
+Proving the gates in CI exposed a flaw worth more than the proof: Actions stops a job
+at the first failing step, so the first attempt reported one broken gate and hid four.
+The lint steps now carry `if: !cancelled()`.
 
-Three statements in [phase_0.md](phase_0.md) §3–§4 turned out to be wrong and were
-corrected rather than worked around — a nonexistent compiler flag, a dependency
-cache layout that cannot support two build trees, and a per-target language
-standard that breaks the Catch2 link. All three are written up in
-[phase_0.md](phase_0.md) §10, because §4 binds every later phase.
+Three statements in [phase_0.md](phase_0.md) §3–§4 were wrong and are corrected in its
+§10 — a compiler flag MSVC does not accept, a dependency cache layout that cannot
+support two build trees, and a per-target language standard that breaks the Catch2
+link. P0-1 through P0-5 were all closed during the phase; see §10 for what changed.
 
-**Open issues for Phase 1:**
-
-- **P0-6** · `BLOCKER` for calling Phase 0 done (not for starting Phase 1) ·
-  `.github/workflows/ci.yml` has never run. `ilammy/msvc-dev-cmd`, the `.deps`
-  cache key, and whether `ninja` is on the `windows-latest` image are all
-  unverified, as is every gate's behaviour *in CI* rather than on a developer
-  machine. Fixed when: a push shows both matrix jobs green, and one deliberate
-  breakage of each gate is seen to turn a CI run red.
-
-- **P0-2** · The clang-tidy RT ban list is **header-level only**:
-  `portability-restrict-system-includes` (the banned `<header>` set),
-  `cppcoreguidelines-no-malloc`, `cppcoreguidelines-owning-memory`,
-  `bugprone-exception-escape`, `misc-no-recursion`. The identifier-level half of
-  [phase_0.md](phase_0.md) §4.6 — `printf`, `std::cout`, `new`, `delete`,
-  `malloc`, `throw`, `std::function`, `std::string`, `std::mutex`,
-  `std::lock_guard`, `std::shared_ptr` banned *by name* — is not implemented;
-  §4.6 and §8 assign it to this phase, which is the first one with real RT
-  headers to test it against. Note that `<cstdio>` is deliberately **not** in the
-  header ban list, because `engine/core/Config.h` includes it for the default
-  assertion handler and realtime code includes that header — an identifier-level
-  `printf` ban is what actually closes that hole. Fixed when: `.clang-tidy-rt`
-  bans each named identifier and a probe under `engine/rt/` is observed to trip
-  each one.
-
-- **P0-3** · The realtime path list exists twice: `RT_PATHS` in `tools/lint.py`
-  (which does the work) and a prose list in `.clang-tidy-rt`'s header comment.
-  The duplication exists only because clang-tidy's native scoping mechanism is a
-  `.clang-tidy` file inside each realtime directory, and Phase 0 was forbidden
-  from creating those directories. Phase 1 creates `engine/rt/`. Fixed when:
-  either `engine/rt/.clang-tidy` replaces the driver's scoping and `RT_PATHS`
-  loses that entry, or the prose list is deleted and the driver is named as the
-  single source.
-
-- **P0-5** · An editable install does not rebuild the extension.
-  scikit-build-core builds into `build/skbuild-*`, which is a different tree from
-  `build/windows-x64-*`, so after touching C++ you must re-run
-  `pip install -e ".[dev]"` before `pytest` sees the change — otherwise the test
-  suite silently exercises a stale `.pyd`. `editable.rebuild` was left off
-  deliberately: it would need the MSVC environment present at *import* time and
-  would make `pytest` fail in any ordinary shell. This will bite Phase 1 on its
-  first day, since Phase 1 is the first phase with C++ that Python tests assert
-  on. Fixed when: one documented command does build-then-reinstall, or the
-  README says plainly that C++ changes need a reinstall.
-
-- **P0-1** · `ADX_GIT_SHA` is captured at configure time, so a build made after a
-  commit without reconfiguring reports the previous commit. Harmless for a version
-  banner, not harmless once a golden render hash is attributed to a commit
-  (FINAL_PLAN §9). Fixed when: the SHA is refreshed as part of the build, or
-  `adx::gitSha()` stops claiming provenance it cannot guarantee.
-
-- **P0-4** · `ruff` and `mypy` are floor-pinned (`>=0.6`, `>=1.11`) exactly as
-  [phase_0.md](phase_0.md) §3.6 specifies, while clang-format and clang-tidy are
-  pinned exactly. A ruff or mypy release that adds a rule therefore turns CI red
-  on unchanged code, which is the failure mode the clang pins exist to prevent.
-  Not changed here because §3.6 states the floors explicitly. Fixed when: either
-  both are exact-pinned with a deliberate bump step, or §3.6 records the floor as
-  an intentional choice.
+**Open issues for Phase 1:** none. All closed.
 
 ---
 
@@ -176,15 +118,75 @@ standard that breaks the Catch2 link. All three are written up in
 | **Plan** | [phase_1.md](phase_1.md) |
 | **Entry** | Phase 0 §6 complete |
 | **Done when** | [phase_1.md](phase_1.md) §6 |
-| **Status** | Not started |
+| **Status** | In progress (2026-09-13). Every §6 box observed locally; the CI box is open. |
 | **Completed** | — |
 
 > The allocator hook's positive-control test gates every phase after this one.
 > If it has never been seen to fail, it is not a gate.
 
+It has been seen to fail. The early-out in `noteIfRealtime` was forced true, the suite
+rebuilt, and `alloc_guard_positive_control` failed with its own message before being
+reverted. The hook catches all eight replaceable `operator new` forms, `std::vector`,
+`std::string` and `make_shared`, and does not fire outside an RT section.
+
+33 ctest tests on Debug, RelWithDebInfo and Release, including 60 s of NullBackend with
+zero violations; 60 s through real hardware at 48 kHz/256 with zero xruns and zero
+violations.
+
+All of that is local. [phase_1.md](phase_1.md) §6's first box says *in CI*, and that
+has not happened: the run has been queued since 08:51 UTC without a runner, during an
+open GitHub incident. The phase is not Done until it has.
+
 **Open issues for Phase 2:**
 
-- _to be filled in by the agent that completes this phase_
+- **P1-6** · `BLOCKER` for calling Phase 1 done (not for starting Phase 2) · the Phase 1
+  CI run has never executed. Everything in §6 is verified locally on three
+  configurations and on real hardware, but "passes in CI" is a claim about CI. The
+  branch is pushed and the run is queued; nothing is known to be wrong. Fixed when: run
+  34748598147, or its successor on `phase-1-rt-core`, is green on all three matrix jobs.
+
+- **P1-1** · `_CrtSetAllocHook` is not installed, so `malloc`/`realloc`/`free` called
+  directly by a C dependency never reaches the violation log — only C++ `operator new`
+  does. [phase_1.md](phase_1.md) §3.3 specifies it as the second half of the hook; it
+  was deliberately skipped because it exists only in the debug CRT, and the realtime
+  gate has to hold in RelWithDebInfo too, so adding it would buy coverage in the
+  configuration that needs it least while implying coverage in the one that needs it
+  most. Nothing today is affected: RtAudio's allocations happen on the main thread at
+  open time. It becomes real in Phase 4, when miniaudio, shine and libFLAC land on the
+  callback path. Fixed when: either a mechanism catches C-library allocation in
+  RelWithDebInfo, or [phase_1.md](phase_1.md) §3.3 records the gap as accepted and the
+  clang-tidy `malloc` ban is named as the only thing standing behind it.
+
+- **P1-2** · Realtime safety is enforced by directory, not by reachability.
+  `tools/lint.py`'s `RT_PATHS` decides what the ban list applies to, and
+  `engine/audio/` is deliberately not in it — backends legitimately allocate at open
+  time. But `AudioThread::render` and everything it calls *is* realtime, and lives
+  there. Today that is covered because the runtime guard watches the callback
+  regardless of which directory the code sits in. It stops being enough as soon as a
+  phase adds a helper under `engine/audio/` that is called only from the callback.
+  Fixed when: either the realtime parts of `engine/audio/` move under a path the ban
+  covers, or the ban is keyed on something better than directory.
+
+- **P1-3** · The 60-second gate asserts on callback *count*, not on per-callback
+  *duration*. [phase_1.md](phase_1.md) §5 asks for "no callback over 3 ms" and that is
+  not measured — nothing times an individual callback. Count within 1 % catches a
+  stream that stalls; it does not catch one that makes its deadline on average while
+  missing it regularly, which is what a dropout actually is. Fixed when: the callback
+  records its own duration into an `OverwriteRing<LevelFrame>`-style tap and the gate
+  asserts on the worst case, not the mean.
+
+- **P1-4** · `SpscRing::tryPush` is wait-free but its failure is silent to the caller
+  that matters. A full ring returns `false` and the *caller* decides; `Reaper` records a
+  violation, but nothing else does yet. Phase 2 publishes command snapshots through one
+  of these. Fixed when: the Phase 2 event queue records `ViolationKind::Unbounded` on a
+  refused push, rather than each new caller re-deciding.
+
+- **P1-5** · `NullBackend` and `OfflineBackend` were asserted to produce identical
+  silence, which is a much weaker statement than the bit-identity Phase 3 needs. Both
+  currently write zeros, so the test cannot fail for the right reason. It is here as a
+  placeholder that will start meaning something the moment the graph produces sound.
+  Fixed when: Phase 3's bit-identical offline-vs-realtime test replaces it with a hash
+  comparison over non-trivial output.
 
 ---
 

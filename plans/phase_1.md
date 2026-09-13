@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Not started |
+| **Status** | In progress — 2026-09-13. Every §6 box observed to pass locally on Debug, RelWithDebInfo and Release, and on real hardware. The one box that names CI is open: the run is stuck queued behind a GitHub incident. See §10. |
 | **Governs** | `engine/rt/`, `engine/audio/`, the realtime-safety gate |
 | **FINAL_PLAN refs** | §2.2 Rule 1, §3.1 (`AudioTap`), §3.2 (GC bin), §3.3 items 1–2, §7 Phase 1, §9 |
 | **Entry criteria** | [phase_0.md](phase_0.md) §6 complete |
@@ -485,20 +485,95 @@ broken hook makes 10,000 tests pass. So:
 
 ## 6. Definition of done
 
-- [ ] `null_backend_60s_zero_violations` passes in CI, Debug and RelWithDebInfo.
-- [ ] `alloc_guard_positive_control` is observed to **fail** when the hook is
+Observed on 2026-09-13. 33 ctest tests green on Debug, RelWithDebInfo and Release;
+7 pytest; every lint gate clean.
+
+- [ ] `null_backend_60s_zero_violations` passes **in CI**, Debug and RelWithDebInfo.
+      *Passes locally on Debug, RelWithDebInfo and Release. **Not yet observed in CI**:
+      run 34748598147 has been queued since 08:51 UTC without a runner picking it up,
+      during an open GitHub incident. Tracked as **P1-6** in [STATE.md](STATE.md).*
+      *Catch2 hides `[.slow]` tests from `--list-tests`, so this gate was written but
+      not actually registered with ctest — a test ctest cannot run is a test that does
+      not exist. `adx_add_cpp_test` now registers the hidden sets explicitly, they run
+      by default, and `ctest -LE slow` is the opt-out.*
+- [x] `alloc_guard_positive_control` is observed to **fail** when the hook is
       deliberately disabled, and to pass when enabled.
-- [ ] `alloc_guard_catches_std_containers` reproduces iteration one's
-      `AudioEngine.cpp:206` defect and catches it.
-- [ ] A real device opens, runs 60 s of silence, and reports a plausible
+      *Observed: the early-out in `noteIfRealtime` was forced true, the suite rebuilt,
+      and the test failed with its own message — "every realtime test in this suite is
+      now meaningless" — then reverted.*
+- [x] `alloc_guard_catches_std_containers` reproduces iteration one's
+      `AudioEngine.cpp:206` defect and catches it. *Also `std::string` and
+      `make_shared`, which are the same defect in different clothes.*
+- [x] A real device opens, runs 60 s of silence, and reports a plausible
       round-trip latency (verified manually once; the test is `[.device]`).
-- [ ] `python -c "import adx_engine; print(adx_engine.enumerate_devices())"`
-      lists the machine's real devices.
-- [ ] `BlockArena::highWaterMark()` exported and asserted in at least one test.
-- [ ] clang-tidy RT identifier ban list completed and passing over `engine/rt`.
-- [ ] `.clang-tidy` observed to fire on a deliberately added `std::vector` in an
-      RT path.
-- [ ] FINAL_PLAN.md §10 Phase 1 row updated.
+      *Observed on a Corsair HS55 via WASAPI at 48 kHz / 256 frames: 11258 callbacks
+      against an expected 11250 (0.07 %), zero xruns, zero violations, 5.33 ms.
+      The first run reported 0.00 ms — `getStreamLatency()` returns frames and returns
+      0 on any API that does not know, WASAPI included, and it has nothing to say at
+      all until the stream is running. It is now re-read after `start()`, and 0 falls
+      back to the one-block floor rather than being shown to a user as a latency.*
+- [x] `python -c "import adx_engine; print(adx_engine.enumerate_devices())"`
+      lists the machine's real devices. *Six, with names, APIs and channel counts.*
+- [x] `BlockArena::highWaterMark()` exported and asserted in at least one test.
+      *`block_arena_bump_and_reset` asserts it survives `reset()`, which is what makes
+      it a statement about how the arena is sized rather than about one callback.*
+- [x] clang-tidy RT identifier ban list completed and passing over `engine/rt`.
+      *Completed in Phase 0's close-out rather than here; see phase_0.md §10.*
+- [x] `.clang-tidy` observed to fire on a deliberately added `std::vector` in an
+      RT path. *Observed twice, and the second one mattered:
+      `portability-restrict-system-includes` fires on `#include <vector>` in an RT
+      **source**, but NOT on the same include in a header that source pulls in — it
+      only inspects the file being compiled. See §10.*
+- [x] FINAL_PLAN.md §10 Phase 1 row updated. *Set to In progress rather than Done, because the CI box above is open.*
+
+---
+
+## 10. Corrections made while executing this plan
+
+**§3.10's `std::expected<void, Error>` is C++23.** MSVC does not provide it under
+`/std:c++20`, and the language standard is not something to bump for one return type.
+`AudioBackend` returns `Error` directly, with `Error::Code::None` meaning success. The
+discipline §4.2 asks for is unchanged: below the binding layer a failure is a value,
+and `bindings/audio.cpp` translates it into a Python exception at the boundary.
+
+**The realtime ban list does not work transitively, and §4.6 implied it did.**
+Measured, not assumed: `portability-restrict-system-includes` only inspects includes
+in the file being compiled. An `engine/core` header that included `<vector>` would
+therefore hand `std::vector` to realtime code with nothing to say about it — which is
+the realistic way this ban would have been defeated, since nobody adds `<vector>` to
+`engine/rt/` by accident. `tools/lint.py` now walks the first-party include graph of
+every realtime source and fails on any banned header reachable from one, honouring the
+same `NOLINT` spellings clang-tidy does. The banned list is read from `.clang-tidy`, so
+there is still only one copy of it.
+
+**`RtlCaptureStackBackTrace` is not used.** §3.2 names it for capturing four frames per
+violation. It is Win32, and FINAL_PLAN's non-goals keep Win32 out of the engine so that
+macOS/Linux is later work rather than a rewrite. `ViolationRecord` instead captures one
+frame via the compiler's own `_ReturnAddress` intrinsic, taken at the call site in the
+allocator hook so it names the code that allocated rather than the hook. The remaining
+three slots stay reserved and `returnAddrCount` stays 1.
+
+**`_CrtSetAllocHook` is not used either.** §3.3 specifies it as a second mechanism for
+`malloc`/`free` from C dependencies. It exists only in the debug CRT, and the realtime
+gate has to hold in RelWithDebInfo too — adding it would buy coverage in the one
+configuration that needs it least while implying coverage in the one that needs it
+most. Carried forward as an open issue for the phase that first links a C dependency
+into the callback path.
+
+**`AudioThread` grew a process-step seam.** §3.11 has `m_graph.process(...)` inline in
+`render()`, filled in by Phase 3. It is a function pointer instead, set before `start()`,
+which costs nothing and buys two things: the guards stay installed in exactly one place
+once there is real work to do, and a test can install a step that reports what the
+ambient realtime state looked like from inside a genuine callback — which is how
+`audio_thread_installs_guards` proves the guards are installed by the callback path
+rather than by the test.
+
+**`DeviceInfo` carries its sample rates by value.** §3.10 has
+`std::span<const uint32_t> supportedSampleRates`, which would point at storage the
+struct does not own — fine while the backend's vector is alive, a dangling span the
+moment it re-enumerates. It is a `FixedVector<uint32_t, 16>` instead, which is
+self-contained and trivially copyable, and therefore safe to hand across the binding
+boundary and to hold in a realtime snapshot later.
 
 ---
 

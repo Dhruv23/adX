@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | In progress — every local box in §6 observed to pass 2026-09-12; the two CI boxes are outstanding because the workflow has never run. See §10 and [STATE.md](STATE.md). |
+| **Status** | **Done** — 2026-09-13. Every §6 box observed to pass, CI included. See §10 for three corrections to this plan. |
 | **Governs** | build system, packaging, CI, lint, test harness, project-wide conventions |
 | **FINAL_PLAN refs** | §2.3, §7 Phase 0, §8, §9 |
 | **Entry criteria** | Repo is in its post-archive state: `FINAL_PLAN.md`, `plans/`, `docs/`, `_archive/`, `.gitignore`. Nothing else. |
@@ -340,11 +340,10 @@ CMake 4.4.0-rc2, clang-format/clang-tidy 20.1.8/20.1.0.
 - [x] `python -m adx` prints both versions and exits 0.
       *Observed: `adx 0.1.0` / `engine 0.1.0 (d835d5eb0446)`, exit 0.*
 - [x] `pytest` reports 3/3 passing.
-- [ ] All ten CI steps green on Debug and Release.
-      **Outstanding.** The workflow is written but has never executed: nothing has
-      been pushed. `ilammy/msvc-dev-cmd`, the `.deps` cache key and whether `ninja`
-      is on the `windows-latest` image are all unverified. Tracked as **P0-6** in
-      [STATE.md](STATE.md).
+- [x] All ten CI steps green on Debug and Release.
+      *Observed: run 34746455320, both matrix jobs green on the first attempt. The
+      matrix later grew a RelWithDebInfo job, because Phase 1's realtime gate has to
+      pass there too.*
 - [x] **Each gate observed to fire.** Deliberately break formatting, a
       clang-tidy check, a ruff rule, and a mypy annotation, confirming CI goes
       red for each, then revert. A gate that has never been seen to fail is not
@@ -362,10 +361,15 @@ CMake 4.4.0-rc2, clang-format/clang-tidy 20.1.8/20.1.0.
       | header length | 502-line header | `over 500 lines` |
       *The RT row also proves the **scoping**, not just the checks: byte-identical
       probe files were placed under `engine/rt/` and `engine/core/`, and only the
-      `engine/rt/` one drew the two ban-list diagnostics.*
-      **Not yet observed through CI itself** — see the box above.
-- [ ] FINAL_PLAN.md §10 Phase 0 row set to Done with the date.
-      Set to *In progress* rather than Done, because the two boxes above are open.
+      `engine/rt/` one drew the ban-list diagnostics — 11 findings against 2.*
+      *And **in CI**: run 34747022497 pushed a commit breaking five gates at once and
+      showed clang-format, clang-tidy, ruff check, mypy and the header check all red,
+      on both matrix jobs. `ruff format` is the one gate proven only locally — the
+      probe file happened to be format-clean, and `ruff check` caught it first.*
+      *That run also exposed a flaw worth more than the proof: Actions stops a job at
+      the first failing step, so the first attempt reported one broken gate and hid
+      four. The five independent lint steps now carry `if: !cancelled()`.*
+- [x] FINAL_PLAN.md §10 Phase 0 row set to Done with the date.
 
 ---
 
@@ -402,6 +406,29 @@ so while it compiles `_MSVC_LANG` reads 201402, so it never emits
 `string_view` fails to link with `LNK2019`. `CMAKE_CXX_STANDARD 20` is therefore set
 globally in the root `CMakeLists.txt`, before any dependency is populated. Warnings
 stay per-target; the standard is part of the ABI and cannot.
+
+### Corrections made when closing the phase out
+
+**§3.6 floor-pins ruff and mypy; they are now exact-pinned.** `ruff>=0.6` and
+`mypy>=1.11` mean a linter release adds a rule and turns CI red on code nobody
+touched — the same failure mode the clang-format pin exists to prevent. All four
+linters are now `==`, and bumping one is a deliberate commit that fixes whatever the
+new version found.
+
+**§4.6's identifier-level bans are implemented, not deferred.** §8 hands them to
+Phase 1; they are done here instead, because the mechanism was cheap once the header
+bans existed. `bugprone-unsafe-functions` bans printf, abort, exit, rand and the rest
+by name, and `<cstdio>`/`<cstdlib>` joined the header ban — which was only possible
+after splitting `Config.h` into a header that declares and a `Config.cpp` that
+implements, since the header previously pulled `<cstdio>` into every realtime file
+that included it.
+
+**The commit id is stamped at build time.** §2 has `Version.h.in` configured once at
+CMake time, which reports the previous commit for any build made after committing
+without reconfiguring. Harmless for a banner, not harmless once a golden render hash
+is attributed to a revision (FINAL_PLAN §9). `cmake/AdxGitStamp.cmake` re-reads HEAD
+every build and appends `-dirty` for a modified tree; `configure_file` rewrites the
+header only when the content changes, so it costs one git invocation and no recompile.
 
 ### Additions to the §2 manifest
 
