@@ -70,7 +70,7 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 |---|---|---|
 | 0 — Foundation | S | **Done** 2026-09-13 |
 | 1 — RT core | M | **Done** 2026-09-13 |
-| 2 — Project model, commands, `.adx` v2 | L | Not started |
+| 2 — Project model, commands, `.adx` v2 | L | **Done locally** 2026-09-25 · CI pending |
 | 3 — Audio graph & scheduling | L | Not started |
 | 4 — Instruments & effects | XL | Not started |
 | 5 — Frontend foundation | L | Not started |
@@ -185,19 +185,101 @@ phase was briefly marked done on the wrong one.
 
 ---
 
-## [ ] Phase 2 — Project model, commands, `.adx` v2 · L
+## [x] Phase 2 — Project model, commands, `.adx` v2 · L
 
 | | |
 |---|---|
 | **Plan** | [phase_2.md](phase_2.md) |
 | **Entry** | Phase 1 §6 complete |
 | **Done when** | [phase_2.md](phase_2.md) §6 |
-| **Status** | Not started |
-| **Completed** | — |
+| **Status** | Done locally (2026-09-25) — **CI pending**: not yet pushed |
+| **Completed** | 2026-09-25 (locally) |
+
+The flat `Track` is gone. A project is Channels, Patterns, a Playlist and a Mixer
+with an arbitrary routing DAG, every mutation is a command, and `.adx` v2 is a
+written, normative spec ([docs/adx-format-v2.md](../docs/adx-format-v2.md)) whose
+every diagnostic code is checked against the implementation in both directions.
+
+The gate held, and it earned its keep: `undo_to_empty_random` (100 seeds × 10,000
+commands, comparing written text as well as the model) found two real bugs before it
+passed — a create command that restored zeroed id counters when it had allocated
+nothing, and removals restored in the wrong order. `writer_canonical_idempotent`
+found a third (v2 text labelled `ADX_VERSION=1`), and the new CRLF test a fourth
+(`adx fmt` doubling line endings on Windows stdout). All four are fixed and written up
+in [phase_2.md](phase_2.md) §10, along with fourteen places the plan itself was
+wrong or silent.
+
+Observed locally: 112 ctest tests on Debug, RelWithDebInfo and Release; 31 pytest
+tests; clang-tidy clean on 58 files; clang-format, ruff, mypy `--strict`, header
+length and the new `format-safety` gate clean. `format-safety` was seen to fail on a
+planted `std::stof` — after its first version was found not to fire at all.
+`suffocation.adx` loads in ~0.6 ms; 100k notes in ~150 ms.
+
+Not yet observed: the same in CI. The phase is recorded as done locally only, because
+Phase 1's record already shows what happens when "verified locally" is written down
+as "green in CI".
 
 **Open issues for Phase 3:**
 
-- _to be filled in by the agent that completes this phase_
+- **P1-1** · `CARRIED` · `_CrtSetAllocHook` is not installed, so C-library
+  `malloc`/`free` never reaches the violation log. Still nothing on the callback path
+  calls C allocation — Phase 2 is main-thread only — so re-carried unchanged. It
+  becomes real in Phase 4 with miniaudio, shine and libFLAC. Fixed when: as stated
+  under Phase 1.
+
+- **P1-2** · `CARRIED`, **now due** · Realtime safety is enforced by directory, and
+  `AudioThread::render` lives in `engine/audio/`, outside `RT_PATHS`. Phase 2 added no
+  realtime code, so it could not be fixed here without inventing some. Phase 3 is the
+  phase that puts real work under the callback, which makes this Phase 3's to close.
+  Fixed when: as stated under Phase 1.
+
+- **P1-3** · `CARRIED`, **now due** · The 60-second gate asserts on callback count,
+  not per-callback duration. Re-carried because a duration gate over a callback that
+  does nothing measures nothing; Phase 3 gives it something to do. Fixed when: as
+  stated under Phase 1.
+
+- **P1-4** · `CARRIED` · A refused `SpscRing::tryPush` is silent to its caller.
+  Phase 1 expected Phase 2 to publish command snapshots through a ring, but
+  phase_2.md §7 assigns the render snapshot to Phase 3 — Phase 2 has
+  `CommandStack::revision()` and `dirtySince()` for Phase 3 to poll, and no queue.
+  Fixed when: Phase 3's snapshot publication records `ViolationKind::Unbounded` on a
+  refused push.
+
+- **P1-5** · `CARRIED` · `NullBackend`/`OfflineBackend` equivalence is still asserted
+  on silence. Unchanged; Phase 3's bit-identical offline-vs-realtime test replaces it.
+
+- **P2-1** · The nightly 10-minute randomised fuzz run (phase_2.md §5) does not
+  exist: there is no scheduled workflow at all yet. The fixed-seed corpus runs on every
+  build (10k document cases, 100k full-load cases on optimised builds), so coverage is
+  deterministic but never explores new inputs. Fixed when: a scheduled CI job runs the
+  loader over randomly mutated input for a fixed time budget and fails on a crash or
+  hang.
+
+- **P2-2** · Invariant diagnostics have no position. `validate()` reports with
+  `kNoSpan` (line 0) because a project need not have come from a file — so a routing
+  cycle or a dangling reference found at load is printed without a line to jump to.
+  Parser diagnostics do carry spans. Blocks Phase 7's editor panel anchoring them.
+  Fixed when: the parser records each entity's source span and `validate()` reports
+  against it when one exists.
+
+- **P2-3** · The v1 `SIDECHAIN=` key input is not modelled. It migrates to a `Ducker`
+  slot with `enabled`/`amount`/`releaseMs`; v1 always keyed it from the first track,
+  and nothing in v2 says so yet, because a sidechain input belongs to the effect.
+  Fixed when: Phase 4's Ducker has a sidechain source and the shim sets it to the
+  first track's insert.
+
+- **P2-4** · `ParamDescriptor` ranges are defined but not enforced. The registry
+  knows `filter.cutoff` is 20–20000 Hz; a file saying `PARAM filter.cutoff=-5` loads
+  without a diagnostic. The table is also static and names only what the v1 shim
+  produces. Fixed when: Phase 4's instruments register their descriptors and the
+  loader reports `ADX2001` for a value outside one.
+
+- **P2-5** · Mini-notation is stored, not compiled (by design: phase_2.md §7). The
+  consequence to know about: a v1 file with `PATTERN=` lines migrates their text into
+  `MINI`, but v1 compiled them into notes at load, so such a file has fewer notes in
+  v2 than it played in v1 until Phase 4's compiler lands. No corpus file uses
+  `PATTERN=`, so no fixture shows it. Fixed when: Phase 4 compiles `MINI` and the
+  shim test asserts a migrated `PATTERN=` produces the notes v1 did.
 
 ---
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Not started |
+| **Status** | Done (2026-09-25) |
 | **Governs** | `engine/core/` (ids, time, tempo), `engine/project/`, `engine/format/adx/`, `docs/adx-format-v2.md`, the headless CLI |
 | **FINAL_PLAN refs** | §3.1 (AdxParser), §3.2 (automation evaluator), §3.3 items 7, 8, 11, 12, §4 in full, §6 in full, §7 Phase 2 |
 | **Entry criteria** | [phase_1.md](phase_1.md) §6 complete |
@@ -698,19 +698,44 @@ deterministic) and nightly as a 10-minute libFuzzer-style random run.
 
 ## 6. Definition of done
 
-- [ ] `docs/adx-format-v2.md` exists, is normative, contains complete EBNF, and
-      documents every diagnostic code.
-- [ ] All four `docs/examples/*.adx` load through the v1 shim with zero Errors.
-- [ ] `document_byte_identical_roundtrip` passes on the corpus and 10k fuzz cases.
-- [ ] `writer_canonical_idempotent` passes.
-- [ ] `undo_to_empty_random` passes for 100 seeds × 10,000 commands.
-- [ ] `parser_uses_commands` passes — proving the one-command-set guarantee.
-- [ ] `adx validate`, `adx fmt`, `adx diff`, `adx info` all work on the corpus.
-- [ ] Zero `std::stof`/`try`/`catch` in `engine/format/` (grep check in CI).
-- [ ] `ParamRegistry` resolves every automatable parameter that exists so far;
-      no string comparison survives past load (grep check on the render path is
-      deferred to Phase 3, where a render path exists).
-- [ ] FINAL_PLAN.md §10 Phase 2 row updated.
+- [x] `docs/adx-format-v2.md` exists, is normative, contains complete EBNF, and
+      documents every diagnostic code. *Checked in both directions by
+      `diagnostics_all_codes_documented` (every emitted code appears in the spec) and
+      `every documented code exists in the table` (the spec names no code nothing can
+      emit). Its worked example is `adx fmt` output, so it cannot drift from the
+      writer.*
+- [x] All four `docs/examples/*.adx` load through the v1 shim with zero Errors.
+      *`v1_shim_loads_all_examples`, which also runs `validate()` on the result.
+      `suffocation.adx` fidelity is frozen as a hand-derived fixture: 7 channels, 7
+      patterns, 349 notes, 21 slots, 10 inserts, 6 markers, 6 lanes, 25 breakpoints.*
+- [x] `document_byte_identical_roundtrip` passes on the corpus and 10k fuzz cases,
+      including CRLF, BOM, NUL, lone CR, unterminated quotes and no final newline.
+- [x] `writer_canonical_idempotent` passes, on the corpus and on generated input.
+- [x] `undo_to_empty_random` passes for 100 seeds x 10,000 commands. *The 100-seed
+      run is a `[.slow]` case, which ctest runs by default; two seeds run in the fast
+      loop. It compares the written text as well as the model. It found two real
+      bugs before it passed - see section 10.*
+- [x] `parser_uses_commands` passes - proving the one-command-set guarantee.
+- [x] `adx validate`, `adx fmt`, `adx diff`, `adx info` all work on the corpus.
+      *`tests/python/test_cli.py`; `adx render` is declared and exits 2 naming
+      Phase 8.*
+- [x] Zero `std::stof`/`try`/`catch` in `engine/format/` (grep check in CI).
+      *`python tools/lint.py format-safety`, CI step 11. Observed to fail: a
+      `std::stof` appended to `NoteName.cpp` turned it red. The first version of the
+      gate did not fire - its regex had been corrupted into literal backspace
+      characters - which is exactly why a gate is not done until it has been seen to
+      fail.*
+- [x] `ParamRegistry` resolves every automatable parameter that exists so far;
+      no string comparison survives past load. *All six automation lanes in
+      `suffocation.adx` resolve, including the two v1 `MASTER` lanes, to 8-byte
+      `ParamRef`s. The render-path grep is Phase 3's, as planned.*
+- [x] FINAL_PLAN.md section 10 Phase 2 row updated.
+
+Also observed: 112 ctest tests green on Debug, RelWithDebInfo and Release; 31 pytest
+tests; clang-tidy clean on all 58 first-party files; ruff, mypy `--strict`,
+clang-format and the header-length gate clean. Loading `suffocation.adx` takes
+~0.6 ms and a 100k-note file ~150 ms against the 500 ms budget in section 9, guarded
+by `test_load_budget`.
 
 ---
 
@@ -760,3 +785,104 @@ audio thread. It builds a flattened POD snapshot and hands over a pointer.
 | Command-per-mutation makes bulk operations (load a 100k-note file) slow | `beginGroup` + a bulk `AddNotes` command that carries a whole clip; measured, with a budget of < 500 ms to load `suffocation.adx` |
 | `ParamRegistry` paths break when an entity is renamed | Paths resolve to ids at load and serialize from ids at save, so a rename rewrites the text automatically. Renaming is a command; the writer is the only thing that emits paths |
 | The format grows keys faster than the spec is updated | `diagnostics_all_codes_documented` plus a CI check that every `ParamDescriptor` name appears in the spec |
+
+---
+
+## 10. Corrections made while executing this plan
+
+**`std::expected` is C++23**, as Phase 1 already found. Nothing here returns one.
+`Document::parse` always succeeds and takes a `DiagnosticList&`; the number and
+position parsers return `bool` and record their own diagnostic with a column;
+`ParamRegistry::resolve` returns a `ParamResolution` carrying a reason and the offset
+and length of the offending path segment, so the caller — which knows the line and
+column the path started at — builds the diagnostic that underlines exactly the bad
+segment.
+
+**`TempoMap` keeps cumulative seconds, not samples.** §4.2 named `m_cumSamples`. That
+table would depend on the sample rate, so a 96 kHz export and a 48 kHz stream would
+need two and could disagree about where a segment boundary lands. Seconds are
+rate-independent; rounding to frames happens once, in `toSamples`. The round-trip
+identity holds while a tick is at least one sample long — 750 bpm at 48 kHz — which
+the spec now states.
+
+**Velocity is an integer 0..127 in v2.** The §4.10 example wrote `0.80`. 127 values do
+not map onto round decimals, so a float spelling is lossy and makes `fmt`
+non-idempotent. Only the v1 shim reads 0..1, and it reports `ADX4005`.
+
+**Inline keys are lowercase.** §4.10 wrote `INSERT 1 name="Master" GAIN=1.0`, mixing
+the two conventions. Section-level keys are `UPPER_CASE`; keys inside a positional
+line are `lowercase`, everywhere.
+
+**Indentation is significant for block structure.** §4.10's example indents note
+lines under `NOTES` but never said whether that mattered. It does: a line belongs to
+the nearest preceding line with less indentation. Nothing else lets a `MINI` body, a
+note list and a playlist automation lane end unambiguously. An opener with no
+indented body is `ADX0010`.
+
+**`SEND` carries an id, and slot and send ids are project-wide.** A parameter path
+names a slot or send directly (`insert.2.slot.7.mix`) and an 8-byte `ParamRef` has
+room for one id. Writing the id is what keeps a path pointing at the same send after
+something else is deleted. The parser *adopts* the ids a file gives (inserts, slots,
+sends, playlist tracks) rather than renumbering them — `Project::new*Id(wanted)`.
+
+**`master` is an input alias only.** `master.gain` is gone from the path grammar; the
+writer always emits `insert.N`, so a project has one spelling per reference.
+
+**An automation path must name a parameter the file declares.** Auto-creating the
+missing `PARAM` at its default would add a line the author never wrote, and Rule 2
+says a load/save cycle changes nothing. `ADX3001` instead.
+
+**`Pattern::mini` is a vector, one per channel**, not `std::optional`: §4.10's own
+example has a pattern with both `NOTES Lead` and `MINI Drums`.
+
+**The writer always writes `ADX_VERSION=2` (or higher).** A migrated project keeps
+its source version for `adx info`, but writing `1` over v2 syntax sent the next load
+through the v1 shim. `writer_canonical_idempotent` caught it.
+
+**Residue position.** "Re-emitted at its recorded position" has no canonical meaning
+once the known sections around it have moved. Unknown keys go at the end of their
+section, unknown sections after all known ones, in original order — idempotent, and
+byte-identical for any file this writer produced.
+
+**Curves.** `Step` holds the start value and jumps at the end (v1's `step`, exactly);
+`Hold` jumps immediately. Every kind satisfies f(0)=0, f(1)=1. v1's `exp` was defined
+on the ratio of the two values and cannot be expressed as a normalised shape; it maps
+to `exponential` and reports `ADX4003`.
+
+**`SIDECHAIN=` becomes a `Ducker` slot, with no route.** §4.12 asked for "an explicit
+sidechain `Route`", but every track insert already routes to the master, and `Route`
+has no notion of a sidechain input — a second identical edge would mean nothing. The
+key input belongs to the effect Phase 4 builds. Recorded as P2-3.
+
+**Bindings.** Diagnostics cross as dicts and become dataclasses in
+`app/adx/format.py`. Commands are built by *name* (`commands.MoveNotes("Verse",
+"Lead", 120)` moves that clip's notes) because note ids are not exposed — exposing
+them would mean a list of per-note objects, which Rule 2 forbids until Phase 5's
+numpy view exists.
+
+**`coalesceWith` is not `noexcept`.** Absorbing a rename or a breakpoint list copies
+strings and vectors; a `noexcept` declaration would turn an allocation failure into
+`std::terminate`. clang-tidy's `bugprone-exception-escape` found it.
+
+**`parser_no_exceptions_on_fuzz` runs the whole load**, not just the document layer,
+on mutated input of both grammars: 400 cases in the fast loop, 100k in the `[.slow]`
+case on optimised builds and 10k in Debug, where a full load is ~25× slower and the
+extra coverage is nil.
+
+**Manifest additions**, each because a header needed an implementation or a concern
+needed one home: `engine/project/Color.h`, `Channel.cpp`, `Automation.cpp`,
+`Diff.h/.cpp` (the semantic diff), `engine/format/adx/Value.h/.cpp` (number, position,
+curve and colour parsing and formatting, kept together so the two directions agree),
+`bindings/ProjectHandle.h`, `app/adx/format.py`, `tests/cpp/Corpus.h`.
+
+**Two bugs the undo gate found**, recorded because they are the kind that reappear:
+
+- A create command whose `apply()` bailed out early (its parent was gone) still
+  restored its saved `IdMarks` on revert — which were all zero — resetting every id
+  counter in the project. Guarded on whether an id was actually allocated.
+- Removals detached entities in descending index order (correct) and restored them in
+  the same order (wrong): removing indices 1 and 2 of four and restoring highest-first
+  swaps them. Restoration is now ascending, in five commands.
+
+And one the CRLF test found: `adx fmt` to stdout on Windows wrote CRLF text through a
+text-mode stream and doubled every line ending. It writes bytes now.

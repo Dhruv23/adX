@@ -1,8 +1,5 @@
 // The one and only bridge between Python and the engine (FINAL_PLAN §2.1).
 //
-// Phase 0 exposes the version and nothing else: the point is to prove the
-// build/import/test pipeline end to end before there is any surface to expose.
-//
 // Every binding added after this obeys FINAL_PLAN §2.2:
 //   Rule 2 - cross this boundary O(interactions), never O(notes) or O(frames);
 //            anything returning a list of per-note Python objects is a bug.
@@ -20,6 +17,8 @@ PYBIND11_MODULE(adx_engine, m) {
     m.doc() = "Native engine for adX.";
 
     registerAudioBindings(m);
+    registerProjectBindings(m);
+    registerFormatBindings(m);
 
     m.def(
         "version", []() { return std::string(adx::version()); },

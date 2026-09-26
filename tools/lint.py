@@ -7,6 +7,7 @@ whatever LLVM happens to be on PATH.
     python tools/lint.py format [--check]
     python tools/lint.py tidy --build-dir build/windows-x64-debug
     python tools/lint.py headers
+    python tools/lint.py format-safety
 
 `ruff` and `mypy` need no driver and are run directly.
 """
@@ -380,7 +381,46 @@ def cmd_headers(_args: argparse.Namespace) -> int:
     return 0
 
 
-_GATES = {"format": cmd_format, "tidy": cmd_tidy, "headers": cmd_headers}
+#: phase_2.md 6: "Zero std::stof/try/catch in engine/format/". Iteration one called
+#: std::stof inside try/catch per token, and std::exception::what() carries no
+#: position - which is why every one of its diagnostics degraded to "Malformed X on
+#: line N". Numbers here go through std::from_chars and report their own column.
+_FORMAT_ROOT = "engine/format"
+_FORMAT_BANNED = re.compile(r"\b(std::sto[a-z]+|try|catch)\b")
+
+
+def _strip_comments(line: str) -> str:
+    """Drop a // comment, so explaining why stof is banned is not itself a finding."""
+    at = line.find("//")
+    return line if at < 0 else line[:at]
+
+
+def cmd_format_safety(_args: argparse.Namespace) -> int:
+    """Enforce the engine/format ban on exception-based number parsing."""
+    findings: list[str] = []
+    files = [path for path in _first_party_cpp_files() if _relative(path).startswith(_FORMAT_ROOT)]
+    for path in files:
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            match = _FORMAT_BANNED.search(_strip_comments(line))
+            if match:
+                findings.append(f"{_relative(path)}:{number}: '{match.group(1)}'")
+    if findings:
+        for finding in findings:
+            print(finding, file=sys.stderr)
+        return _fail(
+            f"{len(findings)} use(s) of std::sto*/try/catch in {_FORMAT_ROOT}. Parse numbers "
+            "with std::from_chars and report the column (docs/adx-format-v2.md 3.3)."
+        )
+    print(f"format safety: {len(files)} files in {_FORMAT_ROOT} use no std::sto*, try or catch")
+    return 0
+
+
+_GATES = {
+    "format": cmd_format,
+    "tidy": cmd_tidy,
+    "headers": cmd_headers,
+    "format-safety": cmd_format_safety,
+}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -400,6 +440,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     subparsers.add_parser("headers", help="the 500-line header limit")
+    subparsers.add_parser("format-safety", help="no std::sto*/try/catch in engine/format")
 
     args = parser.parse_args(argv)
     return _GATES[str(args.gate)](args)

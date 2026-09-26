@@ -28,9 +28,10 @@ pytest
 `windows-x64-release` and `windows-x64-relwithdebinfo` are the other two presets.
 `python -m adx` prints the app and engine versions.
 
-`ctest` includes the realtime gate, which runs a 60-second audio stream under the
-allocator hook. For a fast inner loop use `ctest --preset windows-x64-debug -LE slow`;
-CI always runs the full set.
+`ctest` includes the slow gates: the realtime gate, which runs a 60-second audio
+stream under the allocator hook, the 100-seed undo test and the 100k-case parser
+fuzz. For a fast inner loop use `ctest --preset windows-x64-debug -LE slow`; CI
+always runs the full set.
 
 > **After changing C++, re-run `pip install -e ".[dev]"` before `pytest`.**
 > The preset builds into `build/windows-x64-*`; the Python extension that
@@ -40,14 +41,27 @@ CI always runs the full set.
 > deliberately off: it would need the MSVC environment present at import time and
 > would break `pytest` in any ordinary shell.
 
+## The command line
+
+```
+adx validate FILE...          diagnostics with line:column; exit 1 on any error
+adx fmt [--check | -i] FILE   canonical formatting
+adx fmt --upgrade IN -o OUT   migrate a v1 file (v1 files are never rewritten in place)
+adx diff A B                  semantic diff; exit 1 if the projects differ
+adx info FILE                 counts, duration, tempo range
+```
+
+The format is specified in [docs/adx-format-v2.md](docs/adx-format-v2.md).
+
 ## Lint
 
-The same four gates CI runs, at the same versions:
+The same gates CI runs, at the same versions:
 
 ```
 python tools/lint.py format --check
 python tools/lint.py tidy --build-dir build/windows-x64-debug
 python tools/lint.py headers
+python tools/lint.py format-safety
 ruff check app tests/python tools && ruff format --check app tests/python tools
 mypy --strict app
 ```

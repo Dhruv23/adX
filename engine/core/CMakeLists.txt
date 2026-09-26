@@ -47,5 +47,7 @@ endif()
 
 target_sources(adx_engine_static PRIVATE
     Config.cpp
+    Curve.cpp
+    TempoMap.cpp
     Version.cpp
 )

@@ -122,3 +122,8 @@ jobs:
       - name: Header length
         if: ${{ !cancelled() }}
         run: python tools/lint.py headers
+
+      # 11. Phase 2: no exception-based number parsing in the format layer.
+      - name: Format safety
+        if: ${{ !cancelled() }}
+        run: python tools/lint.py format-safety
