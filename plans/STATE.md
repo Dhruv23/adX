@@ -226,8 +226,10 @@ paragraph and P2-0. If it is not, fix it before building on it.
 
 **Open issues for Phase 3:**
 
-- **P2-0** · `BLOCKER until checked` · CI for `b03d5bd` (run 36206915522) was not
-  observed to finish. Everything passed locally on all three configurations, but
+- **P2-0** · `BLOCKER until checked` · CI for `b03d5bd` was not observed to finish.
+  Run 36206915522 ended *cancelled*, not failed: the push of `5b932f0` (docs only)
+  started a newer run and the workflow's `cancel-in-progress` stopped the old one.
+  Check the run for `5b932f0` or any later commit instead - same code. Everything passed locally on all three configurations, but
   "verified locally" and "green in CI" are different claims. Fixed when: the run
   (or a later one containing `b03d5bd`) is seen green on all three matrix jobs.
 
