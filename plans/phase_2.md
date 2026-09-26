@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Done (2026-09-25) |
+| **Status** | Done (2026-09-25) · CI unconfirmed, see STATE.md P2-0 |
 | **Governs** | `engine/core/` (ids, time, tempo), `engine/project/`, `engine/format/adx/`, `docs/adx-format-v2.md`, the headless CLI |
 | **FINAL_PLAN refs** | §3.1 (AdxParser), §3.2 (automation evaluator), §3.3 items 7, 8, 11, 12, §4 in full, §6 in full, §7 Phase 2 |
 | **Entry criteria** | [phase_1.md](phase_1.md) §6 complete |

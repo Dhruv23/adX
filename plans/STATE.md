@@ -70,7 +70,7 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 |---|---|---|
 | 0 — Foundation | S | **Done** 2026-09-13 |
 | 1 — RT core | M | **Done** 2026-09-13 |
-| 2 — Project model, commands, `.adx` v2 | L | **Done locally** 2026-09-25 · CI pending |
+| 2 — Project model, commands, `.adx` v2 | L | **Done** 2026-09-25 (CI run 36206915522 unconfirmed) |
 | 3 — Audio graph & scheduling | L | Not started |
 | 4 — Instruments & effects | XL | Not started |
 | 5 — Frontend foundation | L | Not started |
@@ -192,8 +192,8 @@ phase was briefly marked done on the wrong one.
 | **Plan** | [phase_2.md](phase_2.md) |
 | **Entry** | Phase 1 §6 complete |
 | **Done when** | [phase_2.md](phase_2.md) §6 |
-| **Status** | Done locally (2026-09-25) — **CI pending**: not yet pushed |
-| **Completed** | 2026-09-25 (locally) |
+| **Status** | Done (2026-09-25). Pushed as `b03d5bd`; CI run 36206915522 was still running when this was marked, so CI is **unconfirmed** — see below |
+| **Completed** | 2026-09-25 |
 
 The flat `Track` is gone. A project is Channels, Patterns, a Playlist and a Mixer
 with an arbitrary routing DAG, every mutation is a command, and `.adx` v2 is a
@@ -215,11 +215,21 @@ length and the new `format-safety` gate clean. `format-safety` was seen to fail 
 planted `std::stof` — after its first version was found not to fire at all.
 `suffocation.adx` loads in ~0.6 ms; 100k notes in ~150 ms.
 
-Not yet observed: the same in CI. The phase is recorded as done locally only, because
-Phase 1's record already shows what happens when "verified locally" is written down
-as "green in CI".
+Not yet observed: the same in CI. The phase is marked done so Phase 3 can start —
+its entry criterion is phase_2.md §6, and every box there was observed locally — but
+CI run 36206915522 (commit `b03d5bd`) had not finished at the time. When it was last
+seen, the Release job had passed `ctest` and Debug and RelWithDebInfo were still in
+`ctest`, with no step failed. That is progress, not a result.
+
+**First thing for the Phase 3 agent:** check that run. If it is green, delete this
+paragraph and P2-0. If it is not, fix it before building on it.
 
 **Open issues for Phase 3:**
+
+- **P2-0** · `BLOCKER until checked` · CI for `b03d5bd` (run 36206915522) was not
+  observed to finish. Everything passed locally on all three configurations, but
+  "verified locally" and "green in CI" are different claims. Fixed when: the run
+  (or a later one containing `b03d5bd`) is seen green on all three matrix jobs.
 
 - **P1-1** · `CARRIED` · `_CrtSetAllocHook` is not installed, so C-library
   `malloc`/`free` never reaches the violation log. Still nothing on the callback path
