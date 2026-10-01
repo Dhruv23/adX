@@ -71,7 +71,7 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 0 — Foundation | S | **Done** 2026-09-13 |
 | 1 — RT core | M | **Done** 2026-09-13 |
 | 2 — Project model, commands, `.adx` v2 | L | **Done** 2026-09-25 (CI found one clang-tidy finding; fixed in Phase 3) |
-| 3 — Audio graph & scheduling | L | **Done** 2026-10-01 (CI pending push, P3-0) |
+| 3 — Audio graph & scheduling | L | **Done** 2026-10-01 (CI green, run 36835905774) |
 | 4 — Instruments & effects | XL | Not started |
 | 5 — Frontend foundation | L | Not started |
 | 6 — The DAW proper | XL | Not started |
@@ -300,7 +300,7 @@ clang-tidy against all three databases before marking itself done.
 | **Plan** | [phase_3.md](phase_3.md) |
 | **Entry** | Phase 2 §6 complete |
 | **Done when** | [phase_3.md](phase_3.md) §7 |
-| **Status** | Done (2026-10-01). Every §7 box observed locally on Debug, RelWithDebInfo and Release; CI **unconfirmed** until this is pushed — P3-0 |
+| **Status** | Done (2026-10-01). Every §7 box observed locally on Debug, RelWithDebInfo and Release; CI green on all three jobs: run 36835905774 at `1051977` (one earlier Debug ctest failure, P3-8) |
 | **Completed** | 2026-10-01 |
 
 > Carries the Phase 11 transport checkpoint. Read [phase_3.md](phase_3.md) §2
@@ -339,10 +339,17 @@ P1-1, P2-2, P2-3, P2-4 and P2-5 re-carried with reasons.
 
 **Open issues for Phase 4:**
 
-- **P3-0** · `BLOCKER until checked` · None of this has run in CI: it has not been
-  pushed. That run also confirms P2-0's fix and is the first CI run of the `positions`
-  gate. Fixed when: a run containing this phase's commit is green on all three matrix
-  jobs.
+- **P3-0** · **Closed 2026-10-01** · Run 36835905774 (commit `1051977`) is green on
+  all three matrix jobs, including clang-tidy on Release/RelWithDebInfo (P2-0's fix) and
+  the `positions` gate. Run 36833200360 (`a67caf5`, same code) was green on Release and
+  RelWithDebInfo and **failed `ctest` on Debug** after 11 minutes - see P3-8.
+
+- **P3-8** · A Debug-only `ctest` failure on CI that did not reproduce. Job logs need a
+  token, so the failing test is unknown; the same code passed on the re-run (Debug ctest
+  9 min against 5-7 for the others, so the Debug runner is close to some limit). CI now
+  prints failing lines as annotations (`ctest summary` step). Suspect a timing assertion
+  (worst-callback or throughput) under a loaded Debug runner. Fixed when: a failure is
+  seen with its name, or ten consecutive Debug runs pass.
 
 - **P2-1** · **Wired, not yet observed** · `.github/workflows/nightly.yml` runs the
   whole loader over randomly mutated input for 10 minutes from a fresh, printed seed

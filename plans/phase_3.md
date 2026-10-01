@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Done (2026-10-01) · CI unconfirmed until pushed, see STATE.md P3-0 |
+| **Status** | Done (2026-10-01) · CI green (run 36835905774); see STATE.md P3-0, P3-8 |
 | **Governs** | `engine/graph/`, `engine/transport/`, `engine/project/Snapshot.*`, `engine/render/` (core) |
 | **FINAL_PLAN refs** | §2.2 Rule 1, §3.3 items 1–6, §4 commit protocol, §5.2 engine half, §7 Phase 3 **including the Phase 11 checkpoint** |
 | **Entry criteria** | [phase_2.md](phase_2.md) §6 complete |
