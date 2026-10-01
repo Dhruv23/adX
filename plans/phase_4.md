@@ -70,6 +70,11 @@ engine/instruments/
   fm/FmInstrument.*                 6-operator, 32 algorithms, feedback, ratio/fixed
   wavetable/WavetableInstrument.*   position morph, 2D tables, WT import
   pool/SamplePoolChannel.*          plain one-shot pool playback channel
+  voice/VoiceInstrument.*           UTAU-style sung vocals (§4.13)
+  voice/Voicebank.*                 oto.ini + character.txt parse, alias resolution, encoding detect
+  voice/WorldAnalysis.*             WORLD F0/spectral-envelope/aperiodicity, cached as .adxfrq
+  voice/UtauResampler.*             off-thread note render: pitch, length, flags, bend
+  voice/VoiceRenderCache.*          content-addressed rendered notes in the SamplePool
 
 engine/effects/
   Effect.h                      Node subclass + wet/dry + bypass + latency
@@ -88,8 +93,9 @@ engine/effects/
   ParametricEq.*                8-band fully parametric + spectrum tap for the UI
   Flanger.*  Phaser.*  Tremolo.*
   Convolution.*                 IR loading + uniform-partition FFT convolution
+  Overdrive.*                   oversampled drive stage + tone, soft/tube/hard characters (§4.9)
   Saturation.*                  tube/tape/transformer models + oversampling
-  Vocoder.*                     16-32 band analysis/synthesis with carrier input
+  Vocoder.*                     16-32 band analysis/synthesis, sidechain carrier (§4.9)
   PitchShifter.*                phase-vocoder / RubberBand realtime mode
   FormantFilter.*               vowel morphing as an insert
   StereoImager.*                M/S width, per-band widening
@@ -137,6 +143,10 @@ FM, Wavetable, SamplePoolChannel.
 Flanger, Phaser, Tremolo, Convolution, Saturation, Vocoder, PitchShifter,
 FormantFilter, StereoImager, FrequencyShifter, RingMod, GrossBeat,
 SpectralFreeze.
+
+**Tranche D — Voice.** `engine/instruments/voice/` (§4.13), plus `Overdrive` if
+not already pulled forward for the STAKILLAZ pack. Depends on A (Sampler, SamplePool,
+`Resample.h`) and on Phase 3's `Lyric`/`PitchGlide` events; independent of B and C.
 
 Tranche A is the load-bearing one: it is where the primitives are proven and
 where the porting judgment is spent. B and C are largely *applications* of
@@ -211,6 +221,21 @@ protected:
                             uint32_t frames, const ProcessContext&) noexcept = 0;
 };
 ```
+
+**Pitch glide is in the base, not per instrument.** `Voice` carries a `pitchCents`
+offset that `Instrument::process` advances from `PitchGlide` events (Phase 3 §4.5)
+using the event's duration and curve shape, sample-accurately, once. `renderVoice`
+reads `voice.pitchRatio()` and nothing else, so slide notes and pitch curves work on
+every instrument for free. This is distinct from the ported `GLIDE` parameter, which
+is channel-level portamento: it triggers only when a new note starts while another
+is sounding (mono/legato), glides over `glide.time`, and is overridden by an
+explicit `slide` on the note. Precedence: base pitch + `fineTuneCents` + channel
+`pitchOffsetCents` + portamento + slide + `pitchCurve` + vibrato, summed in cents
+and converted to a ratio once per block with per-sample linear interpolation of the
+cents value (so a slide is smooth, not stair-stepped at block boundaries). A
+`PitchGlide` for a `noteId` with no live voice (already stolen/released) is dropped.
+Tests: `slide_reaches_target_exactly`, `slide_block_size_independent`,
+`slide_plus_vibrato_sums_in_cents`, `portamento_overridden_by_explicit_slide`.
 
 Wet/dry crossfade and bypass are in the base, once, correctly (equal-power
 crossfade, bypass ramped over 5 ms rather than switched, so a bypass toggle is
@@ -356,6 +381,32 @@ Most of §5.4 is straightforward against `engine/dsp/`. These four are not:
   interacts with Phase 11: a GrossBeat on a launched clip follows *that clip's*
   time source.
 
+**Overdrive.** Distinct from the ported `Distortion` (a bare tanh) and from
+`Saturation` (tube/tape/transformer models). Signal path: input gain → pre-emphasis
+high-pass (tightens the low end before clipping, the classic overdrive-pedal
+move) → waveshaper → post low-pass `tone` → output level, all inside 4× oversampling
+with a polyphase half-band pair so the clipper does not alias. Characters (`mode`):
+`soft` (tanh-ish), `tube` (asymmetric, even harmonics), `hard` (clamp). Parameters:
+`drive`, `tone`, `tightness` (pre-HPF corner), `mode`, `level`, `mix`. Declares
+the oversampler's latency honestly. `Saturate.h` supplies the shapers, so this is
+mostly wiring; the work is the oversampler and the aliasing test.
+Tests: `overdrive_alias_below_-60dB` (swept sine, aliased energy measured),
+`overdrive_declares_latency`, `overdrive_mode_switch_no_click`.
+
+**Vocoder.** 16–32 bands (`bands`), analysis filterbank on the modulator, synthesis
+filterbank on the carrier, per-band envelope followers (`attack`/`release`).
+Carrier is a second input: a mixer **sidechain connection** (Phase 3's explicit
+sidechain edge, the same mechanism as Compressor/Ducker), or a built-in carrier
+(`saw` bank tracking MIDI via the host channel, `noise`, or `saw+noise`) so it works
+on one track. Intelligibility features that matter more than band count: `formantShift`,
+`bandwidth`, an unvoiced/sibilance path (high-passed modulator passed through
+or used to gate a noise carrier above ~5 kHz, `sibilance` mix), and
+`bandFreeze`. This is a channel vocoder; the phase-vocoder in `PitchShifter` is a
+different technique despite the shared name. Latency is declared from the filterbank
+group delay and *measured* by `effect_declares_latency`. Tests:
+`vocoder_flat_carrier_reproduces_envelope`, `vocoder_sibilance_passthrough`,
+`vocoder_sidechain_latency_aligned` (PDC aligns modulator and carrier).
+
 ### 4.10 Metering
 
 Peak and RMS per insert; LUFS per BS.1770-4 (K-weighting filter pair, 400 ms
@@ -409,6 +460,146 @@ shipped packs.
 `docs/STAKILLAZ.md`, which FINAL_PLAN §3.1 records as still-current sound-design
 references. Each documented sound becomes a named preset. The *generators*
 described in those documents are Phase 10; Phase 4 ships the patches.
+
+---
+
+### 4.13 Voice — UTAU voicebanks
+
+**What a UTAU voicebank is.** A folder of WAV recordings of syllables plus
+`oto.ini`, which maps each *alias* (a lyric such as "ka" or "- a") to a WAV and five
+timings: offset, consonant, cutoff, preutterance, overlap. `character.txt` names it.
+There is no synthesis in the bank. The synthesis is done by a **resampler** that
+re-pitches and re-times the syllable to the note. adX therefore ships its own
+resampler rather than "loading" a bank into something that already sings.
+
+**Shape.** Offline-quality synthesis cannot run on the audio thread, so Voice is a
+*renderer plus a sampler*:
+
+```
+Note(lyric, pitch, length, slide/pitchCurve, flags)
+   -> VoiceRenderKey = hash(voicebank content hash, resolved alias, pitch, length,
+                            bend, flags, resampler version)
+   -> VoiceRenderCache hit?  yes: play the cached buffer as a Sampler voice
+                             no : worker thread renders -> SamplePool -> snapshot swap
+```
+
+- **Analysis** (`WorldAnalysis`): F0 from the bank's own UTAU `.frq` when present
+  and valid (Teto ships one per WAV), else WORLD Harvest/DIO; CheapTrick envelope and
+  D4C aperiodicity always from WORLD. Cached next to the project as `.adxfrq` keyed by
+  file hash. Heavy; runs on a worker with progress, never on first play.
+- **Render** (`UtauResampler`): resolve alias (with the bank's prefix/suffix map and
+  "CV/VCV" fallbacks), take the oto segment, shift F0 to the note pitch (plus
+  `slide`/`pitchCurve`/vibrato, evaluated per frame), time-stretch only the vowel
+  tail so the consonant keeps its natural length, apply UTAU flags (`g` gender,
+  `B` breathiness, `t` tuning, `P` peak compression — the common subset), resynthesize.
+- **Join**: preutterance and overlap give each note its early start and the
+  crossfade into the previous note, so consecutive notes on a track are rendered as a
+  *phrase*, not as isolated one-shots. The cache key therefore includes the
+  neighboring lyric when overlap is non-zero.
+- **Playback** is ordinary Sampler playback of the cached buffer, so it is
+  allocation-free and obeys the Phase 3 voice rules. A note whose render is not ready
+  plays silence plus a "rendering…" marker in the UI; it never blocks the callback.
+- **Offline == realtime**: export and golden renders *wait* for the cache to be
+  complete (the render is deterministic: WORLD, fixed seeds, no wall-clock), so the
+  determinism gate of Phase 3 §4.10 still holds.
+
+#### Reference voicebank: Kasane Teto (重音テト)
+
+Voice is **built and accepted against Kasane Teto**, not against an abstract UTAU
+spec. Source: the official site (kasaneteto.jp/utau/), `TETO-tougou-110401.zip`
+("Solo + Continuous", 95 MB), downloaded to `third_party_assets/voicebanks/teto/`
+(git-ignored). It is surveyed here from the real files; these facts, not the generic
+description above, are the design inputs:
+
+| Fact (measured) | Consequence for the design |
+|---|---|
+| Three sub-banks in one install: `単独音` solo/CV (142 WAVs, 319 oto lines), `連続音` continuous/VCV (249 WAVs, 887 lines), `エクストラ` extra (16 WAVs, 39 lines) | `Voicebank` loads a **tree of sub-banks** with a search order (VCV → CV → extra), not one flat `oto.ini` |
+| `oto.ini`, `character.txt`, `readme.txt` are Shift-JIS; WAV filenames are Japanese (`_あ.wav`) | Shift-JIS decode is mandatory, not an edge case; filenames resolve through the zip/OS encoding, never assumed ASCII |
+| One WAV carries **many oto lines** (`_あ.wav` has `あ`, `- あ` and `* あ`; a VCV file has five: `a い`, `i う`, `e お`, …) | The alias table is `alias → (wav, 5 timings)`, many-to-one on the file; analysis is cached per WAV, not per alias |
+| CV aliases: `あ` plain, `- あ` (after silence), `* あ` (breath-in/alt). VCV aliases: `<prev vowel> <kana>` (`a い`) | Alias resolution is driven by the **previous note's ending vowel**: lyric `い` after `あ` → `a い`; after a rest → `- い`; otherwise plain `い`. Rule lives in `AliasResolver`, with the bank's own fallbacks |
+| Timings are fractional ms (`542.228`) and **cutoff is negative** in VCV lines (`-809.68`: measured back from the end of the file) | Parse as `double`; negative cutoff means "length = fileEnd − |cutoff| − offset". A common cause of garbled consonants if mishandled; gets its own test |
+| 44.1 kHz, mono, 16-bit WAV | Resampler runs at 44.1 kHz internally; project-rate conversion happens at the cache boundary (`Resample.h`), once |
+| Recorded at **mono-pitch ≈ D#4** (UTAU's own `.frq` reports an average F0 of 309.8 Hz) | Quality degrades far from D#4. Define a supported range (target ±7 semitones clean, wider with a UI warning), and have the gate test the extremes |
+| Every WAV ships a **`.frq`** (UTAU `FREQ0003`: hop 256, average F0, then N × (f0, amplitude) doubles) | Import the `.frq` as the F0 track and **skip Harvest/DIO** when it validates; fall back to analysis only when missing/corrupt. Faster first load and it matches what the bank author tuned |
+| `character.txt` + `readme.txt` bundled | Surfaced in the instrument panel (name, image `teto.bmp`, credits) |
+
+**Licensing, as shipped with this bank (readme.txt).** Free for **non-commercial**
+use (including non-profit doujin); work using it may be published without notifying
+the author; **commercial use needs separate permission** (Crypton Future Media — the
+official terms page says the UTAU/VOICEPEAK banks are licensed through them), and
+**distributing the library without consent is forbidden**. Consequences, binding on
+the plan:
+
+- the bank is **never committed** (`third_party_assets/` is in `.gitignore`), never
+  in CI artifacts, never in the installer, never in a "demo project" bundle;
+- project bundles ("collect and save") **exclude voicebanks by default** and record
+  only path + content hash; including one needs an explicit user action with a
+  warning;
+- the first-load dialog shows the bank's readme text and a non-commercial notice;
+- the export dialog shows a one-line reminder when a Voice channel is present.
+  adX informs; it does not police.
+
+**What is tested on Teto, and what cannot be.** Because the bank cannot enter the
+repo or CI, tests split in two:
+
+- **CI tests** run on the synthetic generated bank (`tests/data/voicebank_synth/`),
+  which is built to *reproduce Teto's structural quirks*: Shift-JIS `oto.ini`, many
+  aliases per WAV, VCV `<vowel> <kana>` aliases, negative cutoffs, fractional
+  timings, a `.frq`. Every parser and resolver rule above has a CI test there.
+- **Local acceptance tests** (`tests/local/teto/`) run only when `ADX_TETO_DIR`
+  points at the extracted bank, and are skipped (not failed) otherwise. They assert:
+  `teto_loads_all_three_subbanks` (counts 319/887/39 lines; every referenced WAV
+  exists), `teto_frq_matches_analysis` (imported F0 within 30 cents of WORLD's on
+  voiced frames), `teto_vcv_phrase_resolves` ("あ い う え お" resolves to
+  `- あ`, `a い`, `i う`, `u え`, `e お`), `teto_pitch_sweep_no_artifacts` (render
+  D#4 ±12 semitones, no clipping, no NaN, F0 within ±10 cents of target), and
+  `teto_offline_equals_realtime`.
+- **The human gate.** A committed score — `examples/teto_demo.adx`, lyrics and notes
+  only, no audio — renders a ~20 s phrase using a slide, a vibrato and a
+  Vocoder-free dry vocal. It must be intelligible Japanese by ear. Like the Phase 4
+  `suffocation.adx` A/B, this is a listening check recorded in `plans/STATE.md`; it
+  cannot be automated and is not pretended to be.
+
+**Encodings and edge cases.** `oto.ini` and `character.txt` are very commonly
+Shift-JIS (Teto's are); detect and transcode to UTF-8, store the original bytes, and never rewrite
+a user's bank. Banks with missing WAVs or out-of-range oto timings load partially
+with diagnostics (`ADX4300` range), not as a failure of the whole instrument.
+Romaji/hiragana alias sets are both supported; a note's lyric is matched against the
+alias table, with a per-channel `lyricFallback`.
+
+**Optional external resampler adapter.** UTAU resamplers (moresampler, fresamp, …)
+share a fixed 12-argument command line. A user may point a channel at one;
+it runs sandboxed exactly like Phase 9's plugin scanner (separate process, timeout,
+no project access beyond the temp WAV) and its output goes into the same
+`VoiceRenderCache`. Off by default; the built-in WORLD resampler is the supported path.
+
+**Licensing.** Voicebanks carry their own terms, often non-commercial or
+character-specific. adX bundles **none**. The UI shows `character.txt`/readme
+text on first load, and the export dialog does not enforce licenses (that is the
+user's responsibility), but the project stores only a path + content hash, so
+sharing a project never redistributes a bank.
+
+**Import.** UST (UTAU sequence) and USTX (OpenUtau) import via Phase 9's import
+path: notes, lyrics, and per-note pitch bends map to `Note`, `Note.lyric`, and
+`Note.pitchCurve`. Export back to UST is out of scope.
+
+**Not covered here.** *Vocaloid* is proprietary and has no third-party SDK, so
+there is no native Vocaloid instrument. It is reachable only through Phase 9's VST3
+host if the user has a VST3 build of a voice product. *DiffSinger* (open neural
+singing synthesis, ONNX) is a plausible later `VoiceInstrument` backend behind
+`ADX_ENABLE_ONNX` (FINAL_PLAN §8.2); the render-cache design above is deliberately
+backend-agnostic for that reason. Record as a Phase 10+ candidate, not a deliverable.
+
+**Tests.** `oto_parse_shiftjis`, `alias_resolution_cv_vcv`,
+`world_analysis_deterministic` (bit-identical across runs),
+`resampler_pitch_accuracy` (±5 cents on a synthetic bank),
+`resampler_consonant_length_preserved`, `voice_cache_key_stable_and_sensitive`
+(any input change changes the key), `voice_note_not_ready_is_silent_not_blocking`
+(allocator hook + no wait), `voice_export_waits_for_cache`,
+`voice_offline_equals_realtime` golden hash. A tiny synthetic voicebank
+(`tests/data/voicebank_synth/`) is generated by script mirroring Teto's structure
+(see the reference-voicebank table) — no real banks in the repo. Teto-specific tests
+are local-only (above).
 
 ---
 

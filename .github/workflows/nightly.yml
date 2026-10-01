@@ -1,0 +1,72 @@
+name: Nightly
+
+# The work that is too slow, or too random, for every push.
+#
+#   fuzz      the whole .adx loader over randomly mutated input for ten minutes, from
+#             a seed that is new every night and printed in the log (Phase 2's P2-1).
+#             A crash fails the step; a hang is caught by timeout-minutes.
+#   gate      the Phase 3 gate - 200 channels, 100k notes, offline vs realtime at
+#             three block sizes - rendered in full in Debug, which the per-push run
+#             shortens to four seconds (phase_3.md §10: "runs on every PR in Release,
+#             nightly in Debug").
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  fuzz:
+    name: fuzz (RelWithDebInfo, 10 min)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - uses: actions/cache@v4
+        with:
+          path: .deps
+          key: deps-${{ runner.os }}-${{ hashFiles('cmake/AdxDependencies.cmake') }}
+          restore-keys: |
+            deps-${{ runner.os }}-
+      - name: Configure
+        run: cmake --preset windows-x64-relwithdebinfo
+      - name: Build
+        run: cmake --build --preset windows-x64-relwithdebinfo
+      - name: Fuzz the loader
+        timeout-minutes: 15
+        env:
+          ADX_FUZZ_SECONDS: '600'
+        run: build/windows-x64-relwithdebinfo/tests/cpp/adx_tests.exe "[.fuzz]"
+
+  gate:
+    name: Phase 3 gate in full (Debug)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - uses: actions/cache@v4
+        with:
+          path: .deps
+          key: deps-${{ runner.os }}-${{ hashFiles('cmake/AdxDependencies.cmake') }}
+          restore-keys: |
+            deps-${{ runner.os }}-
+      - name: Configure
+        run: cmake --preset windows-x64-debug
+      - name: Build
+        run: cmake --build --preset windows-x64-debug
+      - name: Render the whole synthetic project, offline and realtime
+        env:
+          ADX_FULL_EVIDENCE: '1'
+        run: build/windows-x64-debug/tests/cpp/adx_tests.exe "[gate]"

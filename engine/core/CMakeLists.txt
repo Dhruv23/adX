@@ -49,5 +49,6 @@ target_sources(adx_engine_static PRIVATE
     Config.cpp
     Curve.cpp
     TempoMap.cpp
+    TempoMath.cpp
     Version.cpp
 )

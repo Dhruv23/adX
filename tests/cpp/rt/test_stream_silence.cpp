@@ -79,7 +79,8 @@ TEST_CASE("audio_thread_installs_guards", "[rt][audio]") {
     AudioThread audio{std::make_unique<NullBackend>()};
     audio.setProcessStep(
         [](void* user, float* /*out*/, const float* /*in*/, std::uint32_t frames,
-           std::uint32_t channels, const adx::audio::StreamTime& /*time*/) noexcept {
+           std::uint32_t channels, const adx::audio::StreamTime& /*time*/,
+           adx::rt::BlockArena& /*arena*/) noexcept {
             auto* seen = static_cast<Observed*>(user);
             seen->inRtSection.store(adx::rt::inRtSection(), std::memory_order_relaxed);
             seen->denormalsFlushed.store(adx::rt::denormalsAreFlushed(), std::memory_order_relaxed);
@@ -130,7 +131,8 @@ TEST_CASE("process_step_receives_cleared_buffer", "[rt][audio]") {
     AudioThread audio{std::make_unique<OfflineBackend>()};
     audio.setProcessStep(
         [](void* user, float* out, const float* /*in*/, std::uint32_t frames,
-           std::uint32_t channels, const adx::audio::StreamTime& /*time*/) noexcept {
+           std::uint32_t channels, const adx::audio::StreamTime& /*time*/,
+           adx::rt::BlockArena& /*arena*/) noexcept {
             auto* observed = static_cast<Seen*>(user);
             const std::size_t count = static_cast<std::size_t>(frames) * channels;
             bool zero = true;
@@ -271,7 +273,14 @@ TEST_CASE("null_backend_60s_zero_violations", "[rt][audio][.slow]") {
 
     // The gate.
     CHECK(ViolationLog::instance().count() == 0);
-    CHECK(audio.arenaHighWaterMark() == 0); // nothing uses the arena until Phase 3
+    CHECK(audio.arenaHighWaterMark() == 0); // nothing here uses the arena
+
+    // Per callback, not on average (P1-3): the slowest one met its deadline.
+    const double deadlineMs = 1000.0 * 256.0 / 48000.0;
+    const double worstMs = static_cast<double>(audio.callbacks().worstCallbackNs()) / 1e6;
+    INFO("worst callback " << worstMs << " ms");
+    CHECK(worstMs < deadlineMs);
+    CHECK(audio.callbacks().overDeadlineCount() == 0);
 }
 
 TEST_CASE("rtaudio_enumerate_does_not_crash", "[rt][audio][.device]") {

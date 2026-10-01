@@ -19,6 +19,8 @@ PYBIND11_MODULE(adx_engine, m) {
     registerAudioBindings(m);
     registerProjectBindings(m);
     registerFormatBindings(m);
+    registerTransportBindings(m);
+    registerRenderBindings(m);
 
     m.def(
         "version", []() { return std::string(adx::version()); },

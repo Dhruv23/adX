@@ -8,6 +8,7 @@ whatever LLVM happens to be on PATH.
     python tools/lint.py tidy --build-dir build/windows-x64-debug
     python tools/lint.py headers
     python tools/lint.py format-safety
+    python tools/lint.py positions
 
 `ruff` and `mypy` need no driver and are run directly.
 """
@@ -109,7 +110,42 @@ def _relative(path: Path) -> str:
         return path.as_posix()
 
 
+#: A file may say which thread it runs on, in a `// adx-thread: <which>` line among
+#: its first few. The marker overrides the directory in both directions, which is what
+#: closes Phase 1's P1-2: realtime safety used to be decided by directory alone, so
+#: AudioThread::render - the one function in engine/audio/ that runs on every callback
+#: - was outside the ban because the backends beside it allocate at open time.
+#:
+#:   realtime  the ban applies wherever the file lives (engine/audio/CallbackCore.*)
+#:   main      the file is main-thread code inside a realtime directory - a graph
+#:             *builder* in engine/graph/ - and may use std::vector. Nothing realtime
+#:             can include it without the include walk below reporting it.
+_THREAD_MARKER = re.compile(r"^\s*//\s*adx-thread:\s*(realtime|main)\s*$")
+_MARKER_SCAN_LINES = 5
+
+_marker_cache: dict[str, str | None] = {}
+
+
+def _thread_marker(relative_path: str) -> str | None:
+    """The file's declared thread, if it declares one."""
+    if relative_path not in _marker_cache:
+        found: str | None = None
+        path = REPO_ROOT / relative_path
+        if path.is_file():
+            with path.open(encoding="utf-8-sig") as handle:
+                for _, line in zip(range(_MARKER_SCAN_LINES), handle, strict=False):
+                    match = _THREAD_MARKER.match(line)
+                    if match:
+                        found = match.group(1)
+                        break
+        _marker_cache[relative_path] = found
+    return _marker_cache[relative_path]
+
+
 def _is_rt_path(relative_path: str) -> bool:
+    marker = _thread_marker(relative_path)
+    if marker is not None:
+        return marker == "realtime"
     return any(relative_path.startswith(rt + "/") for rt in RT_PATHS)
 
 
@@ -415,11 +451,57 @@ def cmd_format_safety(_args: argparse.Namespace) -> int:
     return 0
 
 
+#: phase_3.md 2, the Phase 11 checkpoint made mechanical: "a grep over engine/
+#: outside engine/transport/ finds zero occurrences of any engine-owned global
+#: position." Time is a set of sources; scheduling takes its source as a parameter,
+#: and anything that stores a playback position of its own has quietly made time a
+#: scalar again - which is what would make clip launching a transport rewrite.
+_TRANSPORT_ROOT = "engine/transport"
+_POSITION_BANNED = re.compile(
+    r"\b("
+    # Iteration one's global, by name, in case it is ever ported back.
+    r"(?:m_)?currentSamplePosition"
+    # TimeSource's own storage. Nobody else keeps a position the way it does.
+    r"|m_positionSamples|m_fractionalSample"
+    # Any member, global, static or thread-local named for a playback position.
+    r"|(?:m|g|s|t)_\w*(?:[Pp]osition|[Pp]layhead|[Ss]ongPos)\w*"
+    # A transport "now" is exactly the global read this gate exists to stop.
+    r"|Transport::now"
+    r")\b"
+)
+
+
+def cmd_positions(_args: argparse.Namespace) -> int:
+    """Enforce that no engine code outside engine/transport/ owns a playback position."""
+    findings: list[str] = []
+    files = [
+        path
+        for path in _first_party_cpp_files()
+        if _relative(path).startswith("engine/")
+        and not _relative(path).startswith(_TRANSPORT_ROOT + "/")
+    ]
+    for path in files:
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            match = _POSITION_BANNED.search(_strip_comments(line))
+            if match:
+                findings.append(f"{_relative(path)}:{number}: '{match.group(1)}'")
+    if findings:
+        for finding in findings:
+            print(finding, file=sys.stderr)
+        return _fail(
+            f"{len(findings)} engine-owned playback position(s) outside {_TRANSPORT_ROOT}. "
+            "Take a `const TimeSource&` instead (phase_3.md 2)."
+        )
+    print(f"positions: {len(files)} engine files outside {_TRANSPORT_ROOT} own no position")
+    return 0
+
+
 _GATES = {
     "format": cmd_format,
     "tidy": cmd_tidy,
     "headers": cmd_headers,
     "format-safety": cmd_format_safety,
+    "positions": cmd_positions,
 }
 
 
@@ -441,6 +523,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     subparsers.add_parser("headers", help="the 500-line header limit")
     subparsers.add_parser("format-safety", help="no std::sto*/try/catch in engine/format")
+    subparsers.add_parser(
+        "positions", help="no engine-global playback position outside engine/transport"
+    )
 
     args = parser.parse_args(argv)
     return _GATES[str(args.gate)](args)

@@ -1,0 +1,47 @@
+[PROJECT]
+ADX_VERSION=2
+TITLE="Golden: routing, sends, strip controls"
+
+[TEMPO]
+0:0:0 100
+
+[CHANNEL Bass]
+OUTPUT=insert.2
+VOLUME=0.9
+
+[CHANNEL Lead]
+OUTPUT=insert.3
+PAN=-0.3
+
+[CHANNEL Keys]
+OUTPUT=insert.3
+PITCH=-12
+
+[PATTERN Riff]
+LENGTH=1:0:0
+NOTES Bass
+  C2 0:0:0 0:1:0 110
+  G2 0:2:0 0:1:0 100
+NOTES Lead
+  G4 0:0:1920 0:0:1920 90
+  A4 0:1:0 0:0:1920 90
+  B4 0:3:0 0:1:0 90
+NOTES Keys
+  E4 0:1:0 0:2:0 70
+
+[PLAYLIST]
+TRACK 1
+  PATTERN Riff 0:0:0
+  PATTERN Riff 1:0:0
+
+[MIXER]
+INSERT 1 name="Master"
+INSERT 2 name="Low" gain=0.7 invert=yes
+  SEND 1 insert.4 level=0.25 pre=yes
+INSERT 3 name="High" width=1.6 pan=0.2
+  SLOT 1 Reverb mix=0.3 room=0.5
+  SEND 2 insert.4 level=0.5
+INSERT 4 name="Aux" gain=0.5 pan=-0.5
+ROUTE insert.2 -> insert.1
+ROUTE insert.3 -> insert.1
+ROUTE insert.4 -> insert.1

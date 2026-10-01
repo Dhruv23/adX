@@ -129,6 +129,18 @@ quantized to the block start. This is the difference between 0 ms and up to
 range splits, transpose, and velocity curves. Every transform is a project
 setting, so a routing setup is saved and diffable like everything else.
 
+**Pitch bend and note slides.** MIDI pitch-bend (and per-note bend from MPE
+channels) maps to `Note.pitchCurve` on input recording and on file import, using the
+bend range the device reports (default ±2 semitones, RPN 0 honored). Export writes
+`slide`/`pitchCurve` as pitch-bend on a per-note channel (MPE-style rotation) so a
+slide survives a round trip into another DAW; this is lossy for overlapping notes
+and the exporter warns. Tests: `midi_bend_import_roundtrip`, `midi_export_slide_mpe`.
+
+**Singing-voice imports.** UST and USTX (OpenUtau) import to `Note` + `lyric` +
+`pitchCurve` for the Voice instrument (Phase 4 §4.13). VSQX (Vocaloid XML) may be
+imported as notes + lyrics only; adX cannot render Vocaloid voices natively, so a
+VSQX channel is assigned a Voice or VST3 instrument by the user.
+
 ### 4.2 Plugin scanning — out of process, always
 
 A plugin scan loads arbitrary code. Some of it crashes on load. Some opens a

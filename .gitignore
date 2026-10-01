@@ -42,3 +42,6 @@ Thumbs.db
 # Outside build/ on purpose: deleting a build tree should cost seconds, not a
 # few hundred megabytes of re-download.
 .deps/
+
+# Third-party voicebanks: licensed, redistribution forbidden. Never commit.
+third_party_assets/

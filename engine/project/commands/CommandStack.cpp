@@ -1,6 +1,7 @@
 #include "engine/project/commands/CommandStack.h"
 
 #include <algorithm>
+#include <ranges>
 #include <utility>
 
 #include "engine/core/Config.h"
@@ -35,8 +36,8 @@ public:
     void revert(Project& project) override {
         // Reverse order, which is the only order that works: a command that created
         // an entity must be reverted after everything that used it.
-        for (auto member = m_members.rbegin(); member != m_members.rend(); ++member) {
-            (*member)->revert(project);
+        for (const auto& member : std::views::reverse(m_members)) {
+            member->revert(project);
         }
     }
 

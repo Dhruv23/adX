@@ -324,8 +324,15 @@ Tools (`tools.py`), each a small state machine over press/move/release:
 | Glue | merges adjacent selected notes on the same pitch |
 | Strum | distributes a chord's onsets over a drag-defined span, forward/reverse/curved |
 | Mute | toggles note mute without deleting |
+| Slide | drag from a note's right end to another pitch: sets `Note.slide` (target in cents, snapped to scale/semitone), drawn as a ramp over the note with draggable start/length handles and a curve-shape toggle; alt-drag onto the *next* note's head targets that pitch |
+| Pitch curve | pencil in a per-note pitch lane (`Note.pitchCurve`): points + segment shapes, for scoops, dives and vibrato-like bends; a "simplify" action thins dense drawn curves |
 
-Per-note lanes: velocity, pan, cutoff, resonance, fine pitch. One lane visible
+Per-note lanes: velocity, pan, cutoff, resonance, fine pitch, **pitch curve**, and
+**lyric** (a text cell per note, visible when the channel is a Voice instrument;
+Tab moves to the next note, so a line of lyrics types straight through; hiragana
+and romaji both accepted; the resolved alias — e.g. `a い` for a VCV bank such as
+Kasane Teto's — is shown dimmed under the lyric so a wrong join is visible before
+rendering). One lane visible
 at a time, edited by dragging bars; multi-select drag scales proportionally.
 These are the `Note` fields Phase 2 §4.6 already defined.
 

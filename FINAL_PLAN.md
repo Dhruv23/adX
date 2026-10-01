@@ -257,6 +257,13 @@ complaint. They are listed so the rewrite is measured against them.
     milliseconds, so saving and reloading silently flattens every curve to a
     linear ramp. → Curves are first-class in the format (§6).
 
+> **Items 1–6 closed in Phase 3 (2026-10-01),** each by a test that reproduces the
+> defect: 1 by `render_no_alloc_under_load` and `arena_high_water_under_load` (zero
+> allocations rendering 200 channels and 100k notes, realtime and offline); 2 and 3 by
+> `scheduler_cursor_is_amortized` (identical event work for 1k and 100k notes); 4 by
+> `voice_identity_cross_channel`; 5 by `bus_count_dynamic` (200 strips, no ceiling);
+> 6 by `voice_pool_per_channel_isolation`. Items 7, 8, 11 and 12 closed in Phase 2.
+
 ---
 
 ## 4. The project model
@@ -318,7 +325,9 @@ definition of "done".
 
 ### 5.1 Sequencing & editing
 Channel rack with step sequencer · piano roll (draw/paint/slice/glue/strum,
-velocity + per-note pan/cutoff/resonance/pitch lanes, ghost notes, scale
+velocity + per-note pan/cutoff/resonance/pitch lanes, **slide notes and a
+freeform per-note pitch curve (A glides into C), a lyric lane for the Voice
+instrument**, ghost notes, scale
 highlighting + snapping, chord and arp tools, quantize/humanize, riff
 generator) · playlist with pattern/audio/automation clips, per-track mute,
 grouping, time markers, arrangement snapshots · automation clips, envelope
@@ -339,12 +348,19 @@ loop modes, zones, velocity layers, round-robin · slicer (beat-sliced audio →
 playable pads, BPM-aware) · virtual-analog subtractive (polyBLEP osc bank,
 unison, filters — ported) · drum synth (kick/snare/hat/clap/tom models;
 absorbs the archived hardstyle kick generator) · granular · FM operator synth ·
-wavetable synth · sample-pool playback channel.
+wavetable synth · sample-pool playback channel · **Voice** (sung vocals from
+UTAU voicebanks: `oto.ini` + WAV, lyric per note, WORLD-based resampling rendered
+off the audio thread and cached — see Phase 4 §4.13). **Kasane Teto (重音テト)
+is the reference voicebank** the instrument is designed and accepted against; she
+is non-commercial-licensed and non-redistributable, so she is never in the repo.
 
 ### 5.4 Native effects
 Ported: reverb, distortion, bitcrush, chorus, 3-band EQ, ping-pong delay,
 compressor, sidechain ducker.
-New: parametric EQ with spectrum overlay · multiband compressor · limiter ·
+New: **overdrive** (oversampled, tone-shaped, soft-clip/tube/hard-clip
+characters — distinct from the ported tanh `Distortion`) · **vocoder**
+(16–32 band, carrier from a sidechain input, built-in saw/noise carrier,
+sibilance passthrough) · parametric EQ with spectrum overlay · multiband compressor · limiter ·
 gate/expander · transient shaper · flanger · phaser · tremolo/auto-pan ·
 convolution reverb (IR loading) · saturation/tube models · vocoder · pitch
 shifter · formant filter · stereo imager · frequency shifter · ring modulator ·
@@ -517,7 +533,10 @@ sampler, the five archived effects, delay, compressor, limiter, parametric EQ,
 gate; B is the rest of §5.3; C is the rest of §5.4. The whole DSP library lives
 in one phase because it is pure DSP against a stable `Node` interface with no UI
 dependency, and splitting it costs two rounds of the same review and test
-scaffolding. Phase 5 may begin once tranche A is done; B and C run in parallel.
+scaffolding. A fourth tranche, D, adds the **Voice** instrument (UTAU) and the
+voice-render cache. Slide notes / pitch curves (instrument side) and Overdrive and
+the full Vocoder spec also land here. Phase 5 may begin once tranche A is done; B,
+C and D run in parallel.
 **Done when** (tranche A) `suffocation.adx` (v1, via the shim) renders and is
 A/B-comparable to the archived build's output, and (full phase) every §5.3 and
 §5.4 item exists with a numerical test and a golden hash.
@@ -611,6 +630,7 @@ to what was heard.
 | C++ tests | Catch2 | Fast, header-light, good matchers for float comparison. |
 | Python tests | pytest + pytest-qt | Standard; pytest-qt covers the panel logic. |
 | Time-stretch | RubberBand (ported) | Already integrated and working. |
+| Voice synthesis | WORLD (modified BSD) for UTAU-style resampling; DiffSinger via the optional ONNX flag later | A UTAU voicebank is only samples plus `oto.ini`; the synthesis is the *resampler*. WORLD is the engine behind tn_fnds/moresampler and is permissively licensed. Vocaloid has no third-party SDK, so it is reached only through the Phase 9 VST3 host, never natively. |
 | MP3 / FLAC | shine, libFLAC (ported) | Already integrated; permissive licensing. |
 | Decode | miniaudio (ported) | Single header, decode-only, no device layer. |
 | FFT | `SimpleFFT` (ported) | Sufficient for UI-rate analysis. Swap for pffft only if profiling demands it — not preemptively. |
@@ -695,8 +715,8 @@ of sync with each other and with the code.
 | Phase plans | **Done** | 2026-09-10. `plans/phase_0.md` … `plans/phase_11.md` written; §5 fully assigned, no gaps. |
 | [0 — Foundation](plans/phase_0.md) | **Done** | 2026-09-13. One build, install and test command, green in CI on Windows x64 across Debug, RelWithDebInfo and Release. Six lint gates, each deliberately broken and observed to fail; five of the six also seen going red in CI. Three §3–§4 statements in the phase plan were wrong and are corrected in its §10. |
 | [1 — RT core](plans/phase_1.md) | **Done** | 2026-09-13. The allocator hook has been observed to fail when disabled, which is what makes every later realtime test mean something. 33 tests green in CI on Debug, RelWithDebInfo and Release; 60 s of silence with zero violations on both the null backend and real hardware (11258 callbacks against 11250 expected, zero xruns, 5.33 ms latency). The clang-tidy realtime ban turned out not to apply transitively through headers; `tools/lint.py` now walks the include graph. Five open issues for Phase 2 in `plans/STATE.md`. |
-| [2 — Project model, commands, `.adx` v2](plans/phase_2.md) | **Done** — CI unconfirmed (P2-0) | 2026-09-25. The flat `Track` is replaced by Channel/Pattern/Playlist/Mixer with a routing DAG; every mutation is a command, the parser included (`parser_uses_commands`). `.adx` v2 is specified in `docs/adx-format-v2.md`, round-trips byte for byte at the document layer and idempotently through the writer; all four v1 examples migrate with zero errors. `undo_to_empty_random` passes 100 seeds × 10,000 commands on text as well as model, after finding two real bugs. 112 ctest tests green on all three configurations locally; CI run 36206915522 had not finished when the phase was marked done (P2-0). Fourteen corrections to the phase plan in its §10; five Phase 1 issues re-carried with reasons and five new ones for Phase 3 in `plans/STATE.md`. |
-| [3 — Audio graph & scheduling](plans/phase_3.md) | Not started | Carries the Phase 11 transport checkpoint. |
+| [2 — Project model, commands, `.adx` v2](plans/phase_2.md) | **Done** | 2026-09-25. The flat `Track` is replaced by Channel/Pattern/Playlist/Mixer with a routing DAG; every mutation is a command, the parser included (`parser_uses_commands`). `.adx` v2 is specified in `docs/adx-format-v2.md`, round-trips byte for byte at the document layer and idempotently through the writer; all four v1 examples migrate with zero errors. `undo_to_empty_random` passes 100 seeds × 10,000 commands on text as well as model, after finding two real bugs. 112 ctest tests green on all three configurations locally; When CI did finish (run 36207438185, same code) it was green except `clang-tidy` on Release and RelWithDebInfo - one `NDEBUG`-only finding the local Debug-database run could not see; fixed in Phase 3. Fourteen corrections to the phase plan in its §10; five Phase 1 issues re-carried with reasons and five new ones for Phase 3 in `plans/STATE.md`. |
+| [3 — Audio graph & scheduling](plans/phase_3.md) | **Done** — CI pending push (P3-0) | 2026-10-01. A project renders through a compiled node graph - slot chains, sends, a routing DAG with cycle paths, PDC - on a cursor-walking scheduler that splits blocks at loop and tempo boundaries. Time is a set of sources; `two_time_sources_independent` and the new `positions` lint gate hold the Phase 11 checkpoint. The phase gate: 200 channels / 100k notes, realtime capture vs offline, identical hashes at block sizes 64, 256 and 1024 (and identical *across* them), zero allocations. It found a real bug first - the arena overflowing at 1024 frames. §3.3 items 1–6 closed. Golden corpus started (9 hashes, identical in all three configurations). Inherited P2-0 and P1-2..P1-5 fixed, P2-1 wired; open issues for Phase 4 in `plans/STATE.md`. |
 | [4 — Instruments & effects](plans/phase_4.md) | Not started | Owns all of §5.3 and §5.4; three tranches. |
 | [5 — Frontend foundation](plans/phase_5.md) | Not started | Where the §2.2 bet is proven or disproven. |
 | [6 — The DAW proper](plans/phase_6.md) | Not started | |

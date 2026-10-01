@@ -70,8 +70,8 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 |---|---|---|
 | 0 — Foundation | S | **Done** 2026-09-13 |
 | 1 — RT core | M | **Done** 2026-09-13 |
-| 2 — Project model, commands, `.adx` v2 | L | **Done** 2026-09-25 (CI run 36206915522 unconfirmed) |
-| 3 — Audio graph & scheduling | L | Not started |
+| 2 — Project model, commands, `.adx` v2 | L | **Done** 2026-09-25 (CI found one clang-tidy finding; fixed in Phase 3) |
+| 3 — Audio graph & scheduling | L | **Done** 2026-10-01 (CI pending push, P3-0) |
 | 4 — Instruments & effects | XL | Not started |
 | 5 — Frontend foundation | L | Not started |
 | 6 — The DAW proper | XL | Not started |
@@ -215,23 +215,21 @@ length and the new `format-safety` gate clean. `format-safety` was seen to fail 
 planted `std::stof` — after its first version was found not to fire at all.
 `suffocation.adx` loads in ~0.6 ms; 100k notes in ~150 ms.
 
-Not yet observed: the same in CI. The phase is marked done so Phase 3 can start —
-its entry criterion is phase_2.md §6, and every box there was observed locally — but
-CI run 36206915522 (commit `b03d5bd`) had not finished at the time. When it was last
-seen, the Release job had passed `ctest` and Debug and RelWithDebInfo were still in
-`ctest`, with no step failed. That is progress, not a result.
-
-**First thing for the Phase 3 agent:** check that run. If it is green, delete this
-paragraph and P2-0. If it is not, fix it before building on it.
+What CI actually said, checked by the Phase 3 agent: run 36206915522 was cancelled
+by the next push, and run 36207438185 (commit `5b932f0`, the same code) finished with
+`ctest` and `pytest` green on all three configurations, Debug green throughout, and
+**`clang-tidy` failing on Release and RelWithDebInfo**. One finding:
+`modernize-loop-convert` on the reverse loop in `CommandStack.cpp`, which only fires
+under `NDEBUG` because Debug's checked iterators hide the pattern from the check. The
+local run above had used the Debug compile database only. Reproduced locally against
+the Release database and fixed in Phase 3 (`std::views::reverse`); Phase 3 runs
+clang-tidy against all three databases before marking itself done.
 
 **Open issues for Phase 3:**
 
-- **P2-0** · `BLOCKER until checked` · CI for `b03d5bd` was not observed to finish.
-  Run 36206915522 ended *cancelled*, not failed: the push of `5b932f0` (docs only)
-  started a newer run and the workflow's `cancel-in-progress` stopped the old one.
-  Check the run for `5b932f0` or any later commit instead - same code. Everything passed locally on all three configurations, but
-  "verified locally" and "green in CI" are different claims. Fixed when: the run
-  (or a later one containing `b03d5bd`) is seen green on all three matrix jobs.
+- **P2-0** · **Fixed in Phase 3** · CI for `b03d5bd` was not observed to finish. When
+  it was: `clang-tidy` red on Release and RelWithDebInfo, everything else green - see
+  above. Confirmation that the fix is green in CI rides on Phase 3's push (P3-0).
 
 - **P1-1** · `CARRIED` · `_CrtSetAllocHook` is not installed, so C-library
   `malloc`/`free` never reaches the violation log. Still nothing on the callback path
@@ -295,23 +293,125 @@ paragraph and P2-0. If it is not, fix it before building on it.
 
 ---
 
-## [ ] Phase 3 — Audio graph & scheduling · L
+## [x] Phase 3 — Audio graph & scheduling · L
 
 | | |
 |---|---|
 | **Plan** | [phase_3.md](phase_3.md) |
 | **Entry** | Phase 2 §6 complete |
 | **Done when** | [phase_3.md](phase_3.md) §7 |
-| **Status** | Not started |
-| **Completed** | — |
+| **Status** | Done (2026-10-01). Every §7 box observed locally on Debug, RelWithDebInfo and Release; CI **unconfirmed** until this is pushed — P3-0 |
+| **Completed** | 2026-10-01 |
 
 > Carries the Phase 11 transport checkpoint. Read [phase_3.md](phase_3.md) §2
 > before writing any code — a transport that forecloses live performance is not
 > recoverable in Phase 11.
 
+The model makes sound. A project flattens into an immutable snapshot, crosses to the
+audio thread through one lock-free queue, and renders through a compiled node graph
+- inserts as slot chains, sends, an arbitrary routing DAG, PDC - on a scheduler that
+walks per-track cursors and splits blocks at loop and tempo boundaries. Time is a set of
+sources: the scheduler takes the set, each step names its source, each node is handed
+it, and `two_time_sources_independent` drives two at different positions, tempos and
+loops through one scheduler. `tools/lint.py positions` makes the rule mechanical and was
+seen to fail on two planted globals.
+
+The gate: a 200-channel / 100k-note project, captured on a real audio thread and
+rendered offline, hashes identically at block sizes 64, 256 and 1024 - and all six
+renders hash the *same*, so the output does not depend on block size at all. Zero
+allocations under the hook in Debug and RelWithDebInfo. The gate earned its keep: at
+1024 frames it overflowed the per-callback arena (every instrument's scratch held until
+the next callback) and failed only at that size; the arena is now scoped per step.
+Written up in [phase_3.md](phase_3.md) §11 with sixteen other places the plan was wrong
+or silent.
+
+Observed locally: 148 ctest tests on each of Debug, RelWithDebInfo and Release
+(including the slow set); 36 pytest tests; clang-tidy clean against all three compile
+databases; clang-format, ruff, mypy `--strict`, header length, `format-safety` and the
+new `positions` gate clean. Golden corpus (five fixtures plus `docs/examples/`) hashes
+identically in all three configurations. Single-note incremental rebuild of the 100k
+project: 0.26 ms (budget 2 ms). Loaded 60 s realtime gate: worst callback 0.61 ms
+against a 5.33 ms deadline. `suffocation.adx` renders 30 s in 0.23 s and plays through a
+real device.
+
+Inherited issues: P2-0, P1-2, P1-3, P1-4 and P1-5 fixed; P2-1 wired (see below);
+P1-1, P2-2, P2-3, P2-4 and P2-5 re-carried with reasons.
+
 **Open issues for Phase 4:**
 
-- _to be filled in by the agent that completes this phase_
+- **P3-0** · `BLOCKER until checked` · None of this has run in CI: it has not been
+  pushed. That run also confirms P2-0's fix and is the first CI run of the `positions`
+  gate. Fixed when: a run containing this phase's commit is green on all three matrix
+  jobs.
+
+- **P2-1** · **Wired, not yet observed** · `.github/workflows/nightly.yml` runs the
+  whole loader over randomly mutated input for 10 minutes from a fresh, printed seed
+  (`parser_fuzz_timed`, `[.fuzz]`), and renders the Phase 3 gate in full in Debug. Run
+  locally for 20 s; the scheduled job has never fired. Fixed when: one scheduled run is
+  seen green.
+
+- **P3-1** · The master can exceed 0 dBFS. Nothing limits it - the master limiter is
+  FINAL_PLAN §5.2, Phase 4's - and dense projects of test tones clip:
+  `suffocation.adx` peaks at 1.25. Fixed when: the master limiter exists and the corpus
+  renders with peak ≤ 1.0.
+
+- **P3-2** · Every instrument is a test tone and every slot is the identity.
+  `NodeStore::channel()` / `slot()` ignore the type; its reuse check compares polyphony
+  and steal mode only. Phase 4 makes the type choose the class - and must add the type
+  to the reuse check, or changing a channel's instrument will keep the old node. Every
+  golden hash moves when it does; regenerate with `ADX_UPDATE_GOLDEN=1` and say why.
+
+- **P3-3** · Parameter values are applied per piece, not smoothed: a knob turn or an
+  automation step is a gain jump at a block boundary (zipper noise). Smoothing is DSP
+  and belongs in the Phase 4 nodes; `ProcessContext::params` is where they read the
+  target. Fixed when: gain, pan and send level ramp across a block.
+
+- **P3-4** · Sidechain is a real port - sorted, delay-compensated, cycle-checked
+  (`cycle_via_sidechain`) - but `GraphBuilder` never creates a sidechain edge, because
+  the model has nowhere to say one exists (P2-3). Fixed with P2-3: the Ducker declares a
+  sidechain source and the builder wires it to `kPortSidechain`.
+
+- **P3-5** · `reset()` on seek is not called. `effectsOf()` reports
+  `resetPositionalDsp`, but no Phase 3 node's output depends on the timeline position,
+  so nothing consumes it. The first node that does (a tempo-synced LFO, an audio clip)
+  needs a way to declare it and the scheduler must call `reset()` for it. Fixed when:
+  such a node exists and `test_seek.cpp` covers it.
+
+- **P3-6** · A voice carries eight floats of instrument state inline
+  (`kVoiceStateFloats`). A Phase 4 synth that needs more keeps a parallel array indexed
+  by voice slot; nothing provides one yet. Fixed when: the first instrument that needs
+  it adds it to `ChannelNode`, allocated in `prepare()` through `rt::OwnedArray`.
+
+- **P3-7** · Meters are readable only from C++ (`NodeStore::findMeter`). Phase 5's UI
+  needs a zero-copy binding for the 60 Hz read (FINAL_PLAN §2.2). Fixed when: one FFI
+  call returns every strip's latest `LevelFrame`.
+
+- **P1-1** · `CARRIED` · `_CrtSetAllocHook` is not installed. Phase 3 put no C library
+  on the callback path, so still nothing is exposed; Phase 4's miniaudio, shine and
+  libFLAC are the first. Fixed when: as stated under Phase 1.
+
+- **P2-2** · `CARRIED` · Invariant diagnostics have no position. Phase 7's to need, and
+  Phase 3 added no diagnostic that wants one. Fixed when: as stated under Phase 2.
+
+- **P2-3** · `CARRIED` · The v1 `SIDECHAIN=` key input is not modelled. Phase 4's
+  Ducker. Now also P3-4.
+
+- **P2-4** · `CARRIED` · `ParamDescriptor` ranges are not enforced. Phase 4's
+  instruments register their descriptors.
+
+- **P2-5** · `CARRIED` · Mini-notation is stored, not compiled. Phase 4's compiler.
+
+Fixed in Phase 3, for the record:
+
+- **P1-2** · The realtime ban is keyed on a file's declared thread as well as its
+  directory (`// adx-thread: realtime|main`). The callback's own code moved into
+  `engine/audio/CallbackCore.*` and is under the ban.
+- **P1-3** · Every callback is timed into a tap; the loaded 60 s gate
+  (`realtime_gate_60s_under_load`) and the Phase 1 silence gate both assert on the
+  worst callback, not the count.
+- **P1-4** · `EngineCore::post` records `ViolationKind::Unbounded` on a refused push
+  (`engine_queue_refusal_is_recorded`); `RenderEngine` keeps the message and resends it.
+- **P1-5** · `render_bit_identical_200x100k` compares hashes of non-trivial output.
 
 ---
 

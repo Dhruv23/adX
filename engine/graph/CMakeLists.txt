@@ -1,0 +1,19 @@
+target_sources(adx_engine_static PRIVATE
+    BufferPool.cpp
+    CompiledGraph.cpp
+    DelayLine.cpp
+    EngineCore.cpp
+    Graph.cpp
+    GraphBuilder.cpp
+    Pdc.cpp
+    Scheduler.cpp
+    TopoSort.cpp
+    VoicePool.cpp
+    nodes/ChannelNode.cpp
+    nodes/InsertNode.cpp
+    nodes/MeterNode.cpp
+    nodes/SendNode.cpp
+    nodes/SlotNode.cpp
+    nodes/SumNode.cpp
+    nodes/TestToneNode.cpp
+)

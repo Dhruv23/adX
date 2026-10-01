@@ -28,10 +28,16 @@ pytest
 `windows-x64-release` and `windows-x64-relwithdebinfo` are the other two presets.
 `python -m adx` prints the app and engine versions.
 
-`ctest` includes the slow gates: the realtime gate, which runs a 60-second audio
-stream under the allocator hook, the 100-seed undo test and the 100k-case parser
-fuzz. For a fast inner loop use `ctest --preset windows-x64-debug -LE slow`; CI
-always runs the full set.
+`ctest` includes the slow gates: the realtime gates, which run 60-second audio
+streams under the allocator hook, the 100-seed undo test, the 100k-case parser fuzz,
+and the render gate - a 200-channel, 100k-note project rendered offline and captured
+from a live stream at three block sizes, which must hash identically. For a fast inner
+loop use `ctest --preset windows-x64-debug -LE slow`; CI always runs the full set.
+
+The golden corpus (`tests/golden/`) pins what adX renders: `golden_corpus_stable`
+compares every fixture's render hash with `tests/golden/hashes.txt`. When a change is
+*meant* to alter the sound, regenerate the file with `ADX_UPDATE_GOLDEN=1` set and say
+why in the commit.
 
 > **After changing C++, re-run `pip install -e ".[dev]"` before `pytest`.**
 > The preset builds into `build/windows-x64-*`; the Python extension that
@@ -53,6 +59,22 @@ adx info FILE                 counts, duration, tempo range
 
 The format is specified in [docs/adx-format-v2.md](docs/adx-format-v2.md).
 
+## Rendering from Python
+
+```python
+import adx_engine
+project, diagnostics = adx_engine.Project.load("docs/examples/suffocation.adx")
+stats = adx_engine.render_offline(project, "out.wav")   # 32-bit float WAV
+
+engine = adx_engine.Engine()             # null_backend=True for no audio device
+engine.set_project(project)
+engine.transport.play()
+engine.start()
+engine.transport.position_ticks()        # poll it; one atomic read
+```
+
+Instruments are test tones until Phase 4.
+
 ## Lint
 
 The same gates CI runs, at the same versions:
@@ -62,6 +84,7 @@ python tools/lint.py format --check
 python tools/lint.py tidy --build-dir build/windows-x64-debug
 python tools/lint.py headers
 python tools/lint.py format-safety
+python tools/lint.py positions
 ruff check app tests/python tools && ruff format --check app tests/python tools
 mypy --strict app
 ```

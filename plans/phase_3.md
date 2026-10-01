@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Not started |
+| **Status** | Done (2026-10-01) · CI unconfirmed until pushed, see STATE.md P3-0 |
 | **Governs** | `engine/graph/`, `engine/transport/`, `engine/project/Snapshot.*`, `engine/render/` (core) |
 | **FINAL_PLAN refs** | §2.2 Rule 1, §3.3 items 1–6, §4 commit protocol, §5.2 engine half, §7 Phase 3 **including the Phase 11 checkpoint** |
 | **Entry criteria** | [phase_2.md](phase_2.md) §6 complete |
@@ -303,8 +303,10 @@ struct ScheduledEvent {                  // trivially copyable, 24 bytes
     EventKind kind;                      // NoteOn/NoteOff/Param/Clip*/Mini*
     uint8_t  channel, pitch, velocity;
     uint32_t noteId;                     // <-- voice identity, fixes §3.3.4
-    float    value;
-};
+    float    value;                      // PitchGlide: target cents; Lyric: lyric-table index
+    uint32_t duration;                   // PitchGlide: ticks; 0 otherwise
+    uint8_t  shape;                      // PitchGlide: CurveShape
+};                                       // 32 bytes (static_assert updated from 24)
 
 struct EventTrack {
     std::span<const ScheduledEvent> events;   // sorted by tick, built ONCE
@@ -546,22 +548,50 @@ a Rule-2-legal O(1) read, polled at 60 Hz by the Phase 5 UI.
 
 ## 7. Definition of done
 
-- [ ] `render_bit_identical_200x100k` passes at all three block sizes.
-- [ ] `render_no_alloc_under_load` reports zero violations.
-- [ ] `two_time_sources_independent` passes.
-- [ ] `no_global_position_grep` is wired into CI and observed to fail when a
-      global position is deliberately introduced.
-- [ ] `voice_identity_cross_channel` passes (§3.3.4 closed).
-- [ ] `bus_count_dynamic` passes with 200 inserts (§3.3.5 closed).
-- [ ] `voice_pool_per_channel_isolation` passes (§3.3.6 closed).
-- [ ] `scheduler_cursor_is_amortized` passes (§3.3.2 and §3.3.3 closed).
-- [ ] `arena_high_water_under_load` passes (§3.3.1 closed).
-- [ ] `tests/golden/` contains at least 5 fixtures with committed hashes.
-- [ ] `python -c` script: load `suffocation.adx`, render 30 s offline to a WAV,
-      play it back — it makes sound (test tones, not the real patch; Phase 4
-      makes it sound right).
-- [ ] FINAL_PLAN.md §10 Phase 3 row updated, and the §3.3 items 1–6 marked
-      closed in a short note.
+- [x] `render_bit_identical_200x100k` passes at all three block sizes. *Realtime
+      capture on `NullBackend` vs `OfflineRender`, identical `RenderHash` at 64, 256
+      and 1024 frames. Optimised builds render the whole project (1,452,000 frames);
+      Debug renders the first four seconds per push and the whole thing nightly
+      (`ADX_FULL_EVIDENCE`, `.github/workflows/nightly.yml`). Stronger than asked: all
+      six renders hash the same, so the output does not depend on block size at all.
+      The gate found a real bug before it passed - see section 11.*
+- [x] `render_no_alloc_under_load` reports zero violations, realtime and offline, in
+      Debug and RelWithDebInfo (Release has no hook and reports a skip).
+- [x] `two_time_sources_independent` passes. *Two sources, 120 and 90 bpm, at tick 0
+      and tick 7680, one looping and one not, through one `Scheduler` in the same
+      blocks; each channel's onsets match hand computation, and rendering A with B's
+      source stopped is bit-identical on A's side.*
+- [x] `no_global_position_grep` is wired into CI and observed to fail when a global
+      position is deliberately introduced. *`python tools/lint.py positions`, CI step
+      12. Observed to fail twice: a planted `g_songPosition` in `Scheduler.cpp` and an
+      `m_currentSamplePosition` in `CallbackCore.cpp`; clean after removal. Its regex
+      was corrupted into backspace characters on the first attempt - the same
+      accident Phase 2's `format-safety` had - and was seen not to fire before it was
+      fixed.*
+- [x] `voice_identity_cross_channel` passes (§3.3.4 closed).
+- [x] `bus_count_dynamic` passes with 200 inserts (§3.3.5 closed). *201 distinct
+      fader nodes, each strip's meter reading exactly its own gain times one
+      channel's peak, through fewer than 16 planned buffers.*
+- [x] `voice_pool_per_channel_isolation` passes (§3.3.6 closed).
+- [x] `scheduler_cursor_is_amortized` passes (§3.3.2 and §3.3.3 closed). *Identical
+      event-comparison counts for 1k and 100k notes over the same five seconds; the
+      one search is 18 probes.*
+- [x] `arena_high_water_under_load` passes (§3.3.1 closed). *After the fix in
+      section 11 the arena holds one step's scratch at a time.*
+- [x] `tests/golden/` contains at least 5 fixtures with committed hashes. *Five
+      fixtures plus the four `docs/examples/`, in `tests/golden/hashes.txt`. Generated
+      in Debug and reproduced bit for bit by RelWithDebInfo and Release.*
+- [x] `python -c` script: load `suffocation.adx`, render 30 s offline to a WAV, play
+      it back - it makes sound. *Rendered 1,440,000 frames in 0.23 s, zero violations,
+      peak 1.25, RMS 0.24; then played through the real output device via
+      `adx_engine.Engine`: 8.02 beats in 4 s at 120 bpm, worst callback 0.061 ms.
+      `tests/python/test_render.py` keeps the render half of this permanently.*
+- [x] FINAL_PLAN.md §10 Phase 3 row updated, and the §3.3 items 1-6 marked closed in
+      a short note.
+
+Also observed: the single-note incremental rebuild of the 100k-note project takes
+0.26 ms against the 2 ms budget; the loaded 60-second realtime gate's worst callback
+was 0.61 ms against a 5.33 ms deadline in RelWithDebInfo.
 
 ---
 
@@ -610,3 +640,114 @@ allocates them in `prepare()`, sized from `PrepareInfo::maxBlockFrames`.
 | PDC longest-path is wrong on graphs with sends that also feed forward | Sends are edges in the same DAG; the diamond and fan-in tests cover it; `pdc_aligns_parallel_paths` verifies by cross-correlation rather than by inspection |
 | The time-source parameter is threaded everywhere and feels like overhead | It is one reference in `ProcessContext`. The CI grep makes the discipline mechanical rather than a matter of vigilance |
 | 200×100k synthetic project is slow enough to make CI painful | Tagged `[.slow]`; runs on every PR in Release, nightly in Debug |
+
+---
+
+## 11. Corrections made while executing this plan
+
+**The realtime ban is keyed on a declaration, not only a directory** (Phase 1's P1-2).
+§3 puts main-thread builders - `Graph`, `GraphBuilder`, `TopoSort`, `Pdc` - in
+`engine/graph/`, which is a realtime path, and Phase 1 had already found the callback
+itself living outside one. A file may now carry `// adx-thread: realtime` or
+`// adx-thread: main` on its first lines, and `tools/lint.py` honours it in both
+directions. The per-callback work moved out of `AudioThread` into
+`engine/audio/CallbackCore.*`, marked realtime, so the callback's own code is under the
+static ban; the main-thread graph files are marked main, and the transitive include
+walk still stops any realtime file from reaching them.
+
+**`CompiledGraph` is its own file.** §3 folds compilation into `Graph.cpp`. It is the
+one place an owning main-thread structure becomes the audio thread's non-owning view,
+and that seam is worth seeing.
+
+**Buffers are planned per graph, not taken from the per-callback arena.** §4.8 sized
+them from the `BlockArena`. Planned buffers - every port gets a live interval, and
+non-overlapping intervals share - are a fact about the project rather than a runtime
+high-water mark, and 200 strips need fewer than 16 of them. The arena keeps what
+genuinely varies per block: event lists and instrument scratch.
+
+**The arena is scoped per step.** The 1024-frame run of the phase gate overflowed the
+1 MB arena: every `ChannelNode` took `2 x frames` floats of scratch and nothing gave it
+back until the next callback, so the arena had to hold every channel's at once.
+`BlockArena::mark()`/`rewind()` now bracket each step, and the arena holds one node's
+scratch at a time. Found by `render_bit_identical_200x100k`, which failed at 1024 only
+- exactly the block-size-dependent bug §10's three sizes exist to catch.
+
+**One ordered queue, not a snapshot ring plus a parameter queue.** §4.2 names
+`SpscRing<const Snapshot*, 64>` and a separate `ParamChange` queue. Two queues cannot
+order a knob turn relative to the snapshot a structural edit produced, and a value
+posted after a snapshot was built must land on that snapshot rather than on the one it
+replaces. `EngineMessage` carries snapshots, parameter values and transport requests
+through one `SpscRing`. `RenderEngine` keeps at most four snapshots in flight and
+coalesces the rest - a newer snapshot supersedes older waiting ones and the knob turns
+it already contains - so a burst of edits costs one swap and cannot flood the reaper.
+
+**Slide notes and lyrics compile to events, not to voice-side lookups.** `Note.slide`
+and `Note.pitchCurve` (Phase 2 addendum) become `EventKind::PitchGlide` events keyed by
+`noteId`, scheduled at the glide's start tick; a pitch curve of N points is N-1 chained
+glides. `Note.lyric` becomes a `Lyric` event carrying an index into a snapshot-owned
+lyric table (strings never ride in the event). `ScheduledEvent` grows from 24 to 32
+bytes to carry `duration` and `shape`; the per-block walk is unchanged. Because the
+glide is an event on the same sorted track, a seek into the middle of a slide
+re-derives the current pitch offset from the resume cursor (§4.11) rather than
+replaying from the note start. Test: `slide_seek_midway_matches_continuous`.
+
+**The snapshot's shape.** §4.2's `ChannelPlan`/`InsertPlan`/`RoutePlan` spans became the
+render graph's steps and edges. `EventTrack` is immutable; the resume cursor is a
+separate `EventCursor` the audio thread owns, because a cursor belongs to a (track,
+time source) pair and a const snapshot cannot hold one. Parameters reach a node as its
+own slice of `params`, not indexed by `ParamRef::index`; knob turns find their slot by
+binary search over a sorted `ParamSlot` index.
+
+**A voice's identity includes the placement.** `ScheduledEvent` is 40 bytes, not 24:
+it carries the note's `endTick` and the playlist item it came from. A pattern placed
+twice plays the same `NoteId` twice, and without the item the two placements' note-offs
+would release each other's voices - §3.3.4 in a different costume.
+
+**Summing happens at input ports; slots are graph nodes.** Every node's main input is
+an accumulator the scheduler sums edges into in a fixed order, so every convergence
+point is already a sum; `SumNode` exists as the named N-to-1 point for graphs that
+want one without processing. An insert becomes a chain - its slots in id order, then
+an `InsertNode` fader with post and pre outputs, then a `MeterNode` - rather than one
+node running its slots internally, so PDC sees each slot's latency and a sidechain edge
+can land on the slot that wants it.
+
+**Loop wraps release the voices that could never see their note-off.** §4.11 says
+voices sustain across a wrap. They do - nothing is cut, and a note straddling the loop
+*start* is not retriggered - but a note whose note-off lies at or past the loop *end*
+would otherwise hang forever, so the wrap releases exactly those voices (a release, not
+a cut). `loop_wrap_sustains_voices` asserts both halves.
+
+**`TempoView`.** TempoMap's conversions moved into `engine/core/TempoMath.*`, over two
+borrowed spans, and `TempoMap` delegates to them. The snapshot carries its own copy of
+the arrays and the audio thread runs the same functions - one implementation, which is
+what bit-identity needs. `VoiceStealMode` and `ParamRef` likewise moved into POD headers
+the realtime side can include.
+
+**No `transport/StreamTime.h`.** `audio::StreamTime` already is the sample clock handed
+to render; the transport's per-block metadata is `BlockTransition`. `Seek.h` is a pure
+policy function, `effectsOf(BlockTransition)`.
+
+**A knob turn is a command plus a message.** §4.2 says value changes do not rebuild.
+`RenderEngine::setParam` executes the value command (so the edit is in undo) and posts
+the value; `commit()` then skips the rebuild when every revision since the last sync
+was a delivered knob turn. Separately, the builder compares the new graph's *structure*
+with the old one, so a value edit that arrives by any other path still reuses every
+node, buffer and delay line and rebuilds only the parameters.
+
+**Determinism across build configurations.** The test tone's sine is a polynomial and
+its pitch a table of semitone ratios times an exact power of two: a library `sin` or
+`pow` may be a different function in Debug and Release, and the corpus has to hash the
+same in all three. The pan law is linear balance and width is skipped at unity, so a
+strip nobody touched passes its input through bit for bit.
+
+**Automation is control-rate.** Lanes are evaluated once per piece, at its first
+sample. Smoothing belongs to the Phase 4 nodes that consume the values.
+
+**`render_offline` is a module function taking the project**, and the golden corpus
+includes the four `docs/examples/` projects (first ten seconds) alongside its own five
+fixtures.
+
+**The loaded realtime gate asserts the block deadline, not 3 ms.** Phase 1's §5 asked
+for "no callback over 3 ms". The gate asserts the worst callback against the block's
+real-time duration (5.33 ms at 256 frames) - the definition of a dropout - because a
+fixed 3 ms on a shared CI runner measures the runner. Observed worst: 0.61 ms.

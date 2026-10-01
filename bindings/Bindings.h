@@ -18,5 +18,11 @@ void registerProjectBindings(pybind11::module_& m);
 /// Registers load/format/validate/diff for the CLI.
 void registerFormatBindings(pybind11::module_& m);
 
+/// Registers the render engine and its transport.
+void registerTransportBindings(pybind11::module_& m);
+
+/// Registers offline render.
+void registerRenderBindings(pybind11::module_& m);
+
 /// Diagnostics as a list of plain dicts. The Python side turns them into dataclasses.
 pybind11::list toPython(const adx::format::DiagnosticList& diagnostics);

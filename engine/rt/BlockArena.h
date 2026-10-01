@@ -83,6 +83,22 @@ public:
         m_offset = 0;
     }
 
+    /// Where the next allocation would start. Pair with rewind() to scope scratch to
+    /// less than a whole callback.
+    [[nodiscard]] ADX_RT_HOT std::size_t mark() const noexcept {
+        return m_offset;
+    }
+
+    /// Releases everything handed out since `mark`. The scheduler brackets each node's
+    /// turn with mark/rewind, so the arena has to hold one node's scratch at a time
+    /// rather than every node's at once - which is the difference between an arena
+    /// sized by the busiest node and one sized by the size of the project.
+    ADX_RT_HOT void rewind(std::size_t mark) noexcept {
+        if (mark <= m_offset) {
+            m_offset = mark;
+        }
+    }
+
     /// The most bytes ever handed out between resets.
     ///
     /// Exported so a test can assert the arena is *sized* correctly rather than

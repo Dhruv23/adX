@@ -127,3 +127,9 @@ jobs:
       - name: Format safety
         if: ${{ !cancelled() }}
         run: python tools/lint.py format-safety
+
+      # 12. Phase 3: the Phase 11 checkpoint. No engine code outside engine/transport/
+      # may own a playback position - time is a set of sources, passed as parameters.
+      - name: No global position
+        if: ${{ !cancelled() }}
+        run: python tools/lint.py positions

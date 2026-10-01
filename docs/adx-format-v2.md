@@ -750,6 +750,13 @@ by reading v1's documentation, which is known to be incomplete.
 | `[PATCH <name>]` and its keys | one `additive` `InstrumentSpec` in the patch library; each positional tuple becomes named `PARAM`s |
 | `[TRACK <patch>]` | **one Channel + one Pattern + one PlaylistTrack + one Insert**, all named after the patch. This 1→4 expansion is the fix for the flat `Track` that blocked every DAW feature |
 | `Note Start Len Vel` | a `NoteClip` in that Pattern; velocity `0..1` → `0..127` |
+
+> **Planned v2 note extensions (not yet in the grammar):** `slide=<semitones|cents>@<start>+<len>[:shape]`,
+> `bend=<tick>:<cents>,...` and `lyric="<text>"` as optional trailing keys on a note line,
+> mapping to the `Note.slide` / `Note.pitchCurve` / `Note.lyric` addendum in
+> [phase_2.md](../plans/phase_2.md). Absent keys serialize to nothing, so existing files are
+> byte-identical on round-trip. The `Voice` instrument's voicebank path is an
+> `InstrumentSpec` sample ref (project-relative), like any sampler asset.
 | `PATTERN=<mini>` | `Pattern.mini`, source text only |
 | `CLIP path start [pitch stretch [R]]` | a `PlaylistItem` with an audio reference; `R` → `reverse=yes`; start seconds → ticks through the tempo map |
 | `ARP mode rate oct gate` | the channel's `ARP` line; v1's integer mode maps 0→off, 1→up, 2→down, 3→updown, 4→random |

@@ -6,6 +6,7 @@
 // corpus and against ten thousand fuzzer-generated inputs.
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <cstdint>
 #include <random>
 #include <string>
@@ -17,6 +18,7 @@
 #include "engine/project/Project.h"
 #include "engine/project/commands/CommandStack.h"
 #include "tests/cpp/Corpus.h"
+#include "tests/cpp/Env.h"
 
 using adx::format::DiagnosticList;
 using adx::format::Document;
@@ -209,6 +211,38 @@ TEST_CASE("parser_no_exceptions_on_fuzz 100k", "[format][roundtrip][.slow]") {
 
     fuzzLoad(v1, 1U, kCasesPerGrammar);
     fuzzLoad(v2, 2U, kCasesPerGrammar);
+}
+
+TEST_CASE("parser_fuzz_timed", "[format][roundtrip][.fuzz]") {
+    // The nightly run (Phase 2's P2-1). The fixed-seed corpus above covers the same
+    // inputs on every build; this one explores new ones, from a seed that is different
+    // every night and printed so a failure can be replayed exactly:
+    //
+    //     ADX_FUZZ_SEED=<seed> ADX_FUZZ_SECONDS=60 adx_tests "[.fuzz]"
+    //
+    // A crash fails the process; a hang is caught by the job's timeout.
+    const auto seconds = adx::tests::environment("ADX_FUZZ_SECONDS");
+    const auto seedText = adx::tests::environment("ADX_FUZZ_SEED");
+    const double budget = seconds ? std::stod(*seconds) : 60.0;
+    const std::uint32_t seed =
+        seedText ? static_cast<std::uint32_t>(std::stoul(*seedText)) : std::random_device{}();
+    WARN("fuzz seed " << seed << ", budget " << budget << " s");
+
+    const std::string v1 = adx::tests::readFile(adx::tests::corpusPaths().back());
+    adx::project::Project project;
+    adx::project::CommandStack stack;
+    DiagnosticList diagnostics;
+    adx::format::load(v1, project, stack, diagnostics);
+    const std::string v2 = adx::format::write(project);
+
+    const auto started = std::chrono::steady_clock::now();
+    std::uint32_t batch = 0;
+    while (std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count() <
+           budget) {
+        fuzzLoad(batch % 2 == 0 ? v1 : v2, seed + batch, 100);
+        ++batch;
+    }
+    WARN("fuzz: " << batch * 100 << " cases");
 }
 
 TEST_CASE("document_preserves_unknown", "[format][roundtrip]") {

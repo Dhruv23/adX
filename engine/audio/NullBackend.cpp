@@ -1,5 +1,6 @@
 #include "engine/audio/NullBackend.h"
 
+#include <algorithm>
 #include <chrono>
 
 #include "engine/rt/ThreadId.h"
@@ -140,12 +141,34 @@ void NullBackend::runLoop() noexcept {
 
         const float* input = m_input.empty() ? nullptr : m_input.data();
         m_callback(m_user, m_output.data(), input, m_config.blockFrames, time);
+        captureBlock();
 
         framesIssued += m_config.blockFrames;
         m_callbackCount.fetch_add(1, std::memory_order_relaxed);
     }
 
     rt::unregisterAudioThread();
+}
+
+void NullBackend::setCapture(std::span<float> capture) noexcept {
+    m_capture = capture;
+    m_capturedFrames.store(0, std::memory_order_release);
+}
+
+void NullBackend::captureBlock() noexcept {
+    const std::size_t channels = m_config.outputChannels;
+    const std::uint64_t captured = m_capturedFrames.load(std::memory_order_relaxed);
+    const std::size_t capacity = channels == 0 ? 0 : m_capture.size() / channels;
+    if (captured >= capacity) {
+        return;
+    }
+    const std::size_t frames =
+        std::min<std::size_t>(m_config.blockFrames, capacity - static_cast<std::size_t>(captured));
+    // A copy into storage the main thread sized before start(): nothing here can
+    // allocate, so capturing does not perturb the thing it is capturing.
+    std::copy_n(m_output.data(), frames * channels,
+                m_capture.begin() + static_cast<std::ptrdiff_t>(captured * channels));
+    m_capturedFrames.store(captured + frames, std::memory_order_release);
 }
 
 StreamInfo NullBackend::info() const noexcept {

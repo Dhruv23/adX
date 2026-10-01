@@ -8,16 +8,6 @@
 namespace adx::core {
 namespace {
 
-/// Seconds per tick at a constant tempo.
-[[nodiscard]] double secondsPerTick(double bpm) noexcept {
-    return 60.0 / (bpm * static_cast<double>(kPpq));
-}
-
-/// Below this, a ramp's endpoints are close enough that the closed form's
-/// log(b1/b0)/k is all rounding error and the constant-tempo formula is both
-/// cheaper and more accurate.
-constexpr double kRampEpsilon = 1e-9;
-
 [[nodiscard]] std::int64_t ticksPerBar(const MeterEvent& meter) noexcept {
     return static_cast<std::int64_t>(meter.numerator) * ticksPerBeat(meter.denominator);
 }
@@ -91,26 +81,7 @@ bool TempoMap::removeMeter(Ticks at) {
 
 void TempoMap::rebuild() {
     m_cumSeconds.assign(m_tempo.size(), 0.0);
-    for (std::size_t i = 1; i < m_tempo.size(); ++i) {
-        const TempoEvent& previous = m_tempo[i - 1];
-        const double span = static_cast<double>((m_tempo[i].at - previous.at).value);
-        double elapsed = 0.0;
-        if (previous.ramp) {
-            // Closed form for a tempo that varies linearly in the tick domain:
-            //   dt/dx = 60 / (PPQ * bpm(x)),  bpm(x) = b0 + k x
-            //   t(L)  = 60 / (PPQ * k) * ln(b1 / b0)
-            const double slope = (m_tempo[i].bpm - previous.bpm) / span;
-            if (std::abs(slope) > kRampEpsilon && span > 0.0) {
-                elapsed = (60.0 / (static_cast<double>(kPpq) * slope)) *
-                          std::log(m_tempo[i].bpm / previous.bpm);
-            } else {
-                elapsed = span * secondsPerTick(previous.bpm);
-            }
-        } else {
-            elapsed = span * secondsPerTick(previous.bpm);
-        }
-        m_cumSeconds[i] = m_cumSeconds[i - 1] + elapsed;
-    }
+    computeCumulativeSeconds(m_tempo, m_cumSeconds);
 
     m_cumBars.assign(m_meter.size(), 0);
     for (std::size_t i = 1; i < m_meter.size(); ++i) {
@@ -123,14 +94,6 @@ void TempoMap::rebuild() {
     }
 }
 
-std::size_t TempoMap::tempoIndexAt(Ticks at) const noexcept {
-    const auto position = std::ranges::upper_bound(m_tempo, at, {}, &TempoEvent::at);
-    if (position == m_tempo.begin()) {
-        return 0;
-    }
-    return static_cast<std::size_t>(std::distance(m_tempo.begin(), position)) - 1;
-}
-
 std::size_t TempoMap::meterIndexAt(Ticks at) const noexcept {
     const auto position = std::ranges::upper_bound(m_meter, at, {}, &MeterEvent::at);
     if (position == m_meter.begin()) {
@@ -140,17 +103,7 @@ std::size_t TempoMap::meterIndexAt(Ticks at) const noexcept {
 }
 
 double TempoMap::bpmAt(Ticks at) const noexcept {
-    const std::size_t index = tempoIndexAt(at);
-    const TempoEvent& event = m_tempo[index];
-    if (!event.ramp || index + 1 >= m_tempo.size()) {
-        return event.bpm;
-    }
-    const double span = static_cast<double>((m_tempo[index + 1].at - event.at).value);
-    if (span <= 0.0) {
-        return event.bpm;
-    }
-    const double offset = std::clamp(static_cast<double>((at - event.at).value), 0.0, span);
-    return event.bpm + ((m_tempo[index + 1].bpm - event.bpm) * (offset / span));
+    return view().bpmAt(at);
 }
 
 MeterEvent TempoMap::meterAt(Ticks at) const noexcept {
@@ -158,73 +111,19 @@ MeterEvent TempoMap::meterAt(Ticks at) const noexcept {
 }
 
 double TempoMap::secondsAt(Ticks at) const noexcept {
-    const std::size_t index = tempoIndexAt(at);
-    const TempoEvent& event = m_tempo[index];
-    const double offset = static_cast<double>((at - event.at).value);
-
-    const bool ramping = event.ramp && index + 1 < m_tempo.size();
-    if (!ramping) {
-        return m_cumSeconds[index] + (offset * secondsPerTick(event.bpm));
-    }
-
-    const double span = static_cast<double>((m_tempo[index + 1].at - event.at).value);
-    const double slope = span > 0.0 ? (m_tempo[index + 1].bpm - event.bpm) / span : 0.0;
-    if (std::abs(slope) <= kRampEpsilon) {
-        return m_cumSeconds[index] + (offset * secondsPerTick(event.bpm));
-    }
-    const double bpmHere = std::max(event.bpm + (slope * offset), kMinBpm);
-    return m_cumSeconds[index] +
-           ((60.0 / (static_cast<double>(kPpq) * slope)) * std::log(bpmHere / event.bpm));
+    return view().secondsAt(at);
 }
 
 Ticks TempoMap::ticksAtSeconds(double seconds) const noexcept {
-    // The segment whose start is at or before `seconds`. Linear rather than a binary
-    // search: a project has a handful of tempo changes, and this is a main-thread
-    // call - Phase 3 converts once per block, from a snapshot, not per sample.
-    std::size_t index = 0;
-    for (std::size_t i = 1; i < m_cumSeconds.size(); ++i) {
-        if (m_cumSeconds[i] > seconds) {
-            break;
-        }
-        index = i;
-    }
-
-    const TempoEvent& event = m_tempo[index];
-    const double elapsed = seconds - m_cumSeconds[index];
-
-    double offset = 0.0;
-    const bool ramping = event.ramp && index + 1 < m_tempo.size();
-    if (ramping) {
-        const double span = static_cast<double>((m_tempo[index + 1].at - event.at).value);
-        const double slope = span > 0.0 ? (m_tempo[index + 1].bpm - event.bpm) / span : 0.0;
-        if (std::abs(slope) > kRampEpsilon) {
-            // Inverse of the closed form above.
-            const double growth = std::exp(elapsed * static_cast<double>(kPpq) * slope / 60.0);
-            offset = (event.bpm * (growth - 1.0)) / slope;
-        } else {
-            offset = elapsed / secondsPerTick(event.bpm);
-        }
-    } else {
-        offset = elapsed / secondsPerTick(event.bpm);
-    }
-
-    return event.at + Ticks{static_cast<std::int64_t>(std::llround(offset))};
+    return view().ticksAtSeconds(seconds);
 }
 
 Samples TempoMap::toSamples(Ticks at, std::uint32_t sampleRate) const noexcept {
-    ADX_ASSERT(sampleRate > 0);
-    if (sampleRate == 0) {
-        return Samples{0};
-    }
-    return Samples{std::llround(secondsAt(at) * static_cast<double>(sampleRate))};
+    return view().toSamples(at, sampleRate);
 }
 
 Ticks TempoMap::toTicks(Samples at, std::uint32_t sampleRate) const noexcept {
-    ADX_ASSERT(sampleRate > 0);
-    if (sampleRate == 0) {
-        return Ticks{0};
-    }
-    return ticksAtSeconds(static_cast<double>(at.value) / static_cast<double>(sampleRate));
+    return view().toTicks(at, sampleRate);
 }
 
 BarBeatTick TempoMap::toBarBeat(Ticks at) const noexcept {

@@ -8,47 +8,19 @@
 // (phase_2.md §4.2).
 //
 // Main thread only. It holds std::vector, it rebuilds its prefix sums on edit, and
-// nothing on the audio callback path touches it.
+// nothing on the audio callback path touches it. The conversions themselves live in
+// TempoMath.h, over a TempoView, so the render snapshot can run the very same code
+// against its own copy of the arrays.
 #pragma once
 
 #include <cstdint>
 #include <span>
 #include <vector>
 
+#include "engine/core/TempoMath.h"
 #include "engine/core/Time.h"
 
 namespace adx::core {
-
-/// A tempo change. `ramp` means the tempo travels linearly in the tick domain from
-/// here to the next event's bpm; without a next event a ramp is held constant,
-/// because there is nothing to ramp toward.
-struct TempoEvent {
-    Ticks at;
-    double bpm{120.0};
-    bool ramp{false};
-
-    [[nodiscard]] friend bool operator==(const TempoEvent&, const TempoEvent&) noexcept = default;
-};
-
-struct MeterEvent {
-    Ticks at;
-    std::uint16_t numerator{4};
-    std::uint16_t denominator{4};
-
-    [[nodiscard]] friend bool operator==(const MeterEvent&, const MeterEvent&) noexcept = default;
-};
-
-/// Tempo bounds. Not taste - arithmetic: below kMinBpm a segment's length overflows
-/// anything useful, and above kMaxBpm a tick is shorter than a sample at 48 kHz, at
-/// which point toTicks(toSamples(t)) stops being an identity.
-inline constexpr double kMinBpm = 1.0;
-inline constexpr double kMaxBpm = 999.0;
-
-/// The highest tempo at which tick-to-sample conversion still round-trips exactly,
-/// for a given rate: one tick has to be at least one sample long.
-[[nodiscard]] constexpr double maxExactBpm(std::uint32_t sampleRate) noexcept {
-    return (static_cast<double>(sampleRate) * 60.0) / static_cast<double>(kPpq);
-}
 
 class TempoMap {
 public:
@@ -75,6 +47,11 @@ public:
         return m_meter;
     }
 
+    /// The same map as a pair of borrowed spans. Valid until the next edit.
+    [[nodiscard]] TempoView view() const noexcept {
+        return TempoView{.events = m_tempo, .cumSeconds = m_cumSeconds};
+    }
+
     [[nodiscard]] double bpmAt(Ticks at) const noexcept;
     [[nodiscard]] MeterEvent meterAt(Ticks at) const noexcept;
 
@@ -97,7 +74,6 @@ private:
     /// Recomputes the prefix sums. Called on every edit, never during render.
     void rebuild();
 
-    [[nodiscard]] std::size_t tempoIndexAt(Ticks at) const noexcept;
     [[nodiscard]] std::size_t meterIndexAt(Ticks at) const noexcept;
 
     std::vector<TempoEvent> m_tempo;

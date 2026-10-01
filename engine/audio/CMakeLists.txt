@@ -1,5 +1,6 @@
 target_sources(adx_engine_static PRIVATE
     AudioThread.cpp
+    CallbackCore.cpp
     NullBackend.cpp
     OfflineBackend.cpp
     RtAudioBackend.cpp

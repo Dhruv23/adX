@@ -334,6 +334,19 @@ struct Note {
 
 struct NoteClip {  ChannelId channel; std::vector<Note> notes; };
 
+// ADDENDUM (post-Phase-2; scheduled in Phase 3 §4.5, Phase 4 §4.2/§4.13, Phase 5 §4.7).
+// Appended to Note; all default to "absent", so existing files and golden hashes
+// are unchanged. Serialized only when set.
+//   std::optional<NoteSlide> slide;        // glide from this note's pitch to a target
+//   std::vector<PitchPoint>  pitchCurve;   // freeform cents-vs-time, note-relative ticks
+//   std::string              lyric;        // Voice instrument; empty = none
+//   struct NoteSlide  { int16_t targetCents; core::Ticks start, length; CurveShape shape; };
+//   struct PitchPoint { core::Ticks t; int16_t cents; CurveShape shape; };
+// `slide` is the editor's one-gesture case (A -> C); `pitchCurve` is the general
+// case. They compose: slide is applied first, the curve is added on top. A slide
+// whose target is a following note's pitch is stored as cents, not as a link, so
+// moving or deleting the next note never silently retargets it.
+
 struct Pattern {
     PatternId id; std::string name; Color color;
     core::Ticks length;                       // pattern-local, may be any length

@@ -20,6 +20,23 @@ adx_add_cpp_test(adx_tests
         format/test_parser.cpp
         format/test_writer.cpp
         format/test_v1shim.cpp
+        graph/GraphFixtures.cpp
+        graph/test_buffers.cpp
+        graph/test_cycle.cpp
+        graph/test_pdc.cpp
+        graph/test_routing.cpp
+        graph/test_scheduler.cpp
+        graph/test_toposort.cpp
+        graph/test_voice_identity.cpp
+        transport/test_loop.cpp
+        transport/test_seek.cpp
+        transport/test_timesource.cpp
+        transport/test_two_sources.cpp
+        render/RenderEvidence.cpp
+        render/RenderFixtures.cpp
+        render/test_bit_identity.cpp
+        render/test_no_alloc_under_load.cpp
+        render/test_snapshot.cpp
 )
 
 # The corpus in docs/examples/ is a permanent parser regression fixture

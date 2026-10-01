@@ -15,6 +15,7 @@
 #include "engine/core/Ids.h"
 #include "engine/core/Rational.h"
 #include "engine/project/Color.h"
+#include "engine/project/VoiceStealMode.h"
 
 namespace adx::project {
 
@@ -67,10 +68,6 @@ struct ArpSettings {
 
     [[nodiscard]] friend bool operator==(const ArpSettings&, const ArpSettings&) noexcept = default;
 };
-
-/// What to do when a channel is at its polyphony limit.
-enum class VoiceStealMode : std::uint8_t { OldestReleased, Oldest, Quietest, None };
-inline constexpr std::size_t kVoiceStealModeCount = 4;
 
 [[nodiscard]] const char* toString(VoiceStealMode mode) noexcept;
 [[nodiscard]] bool voiceStealModeFromString(std::string_view name, VoiceStealMode& out) noexcept;

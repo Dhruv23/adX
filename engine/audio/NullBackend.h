@@ -38,8 +38,23 @@ public:
     void close() noexcept override;
     [[nodiscard]] StreamInfo info() const noexcept override;
 
+    /// Keeps a copy of what the callback produced, block by block, until `capture` is
+    /// full. Main thread, before start(); `capture` is interleaved, preallocated, and
+    /// outlives the stream.
+    ///
+    /// This is the realtime half of phase_3.md's bit-identity gate: the same callback,
+    /// driven by a real clock on a real thread, recorded without allocating - so an
+    /// offline render can be compared against what "playing it" actually produced.
+    void setCapture(std::span<float> capture) noexcept;
+
+    /// Frames copied into the capture buffer so far. Any thread.
+    [[nodiscard]] std::uint64_t capturedFrames() const noexcept {
+        return m_capturedFrames.load(std::memory_order_acquire);
+    }
+
 private:
     void runLoop() noexcept;
+    void captureBlock() noexcept;
 
     std::vector<DeviceInfo> m_devices;
     /// Interleaved output, sized once at open(). The callback writes here and nothing
@@ -57,6 +72,9 @@ private:
     std::atomic<bool> m_open{false};
     std::atomic<std::uint64_t> m_callbackCount{0};
     std::atomic<std::uint64_t> m_lateCount{0};
+
+    std::span<float> m_capture;
+    std::atomic<std::uint64_t> m_capturedFrames{0};
 };
 
 } // namespace adx::audio

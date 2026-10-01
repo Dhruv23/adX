@@ -1,0 +1,39 @@
+[PROJECT]
+ADX_VERSION=2
+TITLE="Golden: polyphony and stealing"
+
+[TEMPO]
+0:0:0 140
+
+[CHANNEL Pad]
+OUTPUT=insert.1
+POLYPHONY=4
+STEAL=oldest-released
+
+[CHANNEL Pluck]
+OUTPUT=insert.1
+POLYPHONY=2
+STEAL=quietest
+PAN=0.5
+
+[PATTERN Chords]
+LENGTH=2:0:0
+NOTES Pad
+  C4 0:0:0 1:0:0 90
+  E4 0:0:0 1:0:0 90
+  G4 0:0:0 1:0:0 90
+  B4 0:0:0 1:0:0 90
+  D5 0:2:0 0:2:0 100
+  F5 0:3:0 1:0:0 110
+NOTES Pluck
+  C6 0:0:0 0:0:960 120
+  E6 0:0:1920 0:0:960 40
+  G6 0:1:0 0:0:960 100
+  C6 0:1:0 0:0:960 70
+
+[PLAYLIST]
+TRACK 1
+  PATTERN Chords 0:0:0
+
+[MIXER]
+INSERT 1 name="Master" gain=0.8
