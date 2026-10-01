@@ -45,3 +45,5 @@ Thumbs.db
 
 # Third-party voicebanks: licensed, redistribution forbidden. Never commit.
 third_party_assets/
+
+token.txt
