@@ -7,6 +7,7 @@
 #include <variant>
 
 #include "engine/core/Config.h"
+#include "engine/project/EventCompile.h"
 #include "engine/project/Project.h"
 
 namespace adx::project {
@@ -18,6 +19,10 @@ struct SnapshotBuilder::TempoBlock {
 
 struct SnapshotBuilder::ChannelEvents {
     std::vector<ScheduledEvent> events;
+    /// The text the Lyric events index, and views of it for the snapshot. Two vectors
+    /// because a view into a string the vector might still move would dangle.
+    std::vector<std::string> lyricText;
+    std::vector<std::string_view> lyrics;
 };
 
 namespace {
@@ -49,8 +54,12 @@ struct SnapshotStorage {
     std::vector<EventTrack> tracks;
     std::vector<EventCursor> cursors;
     std::vector<float> params;
+    std::vector<float> paramBase;
     std::vector<AutomationLane> lanes;
     std::vector<AutomationPoint> points;
+    std::vector<Knot> knots;
+    std::vector<std::uint32_t> paramLaneStart;
+    std::vector<std::uint32_t> paramLanes;
 };
 
 /// The window a placement plays from its source, in the source's own ticks.
@@ -72,19 +81,6 @@ Window windowOf(const PlaylistItem& item, core::Ticks naturalLength) {
                   .placedAt = item.start.value};
 }
 
-bool eventLess(const ScheduledEvent& a, const ScheduledEvent& b) noexcept {
-    if (a.tick != b.tick) {
-        return a.tick < b.tick;
-    }
-    if (a.kind != b.kind) {
-        return a.kind < b.kind;
-    }
-    if (a.noteId != b.noteId) {
-        return a.noteId < b.noteId;
-    }
-    return a.instance < b.instance;
-}
-
 std::uint32_t paramIndexOf(const graph::ParamLayout& layout, ParamRef ref) {
     const auto position = std::ranges::lower_bound(
         layout.index, ref, [](const ParamRef& a, const ParamRef& b) { return paramRefLess(a, b); },
@@ -92,30 +88,69 @@ std::uint32_t paramIndexOf(const graph::ParamLayout& layout, ParamRef ref) {
     return position != layout.index.end() && position->ref == ref ? position->index : graph::kNone;
 }
 
-/// Appends one lane's points and the lane itself. The lane's span is left empty:
-/// buildAutomation points it at its slice once every point is in place.
-bool addLane(const AutomationClip& clip, const Window& window, bool bounded,
-             const graph::ParamLayout& layout, SnapshotStorage& storage) {
-    if (!clip.target.valid() || clip.points.empty()) {
+/// The tolerance a lane on `ref` is compiled to: 0.1 % of the parameter's range
+/// (phase_4.md §4.0), or of the lane's own span when the parameter has no descriptor.
+float toleranceFor(const Project& project, ParamRef ref, const std::vector<Breakpoint>& points) {
+    const ParamDescriptor* descriptor = ParamRegistry::descriptorFor(ref, project);
+    if (descriptor != nullptr && descriptor->maximum > descriptor->minimum) {
+        return automationTolerance(descriptor->minimum, descriptor->maximum);
+    }
+    float low = points.front().value;
+    float high = low;
+    for (const Breakpoint& point : points) {
+        low = std::min(low, point.value);
+        high = std::max(high, point.value);
+    }
+    return automationTolerance(low, high);
+}
+
+/// Where one lane's points and knots sit in the storage vectors, until every lane is
+/// in and spans into them can no longer dangle.
+struct LaneRange {
+    std::size_t points{0};
+    std::size_t pointCount{0};
+    std::size_t knots{0};
+    std::size_t knotCount{0};
+};
+
+/// Appends one lane's points, its compiled knots and the lane itself. `endTick` is
+/// where the lane stops applying; `lastTick` is where its points are cut, for a clip
+/// envelope trimmed by its item (phase_4.md §4.0: trimming the tail drops points).
+bool addLane(const Project& project, ParamRef target, const std::vector<Breakpoint>& points,
+             const Window& window, std::int64_t endTick, std::int64_t lastTick,
+             const graph::ParamLayout& layout, SnapshotStorage& storage,
+             std::vector<LaneRange>& ranges) {
+    if (!target.valid() || points.empty()) {
         return false;
     }
-    const std::uint32_t index = paramIndexOf(layout, clip.target);
+    const std::uint32_t index = paramIndexOf(layout, target);
     if (index == graph::kNone) {
         return false;
     }
-    for (const Breakpoint& point : clip.points) {
-        storage.points.push_back(AutomationPoint{
-            .tick = window.place(point.at.value), .value = point.value, .curve = point.curve});
+    LaneRange range{.points = storage.points.size(), .knots = storage.knots.size()};
+    for (const Breakpoint& point : points) {
+        const std::int64_t tick = window.place(point.at.value);
+        if (tick > lastTick) {
+            break;
+        }
+        storage.points.push_back(
+            AutomationPoint{.tick = tick, .value = point.value, .curve = point.curve});
     }
-    storage.lanes.push_back(AutomationLane{
-        .paramIndex = index,
-        .startTick = window.placedAt,
-        // An unbounded placement holds its last value, the way a lane with no end
-        // does in every DAW.
-        .endTick =
-            bounded ? window.place(window.localEnd) : std::numeric_limits<std::int64_t>::max(),
-        .points = {},
-    });
+    range.pointCount = storage.points.size() - range.points;
+    if (range.pointCount == 0) {
+        return false;
+    }
+    compileBreakpoints(storage.knots,
+                       std::span<const AutomationPoint>{storage.points}.subspan(range.points,
+                                                                                 range.pointCount),
+                       toleranceFor(project, target, points));
+    range.knotCount = storage.knots.size() - range.knots;
+    storage.lanes.push_back(AutomationLane{.paramIndex = index,
+                                           .startTick = window.placedAt,
+                                           .endTick = endTick,
+                                           .points = {},
+                                           .knots = {}});
+    ranges.push_back(range);
     return true;
 }
 
@@ -124,13 +159,18 @@ void buildAutomation(const Project& project, const graph::ParamLayout& layout,
     // Two passes: collect every lane's points into one vector, then point each lane at
     // its slice - a span taken during the first pass would dangle the moment the
     // vector grew.
-    std::vector<std::pair<std::size_t, std::size_t>> ranges;
+    std::vector<LaneRange> ranges;
+    constexpr std::int64_t kForever = std::numeric_limits<std::int64_t>::max();
     const auto add = [&](const AutomationClip& clip, const Window& window, bool bounded) {
-        const std::size_t before = storage.points.size();
-        if (addLane(clip, window, bounded, layout, storage)) {
-            ranges.emplace_back(before, storage.points.size() - before);
-        }
+        // An unbounded placement holds its last value, the way a lane with no end does
+        // in every DAW.
+        const std::int64_t end = bounded ? window.place(window.localEnd) : kForever;
+        static_cast<void>(
+            addLane(project, clip.target, clip.points, window, end, kForever, layout, storage, ranges));
     };
+    // Clip envelopes go last, so where one overlaps a pattern or playlist lane on the
+    // same parameter the most specific automation wins.
+    std::vector<std::pair<const PlaylistItem*, Window>> enveloped;
 
     for (const PlaylistTrack& track : project.playlist.tracks) {
         if (track.muted) {
@@ -149,6 +189,9 @@ void buildAutomation(const Project& project, const graph::ParamLayout& layout,
                 for (const AutomationClip& clip : pattern->autoClips) {
                     add(clip, window, true);
                 }
+                if (!item.envelopes.empty()) {
+                    enveloped.emplace_back(&item, window);
+                }
             } else if (const auto* autoRef = std::get_if<AutomationRef>(&item.content)) {
                 const AutomationClip* clip = project.findAutomationClip(autoRef->clip);
                 if (clip != nullptr) {
@@ -157,9 +200,43 @@ void buildAutomation(const Project& project, const graph::ParamLayout& layout,
             }
         }
     }
+    for (const auto& [item, placed] : enveloped) {
+        // Envelope times are item-relative: 0 is item.start, whatever the source offset.
+        const Window window{.localStart = 0,
+                            .localEnd = placed.localEnd - placed.localStart,
+                            .placedAt = placed.placedAt};
+        const std::int64_t end = window.place(window.localEnd);
+        for (const ClipEnvelope& envelope : item->envelopes) {
+            if (envelope.local == ClipTarget::Param) {
+                static_cast<void>(addLane(project, envelope.target, envelope.points, window, end,
+                                          end, layout, storage, ranges));
+            }
+        }
+    }
+
     for (std::size_t i = 0; i < storage.lanes.size(); ++i) {
         storage.lanes[i].points = std::span<const AutomationPoint>{storage.points}.subspan(
-            ranges[i].first, ranges[i].second);
+            ranges[i].points, ranges[i].pointCount);
+        storage.lanes[i].knots =
+            std::span<const Knot>{storage.knots}.subspan(ranges[i].knots, ranges[i].knotCount);
+    }
+
+    // The parameter -> lanes index, compressed. Lanes keep their order within a
+    // parameter, which is their priority.
+    if (storage.lanes.empty()) {
+        return;
+    }
+    storage.paramLaneStart.assign(storage.params.size() + 1, 0);
+    for (const AutomationLane& lane : storage.lanes) {
+        ++storage.paramLaneStart[lane.paramIndex + 1];
+    }
+    for (std::size_t p = 1; p < storage.paramLaneStart.size(); ++p) {
+        storage.paramLaneStart[p] += storage.paramLaneStart[p - 1];
+    }
+    storage.paramLanes.assign(storage.lanes.size(), 0);
+    std::vector<std::uint32_t> fill(storage.paramLaneStart.begin(), storage.paramLaneStart.end() - 1);
+    for (std::size_t l = 0; l < storage.lanes.size(); ++l) {
+        storage.paramLanes[fill[storage.lanes[l].paramIndex]++] = static_cast<std::uint32_t>(l);
     }
 }
 
@@ -204,8 +281,9 @@ void SnapshotBuilder::refreshClipCache(const Project& project) {
             // A compare, not a hash: equal-length vectors of trivially comparable
             // notes, which is memcmp-speed for the untouched clips that are nearly all
             // of them - and exact, where a hash would only be probable.
-            if (entry.version == 0 || entry.notes != clip.notes) {
+            if (entry.version == 0 || entry.notes != clip.notes || entry.extras != clip.extras) {
                 entry.notes = clip.notes;
+                entry.extras = clip.extras;
                 entry.version = ++m_clipVersion;
             }
             entry.seen = true;
@@ -241,9 +319,18 @@ SnapshotBuilder::collectPlacements(const Project& project) const {
     return byChannel;
 }
 
-std::vector<std::int64_t> SnapshotBuilder::signatureOf(const std::vector<Placement>& placements) {
+std::vector<std::int64_t> SnapshotBuilder::signatureOf(const std::vector<Placement>& placements,
+                                                       const Channel* channel) {
     std::vector<std::int64_t> signature;
-    signature.reserve(placements.size() * 6);
+    signature.reserve((placements.size() * 6) + 5);
+    // The arpeggiator rewrites the events, so its settings are part of what they are a
+    // function of.
+    if (channel != nullptr && channel->arp.mode != ArpMode::Off) {
+        signature.insert(signature.end(),
+                         {static_cast<std::int64_t>(channel->arp.mode), channel->arp.rate.numerator,
+                          channel->arp.rate.denominator, channel->arp.octaves,
+                          static_cast<std::int64_t>(std::bit_cast<std::uint32_t>(channel->arp.gate))});
+    }
     for (const Placement& placement : placements) {
         const PlaylistItem& item = *placement.item;
         signature.insert(signature.end(), {static_cast<std::int64_t>(item.id.value),
@@ -255,7 +342,7 @@ std::vector<std::int64_t> SnapshotBuilder::signatureOf(const std::vector<Placeme
 }
 
 std::shared_ptr<const SnapshotBuilder::ChannelEvents>
-SnapshotBuilder::flatten(const std::vector<Placement>& placements) {
+SnapshotBuilder::flatten(const std::vector<Placement>& placements, const Channel* channel) {
     auto events = std::make_shared<ChannelEvents>();
     for (const Placement& placement : placements) {
         const PlaylistItem& item = *placement.item;
@@ -286,9 +373,17 @@ SnapshotBuilder::flatten(const std::vector<Placement>& placements) {
                                                     .kind = EventKind::NoteOff,
                                                     .pitch = note.pitch,
                                                     .velocity = 0});
+            if (const NoteExtras* extras = placement.clip->extrasFor(note.id)) {
+                appendNoteExtras(events->events, events->lyricText, *extras, on, off,
+                                 note.id.value, item.id.value);
+            }
         }
     }
     std::ranges::sort(events->events, eventLess);
+    if (channel != nullptr) {
+        arpeggiate(events->events, channel->arp);
+    }
+    events->lyrics.assign(events->lyricText.begin(), events->lyricText.end());
     return events;
 }
 
@@ -345,11 +440,12 @@ SnapshotBuildResult SnapshotBuilder::build(const Project& project, std::uint64_t
             ChannelCacheEntry& entry = m_channels[channel.value];
             const auto found = placements.find(channel.value);
             const std::vector<Placement>& mine = found != placements.end() ? found->second : kNone;
-            std::vector<std::int64_t> signature = signatureOf(mine);
+            const Channel* model = project.find(channel);
+            std::vector<std::int64_t> signature = signatureOf(mine, model);
             if (entry.events && entry.signature == signature) {
                 ++m_stats.tracksReused;
             } else {
-                entry.events = flatten(mine);
+                entry.events = flatten(mine, model);
                 entry.signature = std::move(signature);
                 ++m_stats.tracksRebuilt;
             }
@@ -372,13 +468,15 @@ SnapshotBuildResult SnapshotBuilder::build(const Project& project, std::uint64_t
         const auto found = m_channels.find(channel.value);
         if (found != m_channels.end() && found->second.events) {
             storage->keepAlive.push_back(found->second.events);
-            storage->tracks.push_back(EventTrack{.events = found->second.events->events});
+            storage->tracks.push_back(EventTrack{.events = found->second.events->events,
+                                                 .lyrics = found->second.events->lyrics});
         } else {
-            storage->tracks.push_back(EventTrack{.events = kNoEvents.events});
+            storage->tracks.push_back(EventTrack{.events = kNoEvents.events, .lyrics = {}});
         }
     }
     storage->cursors.assign(storage->tracks.size(), EventCursor{});
     graph::fillParams(project, m_graphBuild->params, storage->params);
+    storage->paramBase = storage->params;
     buildAutomation(project, m_graphBuild->params, *storage);
 
     Snapshot& snapshot = storage->snapshot;
@@ -390,7 +488,10 @@ SnapshotBuildResult SnapshotBuilder::build(const Project& project, std::uint64_t
     snapshot.automation = storage->lanes;
     snapshot.graph = m_graph->view();
     snapshot.params = storage->params;
+    snapshot.paramBase = storage->paramBase;
     snapshot.paramIndex = m_graphBuild->params.index;
+    snapshot.paramLaneStart = storage->paramLaneStart;
+    snapshot.paramLanes = storage->paramLanes;
 
     SnapshotStorage* owned = storage.release();
     owned->snapshot.lifetime = rt::retireOf(owned);

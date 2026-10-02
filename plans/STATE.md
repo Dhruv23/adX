@@ -72,7 +72,7 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 1 — RT core | M | **Done** 2026-09-13 |
 | 2 — Project model, commands, `.adx` v2 | L | **Done** 2026-09-25 (CI found one clang-tidy finding; fixed in Phase 3) |
 | 3 — Audio graph & scheduling | L | **Done** 2026-10-01 (CI green, run 36835905774) |
-| 4 — Instruments & effects | XL | Not started |
+| 4 — Instruments & effects | XL | In progress 2026-10-01 |
 | 5 — Frontend foundation | L | Not started |
 | 6 — The DAW proper | XL | Not started |
 | 7 — Text-first layer | M | Not started |
@@ -348,13 +348,12 @@ P1-1, P2-2, P2-3, P2-4 and P2-5 re-carried with reasons.
   `realtime_gate_60s_under_load`: 36 of 11,251 callbacks over the 5.33 ms deadline, worst
   44 ms, on a shared runner running an unoptimised build. The gate now allows 1 % over
   deadline only when `CI` is set and `NDEBUG` is not; Release, RelWithDebInfo and local
-  runs stay strict (zero over). Fixed-confirmed when: the next CI run is green.
+  runs stay strict (zero over). Confirmed: CI run 36950581569 (`c628ff0`) green on all three jobs.
 
-- **P2-1** · **Wired, not yet observed** · `.github/workflows/nightly.yml` runs the
-  whole loader over randomly mutated input for 10 minutes from a fresh, printed seed
-  (`parser_fuzz_timed`, `[.fuzz]`), and renders the Phase 3 gate in full in Debug. Run
-  locally for 20 s; the scheduled job has never fired. Fixed when: one scheduled run is
-  seen green.
+- **P2-1** · **Observed green by manual dispatch** · Nightly run 36950606211 (`c628ff0`,
+  `workflow_dispatch`) passed: the 10-minute mutation fuzz and the Phase 3 gate in
+  Debug. The cron trigger (06:17 UTC) has not yet fired on its own; close this when
+  one scheduled run is seen green.
 
 - **P3-1** · The master can exceed 0 dBFS. Nothing limits it - the master limiter is
   FINAL_PLAN §5.2, Phase 4's - and dense projects of test tones clip:
@@ -428,7 +427,7 @@ Fixed in Phase 3, for the record:
 | **Plan** | [phase_4.md](phase_4.md) |
 | **Entry** | Phase 3 §7 complete |
 | **Done when** | [phase_4.md](phase_4.md) §7 |
-| **Status** | Not started |
+| **Status** | In progress (2026-10-01) |
 | **Completed** | — |
 
 > Three tranches ([phase_4.md](phase_4.md) §3). Phase 5 may start once

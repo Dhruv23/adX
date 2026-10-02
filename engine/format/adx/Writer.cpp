@@ -205,6 +205,40 @@ void writeChannel(Emitter& emitter, const Project& project, const project::Chann
     emitResidue(emitter, project, "CHANNEL", channel.name);
 }
 
+/// Appends a note's slide, bend and lyric. Absent ones write nothing, so a file that
+/// uses none of them is byte-identical to what Phase 2 wrote (phase_4.md §4.0).
+void appendExtras(std::string& text, const Project& project, const project::NoteExtras* extras) {
+    if (extras == nullptr) {
+        return;
+    }
+    if (extras->slide.has_value()) {
+        text += " slide=";
+        text += formatSlide(*extras->slide, project.tempo);
+    }
+    if (!extras->pitchCurve.empty()) {
+        text += " bend=";
+        text += formatBend(extras->pitchCurve, project.tempo);
+    }
+    if (!extras->lyric.empty()) {
+        text += " lyric=";
+        text += quoteAlways(extras->lyric);
+    }
+}
+
+void writeBreakpoints(Emitter& emitter, const Project& project,
+                      const std::vector<project::Breakpoint>& points, std::size_t depth) {
+    for (const project::Breakpoint& point : points) {
+        std::string body = formatPosition(point.at, project.tempo);
+        body += ' ';
+        body += formatFloat(point.value);
+        if (point.curve.kind != core::CurveKind::Linear || point.curve.tension != 0.0F) {
+            body += ' ';
+            body += formatCurve(point.curve);
+        }
+        emitter.indented(depth, body);
+    }
+}
+
 void writeNoteClip(Emitter& emitter, const Project& project, const project::NoteClip& clip) {
     const project::Channel* channel = project.find(clip.channel);
     if (channel == nullptr) {
@@ -237,6 +271,7 @@ void writeNoteClip(Emitter& emitter, const Project& project, const project::Note
         appendIfChanged(text, "fine", static_cast<double>(note->fineTuneCents), 0.0);
         appendIfChanged(text, "rel", static_cast<double>(note->releaseVelocity),
                         static_cast<double>(project::kDefaultReleaseVelocity));
+        appendExtras(text, project, clip.extrasFor(note->id));
         emitter.indented(1, text);
     }
 }
@@ -340,16 +375,24 @@ void writePlaylistItem(Emitter& emitter, const Project& project,
     emitter.indented(1, text);
 
     if (lane != nullptr) {
-        for (const project::Breakpoint& point : lane->points) {
-            std::string body = formatPosition(point.at, project.tempo);
-            body += ' ';
-            body += formatFloat(point.value);
-            if (point.curve.kind != core::CurveKind::Linear || point.curve.tension != 0.0F) {
-                body += ' ';
-                body += formatCurve(point.curve);
+        writeBreakpoints(emitter, project, lane->points, 2);
+        return;
+    }
+    for (const project::ClipEnvelope& envelope : item.envelopes) {
+        std::string target;
+        if (envelope.local != project::ClipTarget::Param) {
+            target = project::toString(envelope.local);
+        } else {
+            target = project::ParamRegistry::pathOf(envelope.target, project);
+            if (target.empty()) {
+                target = envelope.targetPath;
             }
-            emitter.indented(2, body);
         }
+        if (target.empty()) {
+            continue;
+        }
+        emitter.indented(2, "ENVELOPE " + target);
+        writeBreakpoints(emitter, project, envelope.points, 3);
     }
 }
 

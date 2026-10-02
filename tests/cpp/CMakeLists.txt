@@ -20,6 +20,7 @@ adx_add_cpp_test(adx_tests
         format/test_parser.cpp
         format/test_writer.cpp
         format/test_v1shim.cpp
+        format/test_note_extensions.cpp
         graph/GraphFixtures.cpp
         graph/test_buffers.cpp
         graph/test_cycle.cpp

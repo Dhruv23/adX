@@ -13,17 +13,29 @@
 
 #include <cstdint>
 #include <span>
+#include <string_view>
 #include <type_traits>
 
 namespace adx::project {
 
 /// Ordered so that sorting by (tick, kind) dispatches offs before ons at the same
 /// tick: a note that ends exactly where the next begins frees its voice first, so a
-/// monophonic line at full polyphony does not steal from itself.
+/// monophonic line at full polyphony does not steal from itself. A lyric precedes its
+/// note-on, so the voice that starts can find it; a glide follows it, so the voice it
+/// moves exists.
 enum class EventKind : std::uint8_t {
     NoteOff,
     Param,
+    /// `endTick` is an index into Snapshot::lyrics. Strings never ride in an event
+    /// (phase_4.md §4.0).
+    Lyric,
     NoteOn,
+    /// Moves the voice (noteId, instance) linearly from wherever its pitch offset is
+    /// now to `value` cents, arriving at `endTick`. A curved slide or pitch curve is
+    /// subdivided into a chain of these when the snapshot is built, so the audio thread
+    /// only ever interpolates a straight line - and does so identically offline and
+    /// realtime.
+    PitchGlide,
 };
 
 /// One event on the arrangement timeline, in ticks.
@@ -50,11 +62,17 @@ struct ScheduledEvent {
 };
 
 static_assert(std::is_trivially_copyable_v<ScheduledEvent>);
+// The per-block walk touches every event in a block; two to a cache line.
+static_assert(sizeof(ScheduledEvent) == 32);
 
 /// One channel's events on the arrangement, sorted by (tick, kind, noteId, instance).
 /// Immutable once published.
 struct EventTrack {
     std::span<const ScheduledEvent> events;
+    /// What this track's Lyric events index (phase_4.md §4.0). Per track rather than
+    /// per snapshot because a track's events are cached across snapshots, and an index
+    /// into a table that is rebuilt every time would not be.
+    std::span<const std::string_view> lyrics;
 };
 
 /// Where a track's walk is, for one time source.

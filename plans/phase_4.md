@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Not started |
+| **Status** | In progress (2026-10-01) |
 | **Governs** | `engine/dsp/`, `engine/instruments/`, `engine/effects/`, `engine/format/audio/` (decode), the preset system |
 | **FINAL_PLAN refs** | §3.1 (synthesis half, effects, SimpleFFT), §5.3 in full, §5.4 in full, §5.2 per-insert processing, §7 Phase 4 |
 | **Entry criteria** | [phase_3.md](phase_3.md) §7 complete |
