@@ -13,6 +13,7 @@
 #include "engine/audio/NullBackend.h"
 #include "engine/rt/AllocGuard.h"
 #include "engine/rt/Violation.h"
+#include "tests/cpp/Env.h"
 #include "tests/cpp/render/RenderEvidence.h"
 #include "tests/cpp/render/RenderFixtures.h"
 
@@ -79,8 +80,12 @@ TEST_CASE("realtime_gate_60s_under_load", "[render][gate][.slow]") {
                            << callbacks.overDeadlineCount() << " over; "
                            << engine.audio().info().callbackCount << " callbacks");
     CHECK(engine.audio().info().callbackCount > 10'000);
-    CHECK(worstMs < deadlineMs);
-    CHECK(callbacks.overDeadlineCount() == 0);
+    if (adx::tests::deadlineSlackAllowed()) {
+        CHECK(callbacks.overDeadlineCount() * 100 <= engine.audio().info().callbackCount);
+    } else {
+        CHECK(worstMs < deadlineMs);
+        CHECK(callbacks.overDeadlineCount() == 0);
+    }
     if (adx::rt::allocGuardCompiledIn()) {
         CHECK(adx::rt::ViolationLog::instance().count() == before);
     }

@@ -129,6 +129,11 @@ tests/golden/                   grows substantially in this phase
 
 ## 3. Tranches — the order of work
 
+**Tranche A0 — amendments to Phases 2 and 3 (§4.0).** Additive note/clip fields,
+the 32-byte `ScheduledEvent`, `PitchGlide`/`Lyric`/`ParamRamp` events, rate classes.
+*Exit:* the Phase 2 and Phase 3 gates re-run unmodified and green, plus A0's own
+tests. Small, and first, because everything below reads these events.
+
 **Tranche A — parity with iteration one.** `engine/dsp/` primitives, Additive,
 VA, Sampler, Reverb, Distortion, Bitcrush, Chorus, Eq3, Delay, Compressor,
 Limiter, ParametricEq, Gate, decode, presets, the C418 and STAKILLAZ packs.
@@ -146,7 +151,7 @@ SpectralFreeze.
 
 **Tranche D — Voice.** `engine/instruments/voice/` (§4.13), plus `Overdrive` if
 not already pulled forward for the STAKILLAZ pack. Depends on A (Sampler, SamplePool,
-`Resample.h`) and on Phase 3's `Lyric`/`PitchGlide` events; independent of B and C.
+`Resample.h`) and on A0's `Lyric`/`PitchGlide` events (§4.0); independent of B and C.
 
 Tranche A is the load-bearing one: it is where the primitives are proven and
 where the porting judgment is spent. B and C are largely *applications* of
@@ -160,6 +165,74 @@ critical path, and running them in parallel is the intended schedule.
 ---
 
 ## 4. Design
+
+### 4.0 Amendments to the Phase 2 model and Phase 3 scheduler — done first
+
+Phases 2 and 3 are closed. Slide notes, lyrics, clip envelopes and sample-accurate
+automation need changes to both, and those changes are **this phase's first
+tranche (A0)**, landing before any instrument depends on them. Each is additive:
+absent fields serialize to nothing, so existing `.adx` files and every committed golden
+hash are unchanged, and the Phase 2/3 gates re-run green as A0's exit criterion.
+
+**Phase 2 model additions** (`engine/project/Channel.h`, `Pattern.h`, `PlaylistItem`):
+
+```cpp
+// On Note — all default to "absent".
+std::optional<NoteSlide> slide;        // glide from this note's pitch to a target
+std::vector<PitchPoint>  pitchCurve;   // freeform cents-vs-time, note-relative ticks
+std::string              lyric;        // Voice instrument; empty = none
+struct NoteSlide  { int16_t targetCents; core::Ticks start, length; CurveShape shape; };
+struct PitchPoint { core::Ticks t; int16_t cents; CurveShape shape; };
+
+// On PlaylistItem — automation that belongs to THIS item.
+std::vector<ClipEnvelope> envelopes;
+struct ClipEnvelope { ParamTarget target; std::vector<Breakpoint> points; };
+```
+
+`slide` is the editor's one-gesture case (A → C); `pitchCurve` is the general case.
+They compose: slide first, curve added on top. A slide whose target is a following
+note's pitch is stored as cents, not as a link, so moving or deleting the next note
+never silently retargets it. Envelope breakpoint times are item-relative (0 =
+`item.start`) and clamped to `item.length`: trimming the tail drops points, trimming
+the head shifts them. `target` is a clip-local parameter (gain, pan, pitchCents) or any
+`ParamRef` the item's lane feeds, in which case the envelope applies only while the
+item plays and the parameter returns to its base value afterwards. Split divides an
+envelope at the cut and inserts a boundary point so the value is continuous across it.
+The `.adx` syntax is in [adx-format-v2.md](../docs/adx-format-v2.md) (planned note
+extensions); the commands (`SetNoteSlide`, `SetPitchCurve`, `SetLyric`,
+`SetClipEnvelope`) follow the one-gesture-one-command rule of Phase 2 §4.9.
+
+**Phase 3 scheduler additions** (`engine/project/EventTrack.h`, `SnapshotBuilder`,
+`ParamRegistry`):
+
+- `ScheduledEvent` grows from 24 to 32 bytes: `float value` plus `uint32_t duration`
+  and `uint8_t shape`. The `static_assert` moves with it; the per-block walk is
+  unchanged. New kinds: `PitchGlide`, `Lyric`, `ParamRamp`.
+- **Slides and lyrics compile to events**, not voice-side lookups. `Note.slide` and
+  `Note.pitchCurve` become `PitchGlide` events keyed by `noteId` at the glide's start
+  tick (N curve points → N−1 chained glides). `Note.lyric` becomes a `Lyric` event
+  carrying an index into a snapshot-owned lyric table; strings never ride in an event.
+- **Automation is delivered as ramps, sample-accurately.** An `AutomationClip` and a
+  clip envelope (offset by its item's start) compile to chains of `ParamRamp` events:
+  `value` = target, `duration`/`shape` as above, the parameter slot index in the field
+  `noteId` occupies for note events. A parameter holds `(current, target, remaining
+  samples)`; the audio thread advances it and does not wait for the next block. Curved
+  segments (Bezier, exponential, smooth) are subdivided into linear ramps at compile
+  time until the error against `Curve::evaluate` is under 0.1 % of the parameter
+  range (capped at 32 pieces) — a deterministic function of the curve, so offline and
+  realtime build identical chains.
+- **Rate classes.** `ParamRegistry` gives every parameter `Block` (constant within a
+  block; ramps interpolate at block edges), `Sample` (the node receives a per-sample
+  value span: cutoff, drive, mix, gain, pan) or `Baked` (§4.13).
+- **Seek** into the middle of a glide or ramp resolves the in-flight value from the
+  resume cursor (Phase 3 §4.11), not by replaying from the start.
+
+**A0 tests:** `slide_seek_midway_matches_continuous`,
+`automation_sweep_block_size_independent` (bit-identical at 64/512/1024),
+`automation_ramp_matches_curve_evaluate`, `automation_seek_midramp_continuous`,
+`clip_envelope_applies_only_within_item`, `new_note_fields_absent_roundtrip_unchanged`
+(every existing golden file round-trips byte-identically), and the Phase 2 and Phase 3
+phase gates re-run unmodified.
 
 ### 4.1 `engine/dsp/` is written first and tested numerically
 
@@ -223,7 +296,7 @@ protected:
 ```
 
 **Pitch glide is in the base, not per instrument.** `Voice` carries a `pitchCents`
-offset that `Instrument::process` advances from `PitchGlide` events (Phase 3 §4.5)
+offset that `Instrument::process` advances from `PitchGlide` events (§4.0)
 using the event's duration and curve shape, sample-accurately, once. `renderVoice`
 reads `voice.pitchRatio()` and nothing else, so slide notes and pitch curves work on
 every instrument for free. This is distinct from the ported `GLIDE` parameter, which
@@ -236,6 +309,18 @@ cents value (so a slide is smooth, not stair-stepped at block boundaries). A
 `PitchGlide` for a `noteId` with no live voice (already stolen/released) is dropped.
 Tests: `slide_reaches_target_exactly`, `slide_block_size_independent`,
 `slide_plus_vibrato_sums_in_cents`, `portamento_overridden_by_explicit_slide`.
+
+**Automated parameters at the right rate.** `Effect::processWet` and
+`renderVoice` receive, for each `Sample`-class parameter, a per-sample value span
+(§4.0) — constant when nothing is ramping, so the common case costs one
+pointer check — and a plain float for `Block`-class parameters. Parameters whose
+cost makes per-sample evaluation wasteful (filter coefficient computation) declare
+`Block` and are interpolated at sub-block granularity (every 32 samples) instead;
+the declaration is part of the parameter's metadata, checked by a test that sweeps
+every automatable parameter of every effect and instrument and asserts no
+discontinuity above the smoothing floor. `Smooth.h` still applies to manual knob
+turns; it is bypassed for ramp events, which are already smooth by construction.
+Wet/dry and bypass are automatable like any other parameter.
 
 Wet/dry crossfade and bypass are in the base, once, correctly (equal-power
 crossfade, bypass ramped over 5 ms rather than switched, so a bypass toggle is
@@ -559,6 +644,24 @@ repo or CI, tests split in two:
   Vocoder-free dry vocal. It must be intelligible Japanese by ear. Like the Phase 4
   `suffocation.adx` A/B, this is a listening check recorded in `plans/STATE.md`; it
   cannot be automated and is not pretended to be.
+
+**Automation of Voice parameters.** Voice has two kinds of parameter, and the
+registry marks them differently:
+
+- **Post-render** (`Sample`/`Block` class): volume, pan, filter, envelope, and every
+  insert effect. Automate freely; nothing re-renders.
+- **Baked** (`Baked` class): `gender`, `breathiness`, `tuning`, `formantShift`, the
+  resampler flags. These change the *synthesis*, so they live in the cached render.
+  They are automatable, evaluated per WORLD frame (5 ms) over the note's span at render
+  time, and the sampled curve (not the lane) is hashed into `VoiceRenderKey`.
+  Consequences: editing a baked lane re-renders only the notes the edit overlaps;
+  the changed notes play silent-with-marker until ready (never blocking, §4.13 above);
+  the parameter's knob and lane are drawn with a "re-renders" badge; and a baked lane
+  is time-continuous within a note but **not across a phrase's join**, where the next
+  note's render starts from its own first value.
+
+Tests: `voice_baked_lane_changes_key_only_where_overlapping`,
+`voice_baked_automation_deterministic`, `voice_post_render_automation_no_rerender`.
 
 **Encodings and edge cases.** `oto.ini` and `character.txt` are very commonly
 Shift-JIS (Teto's are); detect and transcode to UTF-8, store the original bytes, and never rewrite

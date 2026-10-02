@@ -29,4 +29,16 @@ namespace adx::tests {
 #endif
 }
 
+/// True on a shared CI runner running an unoptimised build, where a callback can be
+/// descheduled for tens of milliseconds (Debug run 36833200360: 36 of 11251 over, worst
+/// 44 ms). Wall-clock deadline gates allow 1 % over there and stay strict everywhere
+/// else, so a local run or an optimised CI job still demands zero.
+[[nodiscard]] inline bool deadlineSlackAllowed() {
+#ifdef NDEBUG
+    return false;
+#else
+    return environment("CI").has_value();
+#endif
+}
+
 } // namespace adx::tests

@@ -126,6 +126,14 @@ Non-destructive edits are clip *properties*, already in the Phase 2 model
 - **Trim** changes `start`/`length`.
 - **Fades** are in/out curves using Phase 2's `Curve` — the same evaluator again.
 - **Crossfade** between overlapping clips on one lane, equal-power or linear.
+- **Clip envelopes** (model and scheduling land in Phase 4 §4.0; this phase owns the
+  clip-editing behavior): gain, pan and pitch envelopes
+  that belong to the clip, plus envelopes on an effect parameter that apply only while
+  the clip plays. Fades are the special case of a gain envelope's first and last
+  segments; they stay separate in the UI but compile through the same path (Phase 4
+  §4.0 `ParamRamp`). Slip moves the audio under the envelope, not the envelope; trim clamps
+  it. Tests: `clip_envelope_travels_on_move`, `clip_envelope_split_is_continuous`,
+  `clip_envelope_survives_slip`, `clip_fade_equals_gain_envelope`.
 
 Destructive edits (reverse, normalize, DC removal, gain, silence trim) write a
 new `SampleBuffer` and leave the original file untouched, with the edit recorded

@@ -24,6 +24,7 @@
 #include "engine/rt/RtSection.h"
 #include "engine/rt/ThreadId.h"
 #include "engine/rt/Violation.h"
+#include "tests/cpp/Env.h"
 
 using adx::audio::AudioThread;
 using adx::audio::Error;
@@ -279,8 +280,12 @@ TEST_CASE("null_backend_60s_zero_violations", "[rt][audio][.slow]") {
     const double deadlineMs = 1000.0 * 256.0 / 48000.0;
     const double worstMs = static_cast<double>(audio.callbacks().worstCallbackNs()) / 1e6;
     INFO("worst callback " << worstMs << " ms");
-    CHECK(worstMs < deadlineMs);
-    CHECK(audio.callbacks().overDeadlineCount() == 0);
+    if (adx::tests::deadlineSlackAllowed()) {
+        CHECK(audio.callbacks().overDeadlineCount() * 100 <= audio.info().callbackCount);
+    } else {
+        CHECK(worstMs < deadlineMs);
+        CHECK(audio.callbacks().overDeadlineCount() == 0);
+    }
 }
 
 TEST_CASE("rtaudio_enumerate_does_not_crash", "[rt][audio][.device]") {

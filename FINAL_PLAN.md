@@ -533,7 +533,10 @@ sampler, the five archived effects, delay, compressor, limiter, parametric EQ,
 gate; B is the rest of §5.3; C is the rest of §5.4. The whole DSP library lives
 in one phase because it is pure DSP against a stable `Node` interface with no UI
 dependency, and splitting it costs two rounds of the same review and test
-scaffolding. A fourth tranche, D, adds the **Voice** instrument (UTAU) and the
+scaffolding. A tranche A0 runs first: additive amendments to the finished Phase 2 model and
+Phase 3 scheduler (slide/pitch-curve/lyric note fields, clip envelopes, a 32-byte
+`ScheduledEvent`, sample-accurate parameter ramps), gated on the Phase 2 and 3 gates
+re-passing unchanged. A fourth tranche, D, adds the **Voice** instrument (UTAU) and the
 voice-render cache. Slide notes / pitch curves (instrument side) and Overdrive and
 the full Vocoder spec also land here. Phase 5 may begin once tranche A is done; B,
 C and D run in parallel.

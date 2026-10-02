@@ -219,6 +219,20 @@ Editing: add/remove/drag points, drag a segment's curvature handle, select
 multiple points and scale/offset them, snap values to a grid, and paste a
 shape from a library (ramp, pulse, sine, random).
 
+**Keyframing from the control.** Right-click any automatable knob/slider → "Create
+automation" (or the keyframe button beside it) creates a lane targeting that
+`ParamRef` in one command and starts it with a point at the current value. A knob
+under automation shows a lane-colored ring and its live value; turning it while
+playing edits the base value, and holding the record modifier writes points
+(thinned on release). Baked Voice parameters carry a "re-renders" badge (Phase 4 §4.13).
+
+**Clip envelopes.** A selected playlist item shows its envelopes drawn *on the clip*
+(gain by default, switchable to pan, pitch, or an effect parameter the lane feeds).
+Points edit in place and travel with the clip on move, duplicate and split (Phase 2
+`PlaylistItem` envelopes, Phase 4 §4.0). One lane per target; the clip header shows which parameters
+it envelopes. A clip envelope is distinct from a playlist automation clip, which spans
+many items: the UI labels them differently.
+
 **Controllers** (§5.1's envelope controller, LFO tool, peak controller) are
 automation *sources* rather than drawn curves. Each is a small engine node whose
 output is assignable to any `ParamRef`. They are engine-side because they must

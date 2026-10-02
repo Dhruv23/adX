@@ -753,8 +753,9 @@ by reading v1's documentation, which is known to be incomplete.
 
 > **Planned v2 note extensions (not yet in the grammar):** `slide=<semitones|cents>@<start>+<len>[:shape]`,
 > `bend=<tick>:<cents>,...` and `lyric="<text>"` as optional trailing keys on a note line,
-> mapping to the `Note.slide` / `Note.pitchCurve` / `Note.lyric` addendum in
-> [phase_2.md](../plans/phase_2.md). Absent keys serialize to nothing, so existing files are
+> mapping to the `Note.slide` / `Note.pitchCurve` / `Note.lyric` additions in
+> [phase_4.md §4.0](../plans/phase_4.md) (Phases 2 and 3 are closed, so the schema change is
+> scheduled there). Absent keys serialize to nothing, so existing files are
 > byte-identical on round-trip. The `Voice` instrument's voicebank path is an
 > `InstrumentSpec` sample ref (project-relative), like any sampler asset.
 | `PATTERN=<mini>` | `Pattern.mini`, source text only |

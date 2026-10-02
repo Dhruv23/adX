@@ -303,10 +303,8 @@ struct ScheduledEvent {                  // trivially copyable, 24 bytes
     EventKind kind;                      // NoteOn/NoteOff/Param/Clip*/Mini*
     uint8_t  channel, pitch, velocity;
     uint32_t noteId;                     // <-- voice identity, fixes §3.3.4
-    float    value;                      // PitchGlide: target cents; Lyric: lyric-table index
-    uint32_t duration;                   // PitchGlide: ticks; 0 otherwise
-    uint8_t  shape;                      // PitchGlide: CurveShape
-};                                       // 32 bytes (static_assert updated from 24)
+    float    value;
+};
 
 struct EventTrack {
     std::span<const ScheduledEvent> events;   // sorted by tick, built ONCE
@@ -680,16 +678,6 @@ replaces. `EngineMessage` carries snapshots, parameter values and transport requ
 through one `SpscRing`. `RenderEngine` keeps at most four snapshots in flight and
 coalesces the rest - a newer snapshot supersedes older waiting ones and the knob turns
 it already contains - so a burst of edits costs one swap and cannot flood the reaper.
-
-**Slide notes and lyrics compile to events, not to voice-side lookups.** `Note.slide`
-and `Note.pitchCurve` (Phase 2 addendum) become `EventKind::PitchGlide` events keyed by
-`noteId`, scheduled at the glide's start tick; a pitch curve of N points is N-1 chained
-glides. `Note.lyric` becomes a `Lyric` event carrying an index into a snapshot-owned
-lyric table (strings never ride in the event). `ScheduledEvent` grows from 24 to 32
-bytes to carry `duration` and `shape`; the per-block walk is unchanged. Because the
-glide is an event on the same sorted track, a seek into the middle of a slide
-re-derives the current pitch offset from the resume cursor (§4.11) rather than
-replaying from the note start. Test: `slide_seek_midway_matches_continuous`.
 
 **The snapshot's shape.** §4.2's `ChannelPlan`/`InsertPlan`/`RoutePlan` spans became the
 render graph's steps and edges. `EventTrack` is immutable; the resume cursor is a
