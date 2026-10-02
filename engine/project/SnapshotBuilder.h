@@ -109,7 +109,6 @@ private:
     struct ChannelEvents;
     struct ClipCacheEntry {
         std::vector<Note> notes;
-        std::vector<NoteExtras> extras;
         std::uint64_t version{0};
         bool seen{false};
     };
@@ -134,9 +133,9 @@ private:
     /// own placements and not every placement in the project.
     [[nodiscard]] PlacementsByChannel collectPlacements(const Project& project) const;
     [[nodiscard]] static std::vector<std::int64_t>
-    signatureOf(const std::vector<Placement>& placements, const Channel* channel);
+    signatureOf(const std::vector<Placement>& placements);
     [[nodiscard]] static std::shared_ptr<const ChannelEvents>
-    flatten(const std::vector<Placement>& placements, const Channel* channel);
+    flatten(const std::vector<Placement>& placements);
 
     std::uint32_t m_sampleRate;
     graph::NodeStore m_nodes;

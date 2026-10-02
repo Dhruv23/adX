@@ -15,12 +15,36 @@
 #include <string>
 #include <string_view>
 
-#include "engine/project/ParamDescriptor.h"
 #include "engine/project/ParamRef.h"
 
 namespace adx::project {
 
 class Project;
+
+enum class Unit : std::uint8_t {
+    Normalized,
+    Hertz,
+    Decibels,
+    Milliseconds,
+    Seconds,
+    Ratio,
+    Semitones,
+    Cents,
+    Percent,
+    Count,
+    Boolean,
+};
+
+enum class ScaleKind : std::uint8_t { Linear, Logarithmic, Stepped };
+
+struct ParamDescriptor {
+    std::string_view name;
+    float minimum{0.0F};
+    float maximum{1.0F};
+    float defaultValue{0.0F};
+    Unit unit{Unit::Normalized};
+    ScaleKind scale{ScaleKind::Linear};
+};
 
 /// Why a path did not resolve, and which characters to underline.
 ///
@@ -72,12 +96,6 @@ public:
     /// ADX1004 warning and the value is kept, because a newer adX's parameter must
     /// survive an older adX's save (FINAL_PLAN §6 rule 4).
     [[nodiscard]] static const ParamDescriptor* describeNamed(std::string_view name) noexcept;
-
-    /// The descriptor for whatever `ref` addresses: the instrument's or effect's own
-    /// table entry for a named parameter, the fixed one otherwise. Null when the name
-    /// is not one its type declares.
-    [[nodiscard]] static const ParamDescriptor* descriptorFor(ParamRef ref,
-                                                              const Project& project) noexcept;
 
     /// Quotes a name for use as a path segment, if it needs quoting.
     [[nodiscard]] static std::string quoteSegment(std::string_view name);

@@ -8,7 +8,6 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -20,19 +19,11 @@
 
 namespace adx::project {
 
-/// Extras for the note at `index` in an AddNotes input. The extras' own `note` field
-/// is ignored: the id does not exist until apply() assigns it.
-struct NoteExtrasAt {
-    std::size_t index{0};
-    NoteExtras extras;
-};
-
 /// Adds notes to one channel's clip in one pattern, creating the clip if it is not
 /// there yet. Note ids are assigned by apply(); the ids on the input are ignored.
 class AddNotes final : public Command {
 public:
-    AddNotes(core::PatternId pattern, core::ChannelId channel, std::vector<Note> notes,
-             std::vector<NoteExtrasAt> extras = {});
+    AddNotes(core::PatternId pattern, core::ChannelId channel, std::vector<Note> notes);
 
     void apply(Project& project) override;
     void revert(Project& project) override;
@@ -49,7 +40,6 @@ private:
     core::PatternId m_pattern;
     core::ChannelId m_channel;
     std::vector<Note> m_notes;
-    std::vector<NoteExtrasAt> m_extras;
     std::vector<core::NoteId> m_created;
     IdMarks m_marks;
     /// True when apply() had to create the clip, so revert() knows to remove it
@@ -72,7 +62,6 @@ private:
     struct Detached {
         std::size_t index{0};
         Note note;
-        NoteExtras extras;
     };
 
     core::PatternId m_pattern;
@@ -142,59 +131,6 @@ private:
     NoteField m_field{NoteField::Velocity};
     double m_value{0.0};
     std::vector<double> m_previous;
-};
-
-/// Which part of a note's extras a SetNoteExtra command replaces.
-enum class NoteExtra : std::uint8_t { Slide, PitchCurve, Lyric };
-
-/// Replaces one part of one note's extras. The three public commands below are this
-/// with the part fixed, so each is one gesture and one history entry (phase_2.md
-/// §4.9) while sharing one implementation of the side table's bookkeeping.
-class SetNoteExtra : public Command {
-public:
-    void apply(Project& project) override;
-    void revert(Project& project) override;
-    [[nodiscard]] DirtyMask dirty() const noexcept override;
-
-protected:
-    SetNoteExtra(core::PatternId pattern, core::ChannelId channel, core::NoteId note,
-                 NoteExtra part, NoteExtras value);
-
-private:
-    core::PatternId m_pattern;
-    core::ChannelId m_channel;
-    core::NoteId m_note;
-    NoteExtra m_part;
-    /// Only the `m_part` member is read.
-    NoteExtras m_value;
-    std::optional<NoteExtras> m_previous;
-};
-
-/// Sets or (with nullopt) clears a note's slide.
-class SetNoteSlide final : public SetNoteExtra {
-public:
-    SetNoteSlide(core::PatternId pattern, core::ChannelId channel, core::NoteId note,
-                 std::optional<NoteSlide> slide);
-    [[nodiscard]] std::string_view name() const noexcept override;
-    [[nodiscard]] CommandId kind() const noexcept override;
-};
-
-/// Replaces a note's pitch curve; an empty curve clears it.
-class SetPitchCurve final : public SetNoteExtra {
-public:
-    SetPitchCurve(core::PatternId pattern, core::ChannelId channel, core::NoteId note,
-                  std::vector<PitchPoint> curve);
-    [[nodiscard]] std::string_view name() const noexcept override;
-    [[nodiscard]] CommandId kind() const noexcept override;
-};
-
-/// Sets a note's lyric; an empty string clears it.
-class SetLyric final : public SetNoteExtra {
-public:
-    SetLyric(core::PatternId pattern, core::ChannelId channel, core::NoteId note,
-             std::string lyric);
-    [[nodiscard]] std::string_view name() const noexcept override;
-    [[nodiscard]] CommandId kind() const noexcept override;
 };
 
 } // namespace adx::project

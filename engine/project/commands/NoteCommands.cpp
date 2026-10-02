@@ -73,10 +73,8 @@ void writeField(Note& note, NoteField field, double value) noexcept {
 
 // --- AddNotes ----------------------------------------------------------------
 
-AddNotes::AddNotes(core::PatternId pattern, core::ChannelId channel, std::vector<Note> notes,
-                   std::vector<NoteExtrasAt> extras)
-    : m_pattern(pattern), m_channel(channel), m_notes(std::move(notes)),
-      m_extras(std::move(extras)) {}
+AddNotes::AddNotes(core::PatternId pattern, core::ChannelId channel, std::vector<Note> notes)
+    : m_pattern(pattern), m_channel(channel), m_notes(std::move(notes)) {}
 
 void AddNotes::apply(Project& project) {
     Pattern* pattern = project.find(m_pattern);
@@ -99,13 +97,6 @@ void AddNotes::apply(Project& project) {
         m_created.push_back(note.id);
         clip->notes.push_back(note);
     }
-    for (const NoteExtrasAt& at : m_extras) {
-        if (at.index < m_created.size() && !at.extras.empty()) {
-            NoteExtras extras = at.extras;
-            extras.note = m_created[at.index];
-            static_cast<void>(clip->setExtras(std::move(extras)));
-        }
-    }
 }
 
 void AddNotes::revert(Project& project) {
@@ -121,9 +112,6 @@ void AddNotes::revert(Project& project) {
     if (NoteClip* clip = pattern->clipFor(m_channel)) {
         std::erase_if(clip->notes, [this](const Note& note) {
             return std::ranges::find(m_created, note.id) != m_created.end();
-        });
-        std::erase_if(clip->extras, [this](const NoteExtras& extras) {
-            return std::ranges::find(m_created, extras.note) != m_created.end();
         });
         if (m_createdClip && clip->notes.empty()) {
             std::erase_if(pattern->noteClips,
@@ -165,10 +153,7 @@ void RemoveNotes::apply(Project& project) {
         if (std::ranges::find(m_ids, clip->notes[i].id) == m_ids.end()) {
             continue;
         }
-        const core::NoteId id = clip->notes[i].id;
-        m_removed.push_back(Detached{.index = i,
-                                     .note = clip->notes[i],
-                                     .extras = clip->setExtras(NoteExtras{.note = id})});
+        m_removed.push_back(Detached{.index = i, .note = clip->notes[i]});
         clip->notes.erase(clip->notes.begin() + static_cast<std::ptrdiff_t>(i));
     }
 }
@@ -181,7 +166,6 @@ void RemoveNotes::revert(Project& project) {
     for (const Detached& detached : std::views::reverse(m_removed)) {
         const auto at = static_cast<std::ptrdiff_t>(std::min(detached.index, clip->notes.size()));
         clip->notes.insert(clip->notes.begin() + at, detached.note);
-        static_cast<void>(clip->setExtras(detached.extras));
     }
     m_removed.clear();
 }
@@ -341,92 +325,6 @@ bool SetNoteValue::coalesceWith(const Command& next) {
     }
     m_value = other.m_value;
     return true;
-}
-
-
-
-// --- SetNoteExtra ------------------------------------------------------------
-
-SetNoteExtra::SetNoteExtra(core::PatternId pattern, core::ChannelId channel, core::NoteId note,
-                           NoteExtra part, NoteExtras value)
-    : m_pattern(pattern), m_channel(channel), m_note(note), m_part(part),
-      m_value(std::move(value)) {}
-
-void SetNoteExtra::apply(Project& project) {
-    NoteClip* clip = clipIn(project, m_pattern, m_channel);
-    if (clip == nullptr ||
-        std::ranges::find(clip->notes, m_note, &Note::id) == clip->notes.end()) {
-        return;
-    }
-    const NoteExtras* existing = clip->extrasFor(m_note);
-    NoteExtras next = existing != nullptr ? *existing : NoteExtras{.note = m_note};
-    switch (m_part) {
-    case NoteExtra::Slide:
-        next.slide = m_value.slide;
-        break;
-    case NoteExtra::PitchCurve:
-        next.pitchCurve = m_value.pitchCurve;
-        std::ranges::stable_sort(next.pitchCurve, {}, [](const PitchPoint& p) { return p.at; });
-        break;
-    case NoteExtra::Lyric:
-        next.lyric = m_value.lyric;
-        break;
-    }
-    m_previous = clip->setExtras(std::move(next));
-}
-
-void SetNoteExtra::revert(Project& project) {
-    NoteClip* clip = clipIn(project, m_pattern, m_channel);
-    if (clip == nullptr || !m_previous.has_value()) {
-        return;
-    }
-    static_cast<void>(clip->setExtras(std::move(*m_previous)));
-    m_previous.reset();
-}
-
-DirtyMask SetNoteExtra::dirty() const noexcept {
-    return dirty::kPatterns;
-}
-
-SetNoteSlide::SetNoteSlide(core::PatternId pattern, core::ChannelId channel, core::NoteId note,
-                           std::optional<NoteSlide> slide)
-    : SetNoteExtra(pattern, channel, note, NoteExtra::Slide,
-                   NoteExtras{.note = note, .slide = slide, .pitchCurve = {}, .lyric = {}}) {}
-
-std::string_view SetNoteSlide::name() const noexcept {
-    return "Set slide";
-}
-
-CommandId SetNoteSlide::kind() const noexcept {
-    return CommandId::kSetNoteSlide;
-}
-
-SetPitchCurve::SetPitchCurve(core::PatternId pattern, core::ChannelId channel,
-                             core::NoteId note, std::vector<PitchPoint> curve)
-    : SetNoteExtra(pattern, channel, note, NoteExtra::PitchCurve,
-                   NoteExtras{.note = note, .slide = {}, .pitchCurve = std::move(curve),
-                              .lyric = {}}) {}
-
-std::string_view SetPitchCurve::name() const noexcept {
-    return "Set pitch curve";
-}
-
-CommandId SetPitchCurve::kind() const noexcept {
-    return CommandId::kSetPitchCurve;
-}
-
-SetLyric::SetLyric(core::PatternId pattern, core::ChannelId channel, core::NoteId note,
-                   std::string lyric)
-    : SetNoteExtra(pattern, channel, note, NoteExtra::Lyric,
-                   NoteExtras{.note = note, .slide = {}, .pitchCurve = {},
-                              .lyric = std::move(lyric)}) {}
-
-std::string_view SetLyric::name() const noexcept {
-    return "Set lyric";
-}
-
-CommandId SetLyric::kind() const noexcept {
-    return CommandId::kSetLyric;
 }
 
 } // namespace adx::project

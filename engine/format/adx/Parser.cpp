@@ -170,7 +170,6 @@ private:
     std::vector<project::Breakpoint> parseBreakpoints(const BlockNode& node);
     void parsePlaylist(Section& section);
     void parsePlaylistItem(core::PlaylistTrackId track, const BlockNode& node);
-    void parseClipEnvelope(const BlockNode& node, project::PlaylistItem& item);
     void parseMarkers(Section& section);
 
     [[nodiscard]] bool resolveInsert(std::string_view text, Span span, core::InsertId& out);
@@ -926,7 +925,6 @@ void V2Parser::parseNotesBlock(core::PatternId pattern, const BlockNode& node) {
     const core::Ticks patternLength = owner != nullptr ? owner->length : core::Ticks{0};
 
     std::vector<project::Note> notes;
-    std::vector<project::NoteExtrasAt> extras;
     notes.reserve(node.children.size());
     for (const BlockNode& child : node.children) {
         Line& line = lines()[child.line];
@@ -958,29 +956,10 @@ void V2Parser::parseNotesBlock(core::PatternId pattern, const BlockNode& node) {
                        "this note starts past the end of the pattern; kept");
         }
 
-        project::NoteExtras extra;
         for (std::size_t i = 4; i < fields.size(); ++i) {
             const Token& token = fields[i];
             if (!token.isKeyValue()) {
                 m_diag.add(code::kWrongFieldCount, token.span, "expected key=value");
-                continue;
-            }
-            // The three extensions are not numbers, so they are taken before the
-            // numeric keys below (phase_4.md §4.0).
-            if (token.text == "slide") {
-                project::NoteSlide slide;
-                if (parseSlide(token.value, m_project.tempo, token.valueSpan, m_diag, slide)) {
-                    extra.slide = slide;
-                }
-                continue;
-            }
-            if (token.text == "bend") {
-                (void)parseBend(token.value, m_project.tempo, token.valueSpan, m_diag,
-                                extra.pitchCurve);
-                continue;
-            }
-            if (token.text == "lyric") {
-                extra.lyric = token.value;
                 continue;
             }
             double value = 0.0;
@@ -1002,15 +981,11 @@ void V2Parser::parseNotesBlock(core::PatternId pattern, const BlockNode& node) {
                            "unknown key '" + token.text + "' on a note");
             }
         }
-        if (!extra.empty()) {
-            extras.push_back(project::NoteExtrasAt{.index = notes.size(), .extras = std::move(extra)});
-        }
         notes.push_back(note);
         line.claimed = true;
     }
 
-    execute(std::make_unique<project::AddNotes>(pattern, channel, std::move(notes),
-                                                std::move(extras)));
+    execute(std::make_unique<project::AddNotes>(pattern, channel, std::move(notes)));
     header.claimed = true;
 }
 
@@ -1250,53 +1225,8 @@ void V2Parser::parsePlaylistItem(core::PlaylistTrackId track, const BlockNode& n
         }
     }
 
-    if (!std::holds_alternative<project::AutomationRef>(item.content)) {
-        // An automation item's children are its breakpoints; anything else's are its
-        // clip envelopes (phase_4.md §4.0).
-        for (const BlockNode& child : node.children) {
-            parseClipEnvelope(child, item);
-        }
-    }
-
     execute(std::make_unique<project::AddPlaylistItem>(track, item));
     line.claimed = true;
-}
-
-void V2Parser::parseClipEnvelope(const BlockNode& node, project::PlaylistItem& item) {
-    Line& header = lines()[node.line];
-    const std::vector<Token> tokens = tokenize(header, m_diag);
-    if (tokens.empty() || tokens.front().text != "ENVELOPE") {
-        m_diag.add(code::kUnknownKey, header.contentSpan(),
-                   "unrecognised line under a playlist item; preserved on save");
-        return;
-    }
-    if (tokens.size() != 2) {
-        m_diag.add(code::kWrongFieldCount, header.contentSpan(),
-                   "ENVELOPE names exactly one target: gain, pan, pitch or a parameter path");
-        return;
-    }
-    project::ClipEnvelope envelope;
-    if (!project::clipTargetFromString(tokens[1].text, envelope.local)) {
-        envelope.local = project::ClipTarget::Param;
-        envelope.targetPath = tokens[1].text;
-        const project::ParamResolution resolved =
-            project::ParamRegistry::resolve(envelope.targetPath, m_project);
-        if (resolved.ok()) {
-            envelope.target = resolved.ref;
-        } else {
-            m_diag.add(code::kUnresolvedParamPath,
-                       subSpan(tokens[1].span, resolved.segmentOffset, resolved.segmentLength),
-                       "'" + envelope.targetPath + "' does not name a parameter that exists");
-        }
-    }
-    if (node.children.empty()) {
-        m_diag.add(code::kEmptyBlock, header.contentSpan(),
-                   "ENVELOPE has no indented body; breakpoints must be indented under it");
-    }
-    envelope.points = parseBreakpoints(node);
-    std::ranges::stable_sort(envelope.points, {}, &project::Breakpoint::at);
-    item.envelopes.push_back(std::move(envelope));
-    header.claimed = true;
 }
 
 void V2Parser::run() {

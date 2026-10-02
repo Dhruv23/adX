@@ -34,57 +34,7 @@ NoteClip* Pattern::clipFor(core::ChannelId channel) noexcept {
     return match == noteClips.end() ? nullptr : &*match;
 }
 
-const NoteExtras* NoteClip::extrasFor(core::NoteId note) const noexcept {
-    const auto match = std::ranges::lower_bound(extras, note.value, {},
-                                                [](const NoteExtras& e) { return e.note.value; });
-    return match != extras.end() && match->note == note ? &*match : nullptr;
-}
-
-NoteExtras NoteClip::setExtras(NoteExtras value) {
-    const auto match = std::ranges::lower_bound(extras, value.note.value, {},
-                                                [](const NoteExtras& e) { return e.note.value; });
-    NoteExtras previous{.note = value.note, .slide = {}, .pitchCurve = {}, .lyric = {}};
-    if (match != extras.end() && match->note == value.note) {
-        previous = std::move(*match);
-        if (value.empty()) {
-            extras.erase(match);
-        } else {
-            *match = std::move(value);
-        }
-    } else if (!value.empty()) {
-        extras.insert(match, std::move(value));
-    }
-    return previous;
-}
-
 // --- Playlist ----------------------------------------------------------------
-
-const char* toString(ClipTarget target) noexcept {
-    switch (target) {
-    case ClipTarget::Gain:
-        return "gain";
-    case ClipTarget::Pan:
-        return "pan";
-    case ClipTarget::PitchCents:
-        return "pitch";
-    case ClipTarget::Param:
-        break;
-    }
-    return "";
-}
-
-bool clipTargetFromString(std::string_view name, ClipTarget& out) noexcept {
-    if (name == "gain") {
-        out = ClipTarget::Gain;
-    } else if (name == "pan") {
-        out = ClipTarget::Pan;
-    } else if (name == "pitch") {
-        out = ClipTarget::PitchCents;
-    } else {
-        return false;
-    }
-    return true;
-}
 
 const PlaylistTrack* Playlist::find(core::PlaylistTrackId id) const noexcept {
     return findById(tracks, id);
