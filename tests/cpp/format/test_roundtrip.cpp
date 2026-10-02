@@ -106,8 +106,8 @@ TEST_CASE("document_byte_identical_roundtrip corpus", "[format][roundtrip]") {
 
 TEST_CASE("document_byte_identical_roundtrip fuzz", "[format][roundtrip]") {
     // Fixed seed, fixed case count: fast and deterministic, so this runs on every CI
-    // build rather than only in a nightly job. The nightly random run is a separate
-    // thing and does not replace this one.
+    // build rather than only in the phase-completion full check. That check's random
+    // run is a separate thing and does not replace this one.
     std::mt19937 rng(20260913U);
     for (int i = 0; i < 10000; ++i) {
         const std::string text = generate(rng);
@@ -214,9 +214,10 @@ TEST_CASE("parser_no_exceptions_on_fuzz 100k", "[format][roundtrip][.slow]") {
 }
 
 TEST_CASE("parser_fuzz_timed", "[format][roundtrip][.fuzz]") {
-    // The nightly run (Phase 2's P2-1). The fixed-seed corpus above covers the same
-    // inputs on every build; this one explores new ones, from a seed that is different
-    // every night and printed so a failure can be replayed exactly:
+    // The full check's run (Phase 2's P2-1; .github/workflows/full-check.yml). The
+    // fixed-seed corpus above covers the same inputs on every build; this one explores
+    // new ones, from a seed that is different every run and printed so a failure can be
+    // replayed exactly:
     //
     //     ADX_FUZZ_SEED=<seed> ADX_FUZZ_SECONDS=60 adx_tests "[.fuzz]"
     //

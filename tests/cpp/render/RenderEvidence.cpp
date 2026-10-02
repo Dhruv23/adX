@@ -16,8 +16,9 @@ const RenderEvidence& loadEvidence() {
         // The whole arrangement plus a quarter second of release in optimised builds.
         // Debug renders the first four seconds - ~13k of the notes - because a Debug
         // build of 400 nodes runs at a fraction of real time, and the realtime half of
-        // this test cannot run faster than the clock anyway. The nightly job sets
-        // ADX_FULL_EVIDENCE and renders the whole thing in Debug too (phase_3.md §10).
+        // this test cannot run faster than the clock anyway. Set ADX_FULL_EVIDENCE to
+        // render the whole thing in Debug too, as the phase-completion local run does
+        // (plans/STATE.md, "Phase completion").
         const std::int64_t whole =
             project.tempo.toSamples(project.contentLength(), 48000).value + 12000;
         const bool full = optimisedBuild() || environment("ADX_FULL_EVIDENCE").has_value();

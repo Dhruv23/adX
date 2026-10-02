@@ -27,6 +27,20 @@ either fixing them or explicitly re-carrying them forward with a reason.
 4. Set the same phase's row in [FINAL_PLAN.md](../FINAL_PLAN.md) §10 to Done
    with the date. Both files must agree; this file is the working ledger, §10 is
    the permanent record.
+5. **Phase completion.** Per-push CI (`.github/workflows/ci.yml`) is deliberately
+   partial, so a phase is not done until the parts it skips have passed too:
+   - **Locally, in Debug:** the `[.slow]` suite with the whole Phase 3 gate,
+     which per-push CI runs only in the optimised builds:
+     `ADX_FULL_EVIDENCE=1 ctest --preset windows-x64-debug -L slow`. Record the result.
+   - **In CI, the full check** (`.github/workflows/full-check.yml`): clang-tidy over
+     every file in Debug and Release, and the 10-minute loader fuzz. Push the phase's
+     tag to run it (`git tag phase-N && git push origin phase-N`; the tag goes on the
+     commit that marks the phase done), and record the run id.
+
+   There is no nightly run. Per push, clang-tidy checks only the files a change can
+   reach, and a change touching only `plans/` or Markdown runs no CI at all (except
+   `docs/adx-format-v2.md`, which a test reads). Set 2026-10-02, at the user's
+   request: per-push runs had reached ~30 minutes, half of it full clang-tidy.
 
 ### When you start a phase
 
@@ -352,8 +366,10 @@ P1-1, P2-2, P2-3, P2-4 and P2-5 re-carried with reasons.
 
 - **P2-1** · **Observed green by manual dispatch** · Nightly run 36950606211 (`c628ff0`,
   `workflow_dispatch`) passed: the 10-minute mutation fuzz and the Phase 3 gate in
-  Debug. The cron trigger (06:17 UTC) has not yet fired on its own; close this when
-  one scheduled run is seen green.
+  Debug. **2026-10-02: the nightly workflow is gone** (see "When you finish a phase",
+  step 5). The fuzz moved to `full-check.yml`, run per completed phase; the Debug gate
+  moved to the local phase-completion run. Fixed when: the first `full-check.yml` run
+  is seen green.
 
 - **P3-1** · The master can exceed 0 dBFS. Nothing limits it - the master limiter is
   FINAL_PLAN §5.2, Phase 4's - and dense projects of test tones clip:

@@ -5,7 +5,7 @@ resolves the same pinned clang-format and clang-tidy binaries CI uses rather tha
 whatever LLVM happens to be on PATH.
 
     python tools/lint.py format [--check]
-    python tools/lint.py tidy --build-dir build/windows-x64-debug
+    python tools/lint.py tidy --build-dir build/windows-x64-debug [--changed-since REF]
     python tools/lint.py headers
     python tools/lint.py format-safety
     python tools/lint.py positions
@@ -345,18 +345,109 @@ def _transitive_banned_includes(banned: set[str]) -> list[tuple[str, str, str]]:
     return sorted((where, banned_header, root) for (where, banned_header), root in findings.items())
 
 
+#: Changes that can alter clang-tidy's verdict on files nobody touched: its
+#: configuration, this driver, the compile flags, and the pinned clang-tidy version
+#: (pyproject.toml). Any of them makes a --changed-since run a full one.
+_TIDY_FULL_RUN_TRIGGERS = (
+    ".clang-tidy",
+    ".clang-tidy-rt",
+    "tools/lint.py",
+    "CMakeLists.txt",
+    "CMakePresets.json",
+    "pyproject.toml",
+    "cmake/",
+)
+
+
+def _changed_paths(ref: str) -> list[str] | None:
+    """Repo-relative paths that differ between `ref` and the working tree, or None
+    when `ref` does not name a commit here (a new branch's all-zero `before`, or a
+    force-push that dropped it), which callers treat as "check everything"."""
+    resolved = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", ref + "^{commit}"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if resolved.returncode != 0:
+        return None
+    diff = subprocess.run(
+        ["git", "diff", "--name-only", resolved.stdout.strip()],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return [line for line in diff.stdout.splitlines() if line]
+
+
+def _local_include_closure(source: Path, cache: dict[Path, frozenset[str]]) -> frozenset[str]:
+    """Every first-party file `source` reaches through #include "...", itself included.
+
+    Includes resolve from the repository root, as the rest of this script assumes,
+    falling back to the including file's own directory.
+    """
+    if source in cache:
+        return cache[source]
+    seen: set[Path] = set()
+    pending = [source]
+    while pending:
+        current = pending.pop()
+        if current in seen or not current.is_file():
+            continue
+        seen.add(current)
+        for line in current.read_text(encoding="utf-8").splitlines():
+            local = _INCLUDE_LOCAL.match(line)
+            if not local:
+                continue
+            for candidate in (REPO_ROOT / local.group(1), current.parent / local.group(1)):
+                if candidate.is_file():
+                    pending.append(candidate.resolve())
+                    break
+    closure = frozenset(_relative(path) for path in seen)
+    cache[source] = closure
+    return closure
+
+
+def _tidy_selection(files: list[Path], ref: str) -> tuple[list[Path], str]:
+    """The translation units a change since `ref` can affect, and why.
+
+    A unit is selected when it, or any first-party header it includes, changed - a
+    header's findings are reported through the units that compile it.
+    """
+    changed = _changed_paths(ref)
+    if changed is None:
+        return files, f"{ref} is not a commit here; checking everything"
+    for path in changed:
+        for trigger in _TIDY_FULL_RUN_TRIGGERS:
+            if path == trigger or (trigger.endswith("/") and path.startswith(trigger)):
+                return files, f"{path} changed; checking everything"
+    changed_cpp = {path for path in changed if path.endswith(_CPP_SUFFIXES)}
+    cache: dict[Path, frozenset[str]] = {}
+    selected = [path for path in files if _local_include_closure(path, cache) & changed_cpp]
+    return selected, f"{len(changed_cpp)} changed C++ file(s) since {ref}"
+
+
 def cmd_tidy(args: argparse.Namespace) -> int:
     """Run clang-tidy over the first-party half of the compile database.
 
     The realtime ban list is appended for files under RT_PATHS. clang-tidy's
     --checks argument appends to the value read from .clang-tidy, so the
     project-wide set stays in force and the bans are added on top of it.
+
+    With --changed-since, only the translation units a change can affect are
+    checked; the banned-include walk below always covers the whole tree.
     """
     clang_tidy = _find_tool("clang-tidy")
     build_dir = (REPO_ROOT / args.build_dir).resolve()
     files = _compile_database_entries(build_dir)
     if not files:
         return _fail(f"no first-party sources in {_relative(build_dir)}/compile_commands.json")
+    total = len(files)
+    if args.changed_since:
+        files, reason = _tidy_selection(files, args.changed_since)
+        print(f"clang-tidy: {len(files)} of {total} files selected ({reason})")
 
     rt_checks = _tidy_checks_from(REPO_ROOT / ".clang-tidy-rt")
 
@@ -373,7 +464,7 @@ def cmd_tidy(args: argparse.Namespace) -> int:
         commands.append(command)
         labels.append(relative_path)
 
-    failures = _run_parallel(commands, labels)
+    failures = _run_parallel(commands, labels) if commands else 0
     if failures:
         return _fail(f"clang-tidy: {failures} of {len(files)} files have findings")
 
@@ -519,6 +610,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--build-dir",
         default="build/windows-x64-debug",
         help="directory holding compile_commands.json (default: %(default)s)",
+    )
+    tidy_parser.add_argument(
+        "--changed-since",
+        metavar="REF",
+        help="check only the files a change since REF can affect (CI's per-push run)",
     )
 
     subparsers.add_parser("headers", help="the 500-line header limit")

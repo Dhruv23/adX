@@ -6,9 +6,26 @@ name: CI
 # Each gate has been deliberately broken once and observed to turn this workflow
 # red; see plans/STATE.md, Phase 0.
 
+# A change that touches only notes - the plans/ ledger, or Markdown anywhere - builds
+# nothing and runs nothing. docs/adx-format-v2.md is the exception: the diagnostic-code
+# test reads it. (`paths` rather than `paths-ignore`, because only `paths` lets a
+# later pattern re-include a file an earlier one excluded.)
+#
+# This is the per-push gate. The full check - clang-tidy over every file, and the
+# loader fuzz - is .github/workflows/full-check.yml, run when a phase completes.
 on:
   push:
+    paths:
+      - '**'
+      - '!plans/**'
+      - '!**.md'
+      - 'docs/adx-format-v2.md'
   pull_request:
+    paths:
+      - '**'
+      - '!plans/**'
+      - '!**.md'
+      - 'docs/adx-format-v2.md'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -27,15 +44,32 @@ jobs:
           # runs at optimised speed, which is the configuration a real session
           # resembles. Release has the guard compiled out by design and is here to
           # prove the code still builds and runs without it.
+          #
+          # The [.slow] suite (the 60 s realtime gate among it) runs per push only in
+          # the optimised builds. In Debug it runs locally when a phase completes
+          # (plans/STATE.md, "Phase completion").
+          #
+          # clang-tidy runs in Debug and Release only. RelWithDebInfo defines NDEBUG
+          # exactly as Release does - the macro the Phase 2 Release-only finding hung
+          # on - so tidying it as well checked the same code twice.
           - build_type: Debug
             preset: windows-x64-debug
+            ctest_args: -LE slow
+            tidy: true
           - build_type: RelWithDebInfo
             preset: windows-x64-relwithdebinfo
+            ctest_args: ''
+            tidy: false
           - build_type: Release
             preset: windows-x64-release
+            ctest_args: ''
+            tidy: true
 
     steps:
+      # Full history, so clang-tidy can diff against the push's previous head.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -68,11 +102,23 @@ jobs:
         id: build
         run: cmake --build --preset ${{ matrix.preset }}
 
-      # 4. C++ tests.
+      # 4. The Python package, before any test: it is also what installs the pinned
+      # ruff, mypy and clang-tidy. Installed after ctest, one failing test skipped the
+      # install and every lint gate below then failed for want of its tool, which reads
+      # as five broken gates when there is one.
+      #
+      # This also builds the bindings a second time through scikit-build-core, which
+      # is the path a user's `pip install` takes and therefore the one that has to
+      # keep working.
+      - name: Install the Python package
+        id: install
+        run: pip install -e ".[dev]"
+
+      # 5. C++ tests.
       - name: ctest
         shell: bash
         run: |
-          ctest --preset ${{ matrix.preset }} --output-on-failure 2>&1 | tee ctest.log
+          ctest --preset ${{ matrix.preset }} ${{ matrix.ctest_args }} --output-on-failure 2>&1 | tee ctest.log
           exit "${PIPESTATUS[0]}"
 
       # Job logs need a token to read; annotations do not. Surface what failed.
@@ -82,37 +128,40 @@ jobs:
         run: |
           grep -n -E 'Failed|Timeout|FAILED|REQUIRE|with expansion|worst|xrun' ctest.log | head -40 | while IFS= read -r l; do echo "::error title=ctest::${l:0:400}"; done
 
-      # 5. Python package and tests. This also builds the bindings a second time
-      # through scikit-build-core, which is the path a user's `pip install` takes
-      # and therefore the one that has to keep working.
-      - name: Install the Python package
-        run: pip install -e ".[dev]"
-
+      # 6. Python tests. Independent of ctest, so a C++ failure does not hide them.
       - name: pytest
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pytest
 
-      # Steps 6-10 are the lint gates, and they all carry `if: !cancelled()`.
+      # Steps 7-13 are the lint gates, and they all carry `if: !cancelled()`.
       #
       # By default Actions stops a job at the first failing step, which means a run
       # reports one broken gate and hides the rest - a developer then needs one push
-      # per problem to find out how many there are. These five are independent of each
+      # per problem to find out how many there are. These are independent of each
       # other, so every one reports on every run. (clang-tidy is the exception: it
       # reads the compile database, so it is conditioned on the build having
       # succeeded rather than merely not cancelled.)
       #
       # The job still fails if any of them fails. There is no warning tier.
 
-      # 6. Formatting.
+      # 7. Formatting.
       - name: clang-format
         if: ${{ !cancelled() }}
         run: python tools/lint.py format --check
 
-      # 7. Static analysis, including the realtime ban list on realtime paths.
+      # 8. Static analysis, including the realtime ban list on realtime paths. Per
+      # push it checks only the files the change can reach - a changed file, or one
+      # including a changed header - against the push's previous head (a pull
+      # request's base). A change to the tidy config, the driver, the build or the
+      # pinned clang-tidy makes it check everything, as does a previous head this
+      # clone does not have. full-check.yml checks every file.
       - name: clang-tidy
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: python tools/lint.py tidy --build-dir build/${{ matrix.preset }}
+        if: ${{ matrix.tidy && !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          TIDY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: python tools/lint.py tidy --build-dir build/${{ matrix.preset }} --changed-since $env:TIDY_BASE
 
-      # 8. Python lint. Two steps rather than one: in PowerShell only the last
+      # 9. Python lint. Two steps rather than one: in PowerShell only the last
       # command in a multi-line `run` decides the step's exit status, so chaining
       # them would silently swallow a ruff check failure.
       - name: ruff check
@@ -123,22 +172,22 @@ jobs:
         if: ${{ !cancelled() }}
         run: ruff format --check app tests/python tools
 
-      # 9. Python types.
+      # 10. Python types.
       - name: mypy
         if: ${{ !cancelled() }}
         run: mypy --strict app
 
-      # 10. The one hard limit no linter checks.
+      # 11. The one hard limit no linter checks.
       - name: Header length
         if: ${{ !cancelled() }}
         run: python tools/lint.py headers
 
-      # 11. Phase 2: no exception-based number parsing in the format layer.
+      # 12. Phase 2: no exception-based number parsing in the format layer.
       - name: Format safety
         if: ${{ !cancelled() }}
         run: python tools/lint.py format-safety
 
-      # 12. Phase 3: the Phase 11 checkpoint. No engine code outside engine/transport/
+      # 13. Phase 3: the Phase 11 checkpoint. No engine code outside engine/transport/
       # may own a playback position - time is a set of sources, passed as parameters.
       - name: No global position
         if: ${{ !cancelled() }}

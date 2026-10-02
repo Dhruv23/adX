@@ -1,0 +1,90 @@
+name: Full check
+
+# The work too slow, or too random, for every push, run once per completed phase
+# rather than on a schedule. There is no nightly run.
+#
+#   tidy   clang-tidy over every first-party file, in Debug and Release. The per-push
+#          run (ci.yml) checks only the files a change can reach; this is the run that
+#          would catch a finding the change-based selection missed.
+#   fuzz   the whole .adx loader over randomly mutated input for ten minutes, from a
+#          seed that is new every run and printed in the log (Phase 2's P2-1). A crash
+#          fails the step; a hang is caught by timeout-minutes.
+#
+# The [.slow] suite in Debug, which this file's predecessor (nightly.yml) also ran, is
+# run locally at phase completion instead (plans/STATE.md, "Phase completion").
+#
+# Trigger it by pushing the phase's tag - `git tag phase-4 && git push origin phase-4`
+# - or by hand from the Actions tab.
+
+on:
+  push:
+    tags:
+      - 'phase-*'
+  workflow_dispatch:
+
+jobs:
+  tidy:
+    name: clang-tidy, every file (${{ matrix.build_type }})
+    runs-on: windows-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - build_type: Debug
+            preset: windows-x64-debug
+          - build_type: Release
+            preset: windows-x64-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - uses: actions/cache@v4
+        with:
+          path: .deps
+          key: deps-${{ runner.os }}-${{ hashFiles('cmake/AdxDependencies.cmake') }}
+          restore-keys: |
+            deps-${{ runner.os }}-
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+      # For the pinned clang-tidy (pyproject.toml's dev extra).
+      - name: Install the Python package
+        run: pip install -e ".[dev]"
+      - name: clang-tidy
+        run: python tools/lint.py tidy --build-dir build/${{ matrix.preset }}
+
+  fuzz:
+    name: fuzz (RelWithDebInfo, 10 min)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - uses: actions/cache@v4
+        with:
+          path: .deps
+          key: deps-${{ runner.os }}-${{ hashFiles('cmake/AdxDependencies.cmake') }}
+          restore-keys: |
+            deps-${{ runner.os }}-
+      - name: Configure
+        run: cmake --preset windows-x64-relwithdebinfo
+      - name: Build
+        run: cmake --build --preset windows-x64-relwithdebinfo
+      - name: Fuzz the loader
+        timeout-minutes: 15
+        env:
+          ADX_FUZZ_SECONDS: '600'
+        run: build/windows-x64-relwithdebinfo/tests/cpp/adx_tests.exe "[.fuzz]"
