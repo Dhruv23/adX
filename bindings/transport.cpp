@@ -15,7 +15,9 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
+#include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
 #include "bindings/Bindings.h"
@@ -167,6 +169,35 @@ void defineEngine(py::module_& m) {
             py::arg("project"), py::arg("path"), py::arg("value"),
             "A knob turn: the edit goes into the project and its undo history, and the value "
             "straight to the audio thread, with no rebuild.")
+        .def(
+            "levels",
+            [](EngineHandle& self) {
+                // One call per UI frame for every strip (P3-7, phase_5.md §4.9): an
+                // N x 9 float32 array, one row per insert with a meter -
+                // insert id, peak L/R, RMS L/R (linear), momentary, short-term and
+                // integrated loudness (LUFS; -200 is silence), true peak (linear, the
+                // master's only). GIL: trivial - a copy of a few dozen floats per strip.
+                std::vector<adx::render::RenderEngine::StripLevel> strips;
+                self.engine->levels(strips);
+                py::array_t<float> out({static_cast<py::ssize_t>(strips.size()), py::ssize_t{9}});
+                auto rows = out.mutable_unchecked<2>();
+                for (std::size_t i = 0; i < strips.size(); ++i) {
+                    const adx::rt::LevelFrame& f = strips[i].frame;
+                    const auto r = static_cast<py::ssize_t>(i);
+                    rows(r, 0) = static_cast<float>(strips[i].insert.value);
+                    rows(r, 1) = f.peakLeft;
+                    rows(r, 2) = f.peakRight;
+                    rows(r, 3) = f.rmsLeft;
+                    rows(r, 4) = f.rmsRight;
+                    rows(r, 5) = f.momentary;
+                    rows(r, 6) = f.shortTerm;
+                    rows(r, 7) = f.integrated;
+                    rows(r, 8) = f.truePeak;
+                }
+                return out;
+            },
+            "Every strip's latest meter reading, in one call: an N x 9 array of insert id, "
+            "peak L/R, RMS L/R, momentary/short-term/integrated LUFS, and true peak.")
         .def(
             "pump", [](EngineHandle& self) { self.engine->pump(); },
             "Housekeeping for a UI timer: reclaim retired snapshots, resend anything the queue "

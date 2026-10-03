@@ -367,6 +367,38 @@ SetSlotValue::SetSlotValue(core::SlotId id, SlotField field, double value)
 SetSlotValue::SetSlotValue(core::SlotId id, std::string paramName, double value)
     : m_id(id), m_param(std::move(paramName)), m_value(value) {}
 
+SetSlotSidechain::SetSlotSidechain(core::SlotId id, core::InsertId key) : m_id(id), m_key(key) {}
+
+void SetSlotSidechain::apply(Project& project) {
+    Slot* slot = project.mixer.findSlot(m_id);
+    m_applied = slot != nullptr;
+    if (slot != nullptr) {
+        m_previous = slot->sidechain;
+        slot->sidechain = m_key;
+    }
+}
+
+void SetSlotSidechain::revert(Project& project) {
+    Slot* slot = project.mixer.findSlot(m_id);
+    if (slot != nullptr && m_applied) {
+        slot->sidechain = m_previous;
+    }
+    m_applied = false;
+}
+
+std::string_view SetSlotSidechain::name() const noexcept {
+    return "Set sidechain";
+}
+
+CommandId SetSlotSidechain::kind() const noexcept {
+    return CommandId::kSetSlotSidechain;
+}
+
+DirtyMask SetSlotSidechain::dirty() const noexcept {
+    // A new edge in the graph.
+    return dirty::kMixer | dirty::kRouting;
+}
+
 void SetSlotValue::apply(Project& project) {
     Slot* slot = project.mixer.findSlot(m_id);
     if (slot == nullptr) {

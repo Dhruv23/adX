@@ -5,12 +5,14 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "engine/effects/Factory.h"
 #include "engine/graph/nodes/ChannelNode.h"
 #include "engine/graph/nodes/InsertNode.h"
 #include "engine/graph/nodes/SendNode.h"
 #include "engine/graph/nodes/SlotNode.h"
-#include "engine/graph/nodes/TestToneNode.h"
+#include "engine/instruments/Factory.h"
 #include "engine/project/Project.h"
+#include "engine/project/TypeCatalog.h"
 
 namespace adx::graph {
 
@@ -34,37 +36,67 @@ template<class Make> std::shared_ptr<Node> NodeStore::getOrMake(Key key, Make ma
     return entry.node;
 }
 
-std::shared_ptr<Node> NodeStore::channel(const project::Channel& channel) {
+std::shared_ptr<Node> NodeStore::channel(const project::Channel& channel,
+                                         const project::Resources& resources) {
     const Key key{Kind::Channel, channel.id.value};
     // A channel node is reusable only while the things its voice pool was sized and
     // configured from are unchanged. Anything else - a new polyphony, a new steal
-    // mode - is a new pool, and a new pool is a new node.
+    // mode - is a new pool, and a new pool is a new node. The instrument type is part
+    // of it (P3-2), and so is an instrument's structure: a Sampler's zones and the
+    // files they resolve to (instruments::configMatches).
+    const instruments::InstrumentContext context{.resources = &resources, .pool = m_pool};
     const auto found = m_nodes.find(key);
     if (found != m_nodes.end() && found->second.node) {
         const auto* existing = static_cast<const ChannelNode*>(found->second.node.get());
-        if (existing->maxPolyphony() != std::max<std::uint16_t>(channel.maxPolyphony, 1) ||
-            existing->stealMode() != channel.stealMode) {
+        if (!instruments::configMatches(*existing, channel, context)) {
             m_nodes.erase(found);
         }
     }
-    // Every instrument type is a test tone until Phase 4 gives the types meaning.
-    return getOrMake(key, [&channel] {
-        return std::make_shared<TestToneNode>(channel.id.value, channel.maxPolyphony,
-                                              channel.stealMode);
-    });
+    return getOrMake(
+        key, [&channel, &context] { return instruments::makeInstrument(channel, context); });
 }
 
 std::shared_ptr<Node> NodeStore::fader(core::InsertId id) {
     return getOrMake(Key{Kind::Fader, id.value}, [] { return std::make_shared<InsertNode>(); });
 }
 
-std::shared_ptr<Node> NodeStore::meter(core::InsertId id) {
-    return getOrMake(Key{Kind::Meter, id.value}, [] { return std::make_shared<MeterNode>(); });
+std::shared_ptr<Node> NodeStore::meter(core::InsertId id, bool master) {
+    const Key key{Kind::Meter, id.value};
+    // Whether a meter measures true peak is fixed at prepare: the insert becoming or
+    // ceasing to be the master is a new meter.
+    const auto found = m_nodes.find(key);
+    if (found != m_nodes.end() && found->second.node &&
+        static_cast<const MeterNode*>(found->second.node.get())->truePeak() != master) {
+        m_nodes.erase(found);
+    }
+    return getOrMake(key, [master] {
+        auto node = std::make_shared<MeterNode>();
+        node->setTruePeak(master);
+        return node;
+    });
 }
 
-std::shared_ptr<Node> NodeStore::slot(core::SlotId id) {
-    // Every slot is the identity until Phase 4 gives slot types an effect.
-    return getOrMake(Key{Kind::Slot, id.value}, [] { return std::make_shared<SlotNode>(); });
+void NodeStore::forEachMeter(
+    const std::function<void(core::InsertId, const MeterNode&)>& visit) const {
+    for (const auto& [key, entry] : m_nodes) {
+        if (key.first == Kind::Meter && entry.node) {
+            visit(core::InsertId{key.second}, static_cast<const MeterNode&>(*entry.node));
+        }
+    }
+}
+
+std::shared_ptr<Node> NodeStore::slot(const project::Slot& slot) {
+    const Key key{Kind::Slot, slot.id.value};
+    // A slot whose effect type changed is a new node: the old effect's state means
+    // nothing to the new one.
+    const auto found = m_nodes.find(key);
+    if (found != m_nodes.end() && found->second.node) {
+        const auto* existing = static_cast<const SlotNode*>(found->second.node.get());
+        if (!effects::configMatches(*existing, slot)) {
+            m_nodes.erase(found);
+        }
+    }
+    return getOrMake(key, [&slot] { return effects::makeEffect(slot); });
 }
 
 std::shared_ptr<Node> NodeStore::send(core::SendId id) {
@@ -178,6 +210,36 @@ template<class Map> auto* findIn(const Map& map, std::uint32_t id) {
     return found == map.end() ? nullptr : found->second;
 }
 
+/// A named parameter's value, or the component of its curve a binding asks for. A
+/// parameter written without `curve=` has the linear curve's components.
+float valueOrCurvePart(const project::ParamValue& value, const ParamBinding& binding) {
+    using project::CurvePart;
+    if (binding.part == CurvePart::None) {
+        return static_cast<float>(value.value);
+    }
+    if (!value.hasCurve) {
+        return binding.fallback;
+    }
+    const core::Curve& curve = value.curve;
+    switch (binding.part) {
+    case CurvePart::Kind:
+        return static_cast<float>(curve.kind);
+    case CurvePart::Tension:
+        return curve.tension;
+    case CurvePart::C1x:
+        return curve.c1x;
+    case CurvePart::C1y:
+        return curve.c1y;
+    case CurvePart::C2x:
+        return curve.c2x;
+    case CurvePart::C2y:
+        return curve.c2y;
+    case CurvePart::None:
+        break;
+    }
+    return binding.fallback;
+}
+
 float resolve(const ParamBinding& binding, const Lookup& lookup) {
     switch (binding.source) {
     case ParamSource::ChannelVolume:
@@ -199,9 +261,10 @@ float resolve(const ParamBinding& binding, const Lookup& lookup) {
         case ParamSource::ChannelPitch:
             return channel->pitchOffsetCents;
         default:
-            return binding.index < channel->instrument.params.size()
-                       ? static_cast<float>(channel->instrument.params[binding.index].value)
-                       : 0.0F;
+            if (binding.index >= channel->instrument.params.size()) {
+                return binding.fallback;
+            }
+            return valueOrCurvePart(channel->instrument.params[binding.index], binding);
         }
     }
     case ParamSource::InsertGain:
@@ -241,7 +304,7 @@ float resolve(const ParamBinding& binding, const Lookup& lookup) {
         }
         return binding.index < slot->params.size()
                    ? static_cast<float>(slot->params[binding.index].value)
-                   : 0.0F;
+                   : binding.fallback;
     }
     case ParamSource::SendLevel: {
         const project::Send* send = findIn(lookup.sends, binding.owner);
@@ -254,6 +317,9 @@ float resolve(const ParamBinding& binding, const Lookup& lookup) {
 /// The ParamRef a binding answers to, or an invalid ref for the derived ones.
 project::ParamRef refOf(const ParamBinding& binding) {
     using project::ParamKind;
+    if (binding.index == kAbsentParam || binding.part != project::CurvePart::None) {
+        return project::ParamRef{};
+    }
     const auto make = [&binding](ParamKind kind) {
         return project::ParamRef{.owner = binding.owner, .index = binding.index, .kind = kind};
     };
@@ -288,6 +354,20 @@ project::ParamRef refOf(const ParamBinding& binding) {
     return project::ParamRef{};
 }
 
+/// Appends one binding per descriptor of `type`. `indexOf` maps a parameter name to
+/// its position in the model's list, or kAbsentParam.
+template<class IndexOf>
+void appendTyped(ParamLayout& layout, const project::TypeInfo& type, ParamSource source,
+                 std::uint32_t owner, IndexOf indexOf) {
+    for (const project::ParamDescriptor& descriptor : type.params) {
+        layout.bindings.push_back(ParamBinding{.source = source,
+                                               .owner = owner,
+                                               .index = indexOf(descriptor.name),
+                                               .part = descriptor.curve,
+                                               .fallback = descriptor.defaultValue});
+    }
+}
+
 /// Appends a node's parameter slice and returns where it starts.
 std::uint32_t appendParams(ParamLayout& layout, std::initializer_list<ParamBinding> bindings) {
     const auto base = static_cast<std::uint32_t>(layout.bindings.size());
@@ -315,9 +395,12 @@ std::string insertLabel(core::InsertId id) {
     return "insert." + std::to_string(id.value);
 }
 
-/// Adds one insert's chain - slots, fader, meter - and returns (entry, fader).
-std::pair<NodeId, NodeId> addInsertChain(const project::Insert& insert, Graph& graph,
-                                         ParamLayout& layout, NodeStore& nodes) {
+/// Adds one insert's chain - slots, fader, meter - and returns (entry, fader). Slots
+/// keyed from another insert are recorded in `keyed`, to be wired once every fader
+/// exists. The master's meter measures true peak as well.
+std::pair<NodeId, NodeId> addInsertChain(const project::Insert& insert, bool master, Graph& graph,
+                                         ParamLayout& layout, NodeStore& nodes,
+                                         std::vector<std::pair<NodeId, core::InsertId>>& keyed) {
     const std::string label = insertLabel(insert.id);
 
     std::vector<const project::Slot*> slots;
@@ -331,15 +414,25 @@ std::pair<NodeId, NodeId> addInsertChain(const project::Insert& insert, Graph& g
     NodeId entry{kNone};
     NodeId previous{kNone};
     for (const project::Slot* slot : slots) {
-        const NodeId id = graph.add(nodes.slot(slot->id), label);
+        const NodeId id = graph.add(nodes.slot(*slot), label);
+        if (slot->sidechain.valid()) {
+            keyed.emplace_back(id, slot->sidechain);
+        }
         GraphNode& node = *graph.find(id);
         node.paramBase = appendParams(
             layout, {ParamBinding{.source = ParamSource::SlotMix, .owner = slot->id.value},
                      ParamBinding{.source = ParamSource::SlotBypass, .owner = slot->id.value}});
-        for (std::size_t p = 0; p < slot->params.size(); ++p) {
-            layout.bindings.push_back(ParamBinding{.source = ParamSource::SlotEffect,
-                                                   .owner = slot->id.value,
-                                                   .index = static_cast<std::uint16_t>(p)});
+        // The effect's parameters in the order its descriptor table names them - the
+        // order its node reads them - whatever order the file listed them in.
+        if (const project::TypeInfo* type = project::findEffectType(slot->type)) {
+            appendTyped(layout, *type, ParamSource::SlotEffect, slot->id.value,
+                        [slot](std::string_view name) {
+                            const auto match =
+                                std::ranges::find(slot->params, name, &project::SlotParam::name);
+                            return match == slot->params.end()
+                                       ? kAbsentParam
+                                       : static_cast<std::uint16_t>(match - slot->params.begin());
+                        });
         }
         node.paramCount = static_cast<std::uint32_t>(layout.bindings.size()) - node.paramBase;
         if (previous.v == kNone) {
@@ -368,7 +461,7 @@ std::pair<NodeId, NodeId> addInsertChain(const project::Insert& insert, Graph& g
         graph.connect(previous, kPortPost, fader, kPortMain);
     }
 
-    const NodeId meter = graph.add(nodes.meter(insert.id), label);
+    const NodeId meter = graph.add(nodes.meter(insert.id, master), label);
     graph.connect(fader, kPortPost, meter, kPortMain);
     return {entry, fader};
 }
@@ -401,7 +494,8 @@ GraphBuild buildGraph(const project::Project& project, NodeStore& nodes) {
 
     const auto addChannel = [&](std::size_t ordinal) {
         const project::Channel& channel = project.channels[ordinal];
-        const NodeId id = graph.add(nodes.channel(channel), "channel." + channel.name);
+        const NodeId id =
+            graph.add(nodes.channel(channel, project.resources), "channel." + channel.name);
         GraphNode& node = *graph.find(id);
         node.eventTrack = static_cast<std::uint32_t>(ordinal);
         const std::uint32_t owner = channel.id.value;
@@ -410,21 +504,29 @@ GraphBuild buildGraph(const project::Project& project, NodeStore& nodes) {
                      ParamBinding{.source = ParamSource::ChannelPan, .owner = owner},
                      ParamBinding{.source = ParamSource::ChannelAudible, .owner = owner},
                      ParamBinding{.source = ParamSource::ChannelPitch, .owner = owner}});
-        for (std::size_t p = 0; p < channel.instrument.params.size(); ++p) {
-            layout.bindings.push_back(ParamBinding{.source = ParamSource::ChannelInstrument,
-                                                   .owner = owner,
-                                                   .index = static_cast<std::uint16_t>(p)});
+        if (const project::TypeInfo* type = project::findInstrumentType(channel.instrument.type)) {
+            const std::vector<project::ParamValue>& values = channel.instrument.params;
+            appendTyped(layout, *type, ParamSource::ChannelInstrument, owner,
+                        [&values](std::string_view name) {
+                            const auto match =
+                                std::ranges::find(values, name, &project::ParamValue::name);
+                            return match == values.end()
+                                       ? kAbsentParam
+                                       : static_cast<std::uint16_t>(match - values.begin());
+                        });
         }
         node.paramCount = static_cast<std::uint32_t>(layout.bindings.size()) - node.paramBase;
         return id;
     };
 
     std::vector<std::pair<NodeId, core::InsertId>> pendingOutputs;
+    std::vector<std::pair<NodeId, core::InsertId>> keyed;
     for (const project::Insert& insert : project.mixer.inserts) {
         for (const std::size_t ordinal : channelsByInsert[insert.id.value]) {
             pendingOutputs.emplace_back(addChannel(ordinal), insert.id);
         }
-        const auto [entry, fader] = addInsertChain(insert, graph, layout, nodes);
+        const auto [entry, fader] =
+            addInsertChain(insert, insert.id == project.mixer.master, graph, layout, nodes, keyed);
         entries[insert.id.value] = entry;
         faders[insert.id.value] = fader;
         for (const project::Send& send : insert.sends) {
@@ -448,6 +550,16 @@ GraphBuild buildGraph(const project::Project& project, NodeStore& nodes) {
 
     for (const auto& [from, target] : pendingOutputs) {
         graph.connect(from, kPortPost, entries[target.value], kPortMain);
+    }
+    // Sidechains: the key insert's post-fader signal into the slot's key port. Only
+    // into a node that has one - an effect type without a key input ignores the
+    // setting rather than growing a port.
+    for (const auto& [slotNode, key] : keyed) {
+        const GraphNode* node = graph.find(slotNode);
+        if (faders.contains(key.value) && node != nullptr &&
+            node->node->ports().inputs > kPortSidechain) {
+            graph.connect(faders[key.value], kPortPost, slotNode, kPortSidechain);
+        }
     }
     for (const project::Route& route : project.mixer.routes) {
         if (faders.contains(route.from.value) && entries.contains(route.to.value)) {
@@ -504,7 +616,8 @@ bool GraphBuild::sameStructure(const GraphBuild& other) const noexcept {
     for (std::size_t i = 0; i < params.bindings.size(); ++i) {
         const ParamBinding& a = params.bindings[i];
         const ParamBinding& b = other.params.bindings[i];
-        if (a.source != b.source || a.owner != b.owner || a.index != b.index) {
+        if (a.source != b.source || a.owner != b.owner || a.index != b.index || a.part != b.part ||
+            a.fallback != b.fallback) {
             return false;
         }
     }

@@ -480,4 +480,35 @@ bool SetChannelArp::coalesceWith(const Command& next) {
     return true;
 }
 
+SetChannelZones::SetChannelZones(core::ChannelId id, std::vector<SampleZone> zones)
+    : m_id(id), m_zones(std::move(zones)) {}
+
+void SetChannelZones::apply(Project& project) {
+    Channel* channel = project.find(m_id);
+    if (channel == nullptr) {
+        return;
+    }
+    m_previous = channel->instrument.zones;
+    channel->instrument.zones = m_zones;
+}
+
+void SetChannelZones::revert(Project& project) {
+    Channel* channel = project.find(m_id);
+    if (channel != nullptr) {
+        channel->instrument.zones = m_previous;
+    }
+}
+
+std::string_view SetChannelZones::name() const noexcept {
+    return "Set sample zones";
+}
+
+CommandId SetChannelZones::kind() const noexcept {
+    return CommandId::kSetChannelZones;
+}
+
+DirtyMask SetChannelZones::dirty() const noexcept {
+    return dirty::kChannels;
+}
+
 } // namespace adx::project

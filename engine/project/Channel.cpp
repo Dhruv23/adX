@@ -20,6 +20,12 @@ constexpr std::array<std::string_view, kVoiceStealModeCount> kStealNames{
 };
 static_assert(kStealNames.size() == kVoiceStealModeCount);
 
+/// Indexed by LoopMode. Order must match the enum.
+constexpr std::array<std::string_view, kLoopModeCount> kLoopModeNames{
+    "off", "forward", "pingpong", "sustain", "release",
+};
+static_assert(kLoopModeNames.size() == kLoopModeCount);
+
 template<std::size_t N>
 [[nodiscard]] bool lookupName(const std::array<std::string_view, N>& table, std::string_view name,
                               std::size_t& out) noexcept {
@@ -69,6 +75,20 @@ bool voiceStealModeFromString(std::string_view name, VoiceStealMode& out) noexce
         return false;
     }
     out = static_cast<VoiceStealMode>(index);
+    return true;
+}
+
+const char* toString(LoopMode mode) noexcept {
+    const auto index = static_cast<std::size_t>(mode);
+    return index < kLoopModeNames.size() ? kLoopModeNames.at(index).data() : "off";
+}
+
+bool loopModeFromString(std::string_view name, LoopMode& out) noexcept {
+    std::size_t index = 0;
+    if (!lookupName(kLoopModeNames, name, index)) {
+        return false;
+    }
+    out = static_cast<LoopMode>(index);
     return true;
 }
 

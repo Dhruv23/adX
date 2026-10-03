@@ -94,6 +94,10 @@ def test_info(examples: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> Non
     out = capsys.readouterr().out
     assert "notes:           349" in out
     assert "format:          v1" in out
+    # phase_4.md 7: the real instruments, not test tones.
+    assert "  Kick     additive" in out
+    assert "testtone" not in out
+    assert "unknown type" not in out
 
 
 def test_render_is_declared_but_unavailable() -> None:

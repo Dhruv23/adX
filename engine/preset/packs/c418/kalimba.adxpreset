@@ -1,0 +1,19 @@
+# docs/C418.md §2.3 and _archive PatchLibrary "Kalimba": the "Aria Math" core -
+# a strong fundamental, a scooped 2nd, metallic 4th and 8th; plucked, no sustain,
+# the metallic top softened by a 7 kHz lowpass.
+[PRESET]
+NAME="Kalimba"
+TYPE=additive
+PACK=c418
+TAGS=mallet, pluck, metallic, aria math
+
+[PARAMS]
+harmonic.1=1
+harmonic.2=0.2
+harmonic.4=0.4
+harmonic.8=0.4
+env.attack=0.005
+env.decay=0.3 curve=exponential(0)
+env.sustain=0
+env.release=0.15 curve=exponential(0)
+filter.cutoff=7000

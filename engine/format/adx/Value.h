@@ -16,15 +16,20 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "engine/core/Curve.h"
 #include "engine/core/Rational.h"
 #include "engine/core/TempoMap.h"
 #include "engine/core/Time.h"
 #include "engine/format/adx/Diagnostics.h"
+#include "engine/format/adx/Token.h"
 #include "engine/project/Color.h"
+#include "engine/project/Pattern.h"
+#include "engine/project/SampleZone.h"
 
 namespace adx::format {
 
@@ -61,6 +66,20 @@ namespace adx::format {
 [[nodiscard]] bool parseFraction(std::string_view text, Span span, DiagnosticList& diagnostics,
                                  core::Rational& out);
 
+/// A pitch offset with its unit: `3st` (semitones) or `-50c` (cents). Out of the
+/// int16 cents range is ADX2001.
+[[nodiscard]] bool parsePitchAmount(std::string_view text, Span span, DiagnosticList& diagnostics,
+                                    std::int16_t& outCents);
+
+/// `slide=<amount>@<start>+<length>[~<curve>]`, start and length note-relative
+/// durations (phase_4.md §4.0, docs/adx-format-v2.md §7.3).
+[[nodiscard]] bool parseSlide(std::string_view text, const core::TempoMap& tempo, Span span,
+                              DiagnosticList& diagnostics, project::NoteSlide& out);
+
+/// `bend=<amount>@<at>[~<curve>]|...`: a note-relative pitch curve.
+[[nodiscard]] bool parseBend(std::string_view text, const core::TempoMap& tempo, Span span,
+                             DiagnosticList& diagnostics, std::vector<project::PitchPoint>& out);
+
 /// `#rrggbb`, with or without the `#`.
 [[nodiscard]] bool parseColor(std::string_view text, Span span, DiagnosticList& diagnostics,
                               project::Color& out);
@@ -74,7 +93,19 @@ namespace adx::format {
 [[nodiscard]] std::string formatDuration(core::Ticks length, const core::TempoMap& tempo);
 [[nodiscard]] std::string formatCurve(const core::Curve& curve);
 [[nodiscard]] std::string formatFraction(core::Rational value);
+/// Semitones when the cents are a whole number of them, cents otherwise.
+[[nodiscard]] std::string formatPitchAmount(std::int16_t cents);
+[[nodiscard]] std::string formatSlide(const project::NoteSlide& slide, const core::TempoMap& tempo);
+[[nodiscard]] std::string formatBend(const std::vector<project::PitchPoint>& points,
+                                     const core::TempoMap& tempo);
 [[nodiscard]] std::string formatColor(project::Color color);
+
+/// A ZONE line's fields after its sample path - `key=36 root=36 loop=forward ...` -
+/// shared by [CHANNEL] (Parser.cpp) and a preset's [ZONES] (engine/preset).
+void parseZoneFields(std::span<const Token> fields, DiagnosticList& diagnostics,
+                     project::SampleZone& zone);
+/// The inverse: the fields, each with a leading space, defaults left out but `root`.
+[[nodiscard]] std::string formatZoneFields(const project::SampleZone& zone);
 
 [[nodiscard]] inline std::string_view formatBool(bool value) noexcept {
     return value ? "yes" : "no";

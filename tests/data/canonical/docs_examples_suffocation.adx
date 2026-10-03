@@ -1,0 +1,789 @@
+[PROJECT]
+ADX_VERSION=2
+TUNING=440
+
+[TEMPO]
+0:0:0 120
+
+[METER]
+0:0:0 4/4
+
+[CHANNEL Kick]
+INSTRUMENT=additive
+OUTPUT=insert.2
+POLYPHONY=16
+VOLUME=1
+PAN=0
+PARAM env.attack=0.001
+PARAM env.decay=0.14
+PARAM env.sustain=0
+PARAM env.release=0.05
+PARAM harmonic.1=1
+PARAM harmonic.2=0.4
+PARAM harmonic.3=0.15
+PARAM harmonic.4=0.05
+PARAM harmonic.5=0
+PARAM harmonic.6=0
+PARAM harmonic.7=0
+PARAM harmonic.8=0
+PARAM harmonic.9=0
+PARAM harmonic.10=0
+PARAM harmonic.11=0
+PARAM harmonic.12=0
+PARAM harmonic.13=0
+PARAM harmonic.14=0
+PARAM harmonic.15=0
+PARAM harmonic.16=0
+PARAM drive=8
+PARAM filter.cutoff=20000
+PARAM filter.lfoRate=0
+PARAM filter.lfoDepth=0
+PARAM sub.level=1
+PARAM sub.wave=0
+PARAM sub.dropSemitones=36
+PARAM sub.dropMs=55
+PARAM osc.wave=0
+PARAM osc.unison=1
+PARAM osc.detuneCents=0
+PARAM osc.pulseWidth=0
+PARAM noise.level=0.25
+PARAM noise.type=0
+PARAM resfilter.type=0
+PARAM resfilter.cutoff=2200
+PARAM resfilter.resonance=0.1
+PARAM resfilter.envAmount=0
+PARAM resfilter.keyTrack=0
+
+[CHANNEL SubBass]
+INSTRUMENT=additive
+OUTPUT=insert.3
+POLYPHONY=16
+VOLUME=1
+PAN=0
+PARAM env.attack=0.005
+PARAM env.decay=0.12
+PARAM env.sustain=0.75
+PARAM env.release=0.1
+PARAM harmonic.1=1
+PARAM harmonic.2=0.5
+PARAM harmonic.3=0.333
+PARAM harmonic.4=0.25
+PARAM harmonic.5=0.2
+PARAM harmonic.6=0.167
+PARAM harmonic.7=0.143
+PARAM harmonic.8=0.125
+PARAM harmonic.9=0.111
+PARAM harmonic.10=0.1
+PARAM harmonic.11=0.091
+PARAM harmonic.12=0.083
+PARAM harmonic.13=0.077
+PARAM harmonic.14=0.071
+PARAM harmonic.15=0.067
+PARAM harmonic.16=0.062
+PARAM drive=6
+PARAM filter.cutoff=20000
+PARAM filter.lfoRate=0
+PARAM filter.lfoDepth=0
+PARAM sub.level=0.7
+PARAM sub.wave=0
+PARAM sub.dropSemitones=0
+PARAM sub.dropMs=50
+PARAM osc.wave=1
+PARAM osc.unison=3
+PARAM osc.detuneCents=14
+PARAM osc.pulseWidth=0
+PARAM resfilter.type=0
+PARAM resfilter.cutoff=600
+PARAM resfilter.resonance=0.45
+PARAM resfilter.envAmount=0.5
+PARAM resfilter.keyTrack=0.3
+PARAM filterEnv.attack=0.005
+PARAM filterEnv.decay=0.15
+PARAM filterEnv.sustain=0.2
+PARAM filterEnv.release=0.1
+ARP mode=up rate=1/16 octaves=1 gate=0.6
+
+[CHANNEL Lead]
+INSTRUMENT=additive
+OUTPUT=insert.4
+POLYPHONY=16
+VOLUME=1
+PAN=0
+PARAM env.attack=0.002
+PARAM env.decay=0.08
+PARAM env.sustain=0.5
+PARAM env.release=0.12
+PARAM harmonic.1=1
+PARAM harmonic.2=0.5
+PARAM harmonic.3=0.333
+PARAM harmonic.4=0.25
+PARAM harmonic.5=0.2
+PARAM harmonic.6=0.167
+PARAM harmonic.7=0.143
+PARAM harmonic.8=0.125
+PARAM harmonic.9=0.111
+PARAM harmonic.10=0.1
+PARAM harmonic.11=0.091
+PARAM harmonic.12=0.083
+PARAM harmonic.13=0.077
+PARAM harmonic.14=0.071
+PARAM harmonic.15=0.067
+PARAM harmonic.16=0.062
+PARAM drive=4
+PARAM filter.cutoff=20000
+PARAM filter.lfoRate=0
+PARAM filter.lfoDepth=0
+PARAM osc.wave=1
+PARAM osc.unison=5
+PARAM osc.detuneCents=18
+PARAM osc.pulseWidth=0
+PARAM resfilter.type=0
+PARAM resfilter.cutoff=180
+PARAM resfilter.resonance=0.6
+PARAM resfilter.envAmount=0.7
+PARAM resfilter.keyTrack=0.4
+PARAM filterEnv.attack=0.002
+PARAM filterEnv.decay=0.12
+PARAM filterEnv.sustain=0.3
+PARAM filterEnv.release=0.1
+PARAM vibrato.rate=5
+PARAM vibrato.depthCents=8
+PARAM vibrato.delayMs=300
+ARP mode=up rate=1/16 octaves=2 gate=0.5
+
+[CHANNEL Pad]
+INSTRUMENT=additive
+OUTPUT=insert.7
+POLYPHONY=16
+VOLUME=1
+PAN=0
+PARAM env.attack=1.5
+PARAM env.decay=1.2
+PARAM env.sustain=0.8
+PARAM env.release=2.5
+PARAM harmonic.1=1
+PARAM harmonic.2=0.6
+PARAM harmonic.3=0.3
+PARAM harmonic.4=0.15
+PARAM harmonic.5=0.08
+PARAM harmonic.6=0.04
+PARAM harmonic.7=0.02
+PARAM harmonic.8=0
+PARAM harmonic.9=0
+PARAM harmonic.10=0
+PARAM harmonic.11=0
+PARAM harmonic.12=0
+PARAM harmonic.13=0
+PARAM harmonic.14=0
+PARAM harmonic.15=0
+PARAM harmonic.16=0
+PARAM filter.cutoff=1200
+PARAM filter.lfoRate=0.15
+PARAM filter.lfoDepth=0.6
+PARAM osc.wave=1
+PARAM osc.unison=7
+PARAM osc.detuneCents=22
+PARAM osc.pulseWidth=0
+PARAM resfilter.type=0
+PARAM resfilter.cutoff=1500
+PARAM resfilter.resonance=0.2
+PARAM resfilter.envAmount=0.2
+PARAM resfilter.keyTrack=0.2
+PARAM filterEnv.attack=1
+PARAM filterEnv.decay=1.5
+PARAM filterEnv.sustain=0.7
+PARAM filterEnv.release=2
+
+[CHANNEL Vocal]
+INSTRUMENT=additive
+OUTPUT=insert.8
+POLYPHONY=16
+VOLUME=1
+PAN=0
+PARAM env.attack=0.08
+PARAM env.decay=0.2
+PARAM env.sustain=0.9
+PARAM env.release=0.4
+PARAM harmonic.1=1
+PARAM harmonic.2=0.5
+PARAM harmonic.3=0.333
+PARAM harmonic.4=0.25
+PARAM harmonic.5=0.2
+PARAM harmonic.6=0.167
+PARAM harmonic.7=0.143
+PARAM harmonic.8=0.125
+PARAM harmonic.9=0.111
+PARAM harmonic.10=0.1
+PARAM harmonic.11=0.091
+PARAM harmonic.12=0.083
+PARAM harmonic.13=0.077
+PARAM harmonic.14=0.071
+PARAM harmonic.15=0.067
+PARAM harmonic.16=0.062
+PARAM drive=2
+PARAM osc.wave=1
+PARAM osc.unison=3
+PARAM osc.detuneCents=10
+PARAM osc.pulseWidth=0
+PARAM resfilter.type=0
+PARAM resfilter.cutoff=3000
+PARAM resfilter.resonance=0.1
+PARAM resfilter.envAmount=0
+PARAM resfilter.keyTrack=0.5
+PARAM formant.vowelA=0
+PARAM formant.vowelB=3
+PARAM formant.morph=0
+PARAM formant.amount=0.9
+PARAM vibrato.rate=5.5
+PARAM vibrato.depthCents=12
+PARAM vibrato.delayMs=250
+PARAM glide.ms=60
+
+[CHANNEL Snare]
+INSTRUMENT=additive
+OUTPUT=insert.9
+POLYPHONY=16
+VOLUME=1
+PAN=0
+PARAM env.attack=0.001
+PARAM env.decay=0.16
+PARAM env.sustain=0
+PARAM env.release=0.09
+PARAM harmonic.1=1
+PARAM harmonic.2=0.7
+PARAM harmonic.3=0.5
+PARAM harmonic.4=0.3
+PARAM harmonic.5=0.2
+PARAM harmonic.6=0
+PARAM harmonic.7=0
+PARAM harmonic.8=0
+PARAM harmonic.9=0
+PARAM harmonic.10=0
+PARAM harmonic.11=0
+PARAM harmonic.12=0
+PARAM harmonic.13=0
+PARAM harmonic.14=0
+PARAM harmonic.15=0
+PARAM harmonic.16=0
+PARAM drive=5
+PARAM noise.level=0.9
+PARAM noise.type=0
+PARAM resfilter.type=1
+PARAM resfilter.cutoff=1800
+PARAM resfilter.resonance=0.5
+PARAM resfilter.envAmount=0
+PARAM resfilter.keyTrack=0
+
+[CHANNEL Hat]
+INSTRUMENT=additive
+OUTPUT=insert.10
+POLYPHONY=16
+VOLUME=1
+PAN=0
+PARAM env.attack=0.001
+PARAM env.decay=0.04
+PARAM env.sustain=0
+PARAM env.release=0.03
+PARAM harmonic.1=0
+PARAM harmonic.2=0
+PARAM harmonic.3=0
+PARAM harmonic.4=0
+PARAM harmonic.5=0
+PARAM harmonic.6=0
+PARAM harmonic.7=0
+PARAM harmonic.8=0
+PARAM harmonic.9=0
+PARAM harmonic.10=0
+PARAM harmonic.11=0
+PARAM harmonic.12=0
+PARAM harmonic.13=0
+PARAM harmonic.14=0
+PARAM harmonic.15=0
+PARAM harmonic.16=0
+PARAM noise.level=1
+PARAM noise.type=0
+PARAM resfilter.type=2
+PARAM resfilter.cutoff=8000
+PARAM resfilter.resonance=0.3
+PARAM resfilter.envAmount=0
+PARAM resfilter.keyTrack=0
+
+[PATTERN Kick]
+LENGTH=36:0:0
+NOTES Kick
+  C1 8:0:0 0:0:960 127
+  C1 8:2:0 0:0:960 127
+  C1 9:0:0 0:0:960 127
+  C1 9:2:0 0:0:960 127
+  C1 10:0:0 0:0:960 127
+  C1 10:2:0 0:0:960 127
+  C1 11:0:0 0:0:960 127
+  C1 11:2:0 0:0:960 127
+  C1 12:0:0 0:0:960 127
+  C1 12:2:0 0:0:960 127
+  C1 13:0:0 0:0:960 127
+  C1 13:2:0 0:0:960 127
+  C1 14:0:0 0:0:960 127
+  C1 14:2:0 0:0:960 127
+  C1 15:0:0 0:0:960 127
+  C1 15:2:0 0:0:960 127
+  C1 16:0:0 0:0:960 127
+  C1 16:1:0 0:0:960 127
+  C1 16:2:0 0:0:960 127
+  C1 16:3:0 0:0:960 127
+  C1 17:0:0 0:0:960 127
+  C1 17:1:0 0:0:960 127
+  C1 17:2:0 0:0:960 127
+  C1 17:3:0 0:0:960 127
+  C1 18:0:0 0:0:960 127
+  C1 18:1:0 0:0:960 127
+  C1 18:2:0 0:0:960 127
+  C1 18:3:0 0:0:960 127
+  C1 19:0:0 0:0:960 127
+  C1 19:1:0 0:0:960 127
+  C1 19:2:0 0:0:960 127
+  C1 19:3:0 0:0:960 127
+  C1 20:0:0 0:0:960 127
+  C1 20:1:0 0:0:960 127
+  C1 20:2:0 0:0:960 127
+  C1 20:3:0 0:0:960 127
+  C1 21:0:0 0:0:960 127
+  C1 21:1:0 0:0:960 127
+  C1 21:2:0 0:0:960 127
+  C1 21:3:0 0:0:960 127
+  C1 22:0:0 0:0:960 127
+  C1 22:1:0 0:0:960 127
+  C1 22:2:0 0:0:960 127
+  C1 22:3:0 0:0:960 127
+  C1 23:0:0 0:0:960 127
+  C1 23:1:0 0:0:960 127
+  C1 23:2:0 0:0:960 127
+  C1 23:3:0 0:0:960 127
+  C1 28:0:0 0:0:960 127
+  C1 28:1:0 0:0:960 127
+  C1 28:2:0 0:0:960 127
+  C1 28:3:0 0:0:960 127
+  C1 29:0:0 0:0:960 127
+  C1 29:1:0 0:0:960 127
+  C1 29:2:0 0:0:960 127
+  C1 29:3:0 0:0:960 127
+  C1 30:0:0 0:0:960 127
+  C1 30:1:0 0:0:960 127
+  C1 30:2:0 0:0:960 127
+  C1 30:3:0 0:0:960 127
+  C1 31:0:0 0:0:960 127
+  C1 31:1:0 0:0:960 127
+  C1 31:2:0 0:0:960 127
+  C1 31:3:0 0:0:960 127
+  C1 32:0:0 0:0:960 127
+  C1 32:1:0 0:0:960 127
+  C1 32:2:0 0:0:960 127
+  C1 32:3:0 0:0:960 127
+  C1 33:0:0 0:0:960 127
+  C1 33:1:0 0:0:960 127
+  C1 33:2:0 0:0:960 127
+  C1 33:3:0 0:0:960 127
+  C1 34:0:0 0:0:960 127
+  C1 34:1:0 0:0:960 127
+  C1 34:2:0 0:0:960 127
+  C1 34:3:0 0:0:960 127
+  C1 35:0:0 0:0:960 127
+  C1 35:1:0 0:0:960 127
+  C1 35:2:0 0:0:960 127
+  C1 35:3:0 0:0:960 127
+
+[PATTERN SubBass]
+LENGTH=40:0:0
+NOTES SubBass
+  F#2 8:0:0 2:0:0 108
+  C#3 8:0:0 2:0:0 108
+  D2 10:0:0 2:0:0 108
+  A2 10:0:0 2:0:0 108
+  A2 12:0:0 2:0:0 108
+  E3 12:0:0 2:0:0 108
+  E2 14:0:0 2:0:0 108
+  B2 14:0:0 2:0:0 108
+  F#2 16:0:0 2:0:0 108
+  C#3 16:0:0 2:0:0 108
+  D2 18:0:0 2:0:0 108
+  A2 18:0:0 2:0:0 108
+  A2 20:0:0 2:0:0 108
+  E3 20:0:0 2:0:0 108
+  E2 22:0:0 2:0:0 108
+  B2 22:0:0 2:0:0 108
+  F#2 24:0:0 2:0:0 108
+  C#3 24:0:0 2:0:0 108
+  D2 26:0:0 2:0:0 108
+  A2 26:0:0 2:0:0 108
+  A2 28:0:0 2:0:0 108
+  E3 28:0:0 2:0:0 108
+  E2 30:0:0 2:0:0 108
+  B2 30:0:0 2:0:0 108
+  F#2 32:0:0 2:0:0 108
+  C#3 32:0:0 2:0:0 108
+  D2 34:0:0 2:0:0 108
+  A2 34:0:0 2:0:0 108
+  A2 36:0:0 2:0:0 108
+  E3 36:0:0 2:0:0 108
+  E2 38:0:0 2:0:0 108
+  B2 38:0:0 2:0:0 108
+
+[PATTERN Lead]
+LENGTH=40:0:0
+NOTES Lead
+  F#4 0:0:0 2:0:0 89
+  A4 0:0:0 2:0:0 89
+  C#5 0:0:0 2:0:0 89
+  D4 2:0:0 2:0:0 89
+  F#4 2:0:0 2:0:0 89
+  A4 2:0:0 2:0:0 89
+  A4 4:0:0 2:0:0 89
+  C#5 4:0:0 2:0:0 89
+  E5 4:0:0 2:0:0 89
+  E4 6:0:0 2:0:0 89
+  G#4 6:0:0 2:0:0 89
+  B4 6:0:0 2:0:0 89
+  F#4 8:0:0 2:0:0 89
+  A4 8:0:0 2:0:0 89
+  C#5 8:0:0 2:0:0 89
+  D4 10:0:0 2:0:0 89
+  F#4 10:0:0 2:0:0 89
+  A4 10:0:0 2:0:0 89
+  A4 12:0:0 2:0:0 89
+  C#5 12:0:0 2:0:0 89
+  E5 12:0:0 2:0:0 89
+  E4 14:0:0 2:0:0 89
+  G#4 14:0:0 2:0:0 89
+  B4 14:0:0 2:0:0 89
+  F#4 16:0:0 2:0:0 89
+  A4 16:0:0 2:0:0 89
+  C#5 16:0:0 2:0:0 89
+  D4 18:0:0 2:0:0 89
+  F#4 18:0:0 2:0:0 89
+  A4 18:0:0 2:0:0 89
+  A4 20:0:0 2:0:0 89
+  C#5 20:0:0 2:0:0 89
+  E5 20:0:0 2:0:0 89
+  E4 22:0:0 2:0:0 89
+  G#4 22:0:0 2:0:0 89
+  B4 22:0:0 2:0:0 89
+  F#4 24:0:0 2:0:0 89
+  A4 24:0:0 2:0:0 89
+  C#5 24:0:0 2:0:0 89
+  D4 26:0:0 2:0:0 89
+  F#4 26:0:0 2:0:0 89
+  A4 26:0:0 2:0:0 89
+  A4 28:0:0 2:0:0 89
+  C#5 28:0:0 2:0:0 89
+  E5 28:0:0 2:0:0 89
+  E4 30:0:0 2:0:0 89
+  G#4 30:0:0 2:0:0 89
+  B4 30:0:0 2:0:0 89
+  F#4 32:0:0 2:0:0 89
+  A4 32:0:0 2:0:0 89
+  C#5 32:0:0 2:0:0 89
+  D4 34:0:0 2:0:0 89
+  F#4 34:0:0 2:0:0 89
+  A4 34:0:0 2:0:0 89
+  A4 36:0:0 2:0:0 89
+  C#5 36:0:0 2:0:0 89
+  E5 36:0:0 2:0:0 89
+  E4 38:0:0 2:0:0 89
+  G#4 38:0:0 2:0:0 89
+  B4 38:0:0 2:0:0 89
+
+[PATTERN Pad]
+LENGTH=40:0:0
+NOTES Pad
+  F#3 0:0:0 2:0:0 70
+  A3 0:0:0 2:0:0 70
+  C#4 0:0:0 2:0:0 70
+  F#3 2:0:0 2:0:0 70
+  A3 2:0:0 2:0:0 70
+  D4 2:0:0 2:0:0 70
+  A3 4:0:0 2:0:0 70
+  C#4 4:0:0 2:0:0 70
+  E4 4:0:0 2:0:0 70
+  G#3 6:0:0 2:0:0 70
+  B3 6:0:0 2:0:0 70
+  E4 6:0:0 2:0:0 70
+  F#3 8:0:0 2:0:0 70
+  A3 8:0:0 2:0:0 70
+  C#4 8:0:0 2:0:0 70
+  F#3 10:0:0 2:0:0 70
+  A3 10:0:0 2:0:0 70
+  D4 10:0:0 2:0:0 70
+  A3 12:0:0 2:0:0 70
+  C#4 12:0:0 2:0:0 70
+  E4 12:0:0 2:0:0 70
+  G#3 14:0:0 2:0:0 70
+  B3 14:0:0 2:0:0 70
+  E4 14:0:0 2:0:0 70
+  F#3 16:0:0 2:0:0 70
+  A3 16:0:0 2:0:0 70
+  C#4 16:0:0 2:0:0 70
+  F#3 18:0:0 2:0:0 70
+  A3 18:0:0 2:0:0 70
+  D4 18:0:0 2:0:0 70
+  A3 20:0:0 2:0:0 70
+  C#4 20:0:0 2:0:0 70
+  E4 20:0:0 2:0:0 70
+  G#3 22:0:0 2:0:0 70
+  B3 22:0:0 2:0:0 70
+  E4 22:0:0 2:0:0 70
+  F#3 24:0:0 2:0:0 70
+  A3 24:0:0 2:0:0 70
+  C#4 24:0:0 2:0:0 70
+  F#3 26:0:0 2:0:0 70
+  A3 26:0:0 2:0:0 70
+  D4 26:0:0 2:0:0 70
+  A3 28:0:0 2:0:0 70
+  C#4 28:0:0 2:0:0 70
+  E4 28:0:0 2:0:0 70
+  G#3 30:0:0 2:0:0 70
+  B3 30:0:0 2:0:0 70
+  E4 30:0:0 2:0:0 70
+  F#3 32:0:0 2:0:0 70
+  A3 32:0:0 2:0:0 70
+  C#4 32:0:0 2:0:0 70
+  F#3 34:0:0 2:0:0 70
+  A3 34:0:0 2:0:0 70
+  D4 34:0:0 2:0:0 70
+  A3 36:0:0 2:0:0 70
+  C#4 36:0:0 2:0:0 70
+  E4 36:0:0 2:0:0 70
+  G#3 38:0:0 2:0:0 70
+  B3 38:0:0 2:0:0 70
+  E4 38:0:0 2:0:0 70
+
+[PATTERN Vocal]
+LENGTH=40:0:0
+NOTES Vocal
+  C#5 8:0:0 0:3:0 102
+  A4 8:3:0 0:2:0 95
+  F#4 9:1:0 0:3:0 102
+  F#5 10:0:0 0:3:0 108
+  E5 10:3:0 0:2:0 102
+  C#5 11:1:0 0:3:0 102
+  E5 12:0:0 0:3:0 108
+  C#5 12:3:0 0:2:0 99
+  A4 13:1:0 0:3:0 102
+  G#4 14:0:0 1:0:0 102
+  B4 15:0:0 1:0:0 104
+  F#5 16:0:0 1:0:0 114
+  C#5 17:0:0 0:2:0 108
+  A5 17:2:0 0:2:0 117
+  A5 18:0:0 0:3:0 117
+  F#5 18:3:0 0:3:0 112
+  D5 19:2:0 0:2:0 108
+  E5 20:0:0 0:3:0 114
+  C#5 20:3:0 0:2:0 108
+  A5 21:1:0 0:3:0 117
+  B4 22:0:0 1:0:0 108
+  G#5 23:0:0 1:0:0 114
+  C#5 24:2:0 1:2:0 89
+  A4 26:2:0 1:2:0 86
+  F#5 28:0:0 1:0:0 117
+  C#5 29:0:0 0:2:0 109
+  A5 29:2:0 0:2:0 119
+  A5 30:0:0 0:3:0 119
+  F#5 30:3:0 0:3:0 114
+  D5 31:2:0 0:2:0 108
+  E5 32:0:0 0:3:0 114
+  C#5 32:3:0 0:2:0 108
+  A5 33:1:0 0:3:0 117
+  B4 34:0:0 1:0:0 108
+  G#5 35:0:0 1:0:0 114
+  C#5 36:0:0 2:0:0 89
+  F#5 38:0:0 2:0:0 76
+
+[PATTERN Snare]
+LENGTH=35:0:0
+NOTES Snare
+  D3 16:1:0 0:0:768 108
+  D3 16:3:0 0:0:768 108
+  D3 18:1:0 0:0:768 108
+  D3 18:3:0 0:0:768 108
+  D3 20:1:0 0:0:768 108
+  D3 20:3:0 0:0:768 108
+  D3 22:1:0 0:0:768 108
+  D3 22:3:0 0:0:768 108
+  D3 28:1:0 0:0:768 108
+  D3 28:3:0 0:0:768 108
+  D3 30:1:0 0:0:768 108
+  D3 30:3:0 0:0:768 108
+  D3 32:1:0 0:0:768 108
+  D3 32:3:0 0:0:768 108
+  D3 34:1:0 0:0:768 108
+  D3 34:3:0 0:0:768 108
+
+[PATTERN Hat]
+LENGTH=36:0:0
+NOTES Hat
+  F#5 16:0:1920 0:0:384 64
+  F#5 16:1:1920 0:0:384 64
+  F#5 16:2:1920 0:0:384 64
+  F#5 16:3:1920 0:0:384 64
+  F#5 17:0:1920 0:0:384 64
+  F#5 17:1:1920 0:0:384 64
+  F#5 17:2:1920 0:0:384 64
+  F#5 17:3:1920 0:0:384 64
+  F#5 18:0:1920 0:0:384 64
+  F#5 18:1:1920 0:0:384 64
+  F#5 18:2:1920 0:0:384 64
+  F#5 18:3:1920 0:0:384 64
+  F#5 19:0:1920 0:0:384 64
+  F#5 19:1:1920 0:0:384 64
+  F#5 19:2:1920 0:0:384 64
+  F#5 19:3:1920 0:0:384 64
+  F#5 20:0:1920 0:0:384 64
+  F#5 20:1:1920 0:0:384 64
+  F#5 20:2:1920 0:0:384 64
+  F#5 20:3:1920 0:0:384 64
+  F#5 21:0:1920 0:0:384 64
+  F#5 21:1:1920 0:0:384 64
+  F#5 21:2:1920 0:0:384 64
+  F#5 21:3:1920 0:0:384 64
+  F#5 22:0:1920 0:0:384 64
+  F#5 22:1:1920 0:0:384 64
+  F#5 22:2:1920 0:0:384 64
+  F#5 22:3:1920 0:0:384 64
+  F#5 23:0:1920 0:0:384 64
+  F#5 23:1:1920 0:0:384 64
+  F#5 23:2:1920 0:0:384 64
+  F#5 23:3:1920 0:0:384 64
+  F#5 28:0:1920 0:0:384 64
+  F#5 28:1:1920 0:0:384 64
+  F#5 28:2:1920 0:0:384 64
+  F#5 28:3:1920 0:0:384 64
+  F#5 29:0:1920 0:0:384 64
+  F#5 29:1:1920 0:0:384 64
+  F#5 29:2:1920 0:0:384 64
+  F#5 29:3:1920 0:0:384 64
+  F#5 30:0:1920 0:0:384 64
+  F#5 30:1:1920 0:0:384 64
+  F#5 30:2:1920 0:0:384 64
+  F#5 30:3:1920 0:0:384 64
+  F#5 31:0:1920 0:0:384 64
+  F#5 31:1:1920 0:0:384 64
+  F#5 31:2:1920 0:0:384 64
+  F#5 31:3:1920 0:0:384 64
+  F#5 32:0:1920 0:0:384 64
+  F#5 32:1:1920 0:0:384 64
+  F#5 32:2:1920 0:0:384 64
+  F#5 32:3:1920 0:0:384 64
+  F#5 33:0:1920 0:0:384 64
+  F#5 33:1:1920 0:0:384 64
+  F#5 33:2:1920 0:0:384 64
+  F#5 33:3:1920 0:0:384 64
+  F#5 34:0:1920 0:0:384 64
+  F#5 34:1:1920 0:0:384 64
+  F#5 34:2:1920 0:0:384 64
+  F#5 34:3:1920 0:0:384 64
+  F#5 35:0:1920 0:0:384 64
+  F#5 35:1:1920 0:0:384 64
+  F#5 35:2:1920 0:0:384 64
+  F#5 35:3:1920 0:0:384 64
+
+[PLAYLIST]
+TRACK 1 name="Kick"
+  PATTERN Kick 0:0:0
+TRACK 2 name="SubBass"
+  PATTERN SubBass 0:0:0
+TRACK 3 name="Lead"
+  PATTERN Lead 0:0:0
+TRACK 4 name="Pad"
+  PATTERN Pad 0:0:0
+TRACK 5 name="Vocal"
+  PATTERN Vocal 0:0:0
+TRACK 6 name="Snare"
+  PATTERN Snare 0:0:0
+TRACK 7 name="Hat"
+  PATTERN Hat 0:0:0
+TRACK 8 name="Automation"
+  AUTOMATION channel.Lead.resfilter.cutoff 0:0:0
+    0:0:0 180 exponential
+    8:0:0 900 exponential
+    16:0:0 3200 exponential
+    24:0:0 500
+    28:0:0 3400 exponential
+    36:0:0 400 exponential
+  AUTOMATION channel.Pad.volume 0:0:0
+    0:0:0 0.2
+    8:0:0 0.5 smooth
+    16:0:0 0.7 smooth
+    36:0:0 0 smooth
+  AUTOMATION channel.Vocal.formant.morph 0:0:0
+    8:0:0 0
+    16:0:0 1 smooth
+    24:0:0 0.3
+    28:0:0 1 smooth
+  AUTOMATION insert.8.slot.17.mix 0:0:0
+    8:0:0 0.3 step
+    24:0:0 0.7 step
+    28:0:0 0.4 step
+  AUTOMATION insert.1.slot.4.amount 0:0:0
+    8:0:0 0 step
+    16:0:0 0.7 step
+    24:0:0 0 step
+    28:0:0 0.7 step
+    36:0:0 0 step
+  AUTOMATION insert.1.slot.3.mix 0:0:0
+    0:0:0 0.55
+    24:0:0 0.85 smooth
+    28:0:0 0.45 smooth
+
+[MIXER]
+INSERT 1 name="Master" gain=0.8
+  SLOT 1 Distortion drive=3
+  SLOT 2 Delay mix=0.28 timeMs=375 feedback=0.42
+  SLOT 3 Reverb mix=0.5 room=0.85 damp=0.4
+  SLOT 4 Ducker enabled=1 amount=0.7 releaseMs=130
+INSERT 2 name="Kick"
+  SLOT 5 Distortion drive=6
+INSERT 3 name="SubBass" gain=0.9
+  SLOT 6 Distortion mix=0.9 drive=12
+  SLOT 7 EQ low=4 mid=0 high=-2
+  SLOT 8 Bitcrush mix=0.3 bits=10 rate=14000
+INSERT 4 name="Lead" gain=0.7 pan=-0.1
+  SLOT 9 Bitcrush mix=0.25 bits=12 rate=18000
+  SLOT 10 Distortion mix=0.6 drive=4
+  SLOT 11 Chorus mix=0.5 rate=0.8 depth=0.4
+  SLOT 12 EQ low=-5 mid=0 high=2
+  SEND 1 insert.5 level=0.4
+  SEND 2 insert.6 level=0.5
+INSERT 5 name="Delay Bus"
+INSERT 6 name="Reverb Bus"
+INSERT 7 name="Pad" gain=0.5
+  SLOT 13 Chorus mix=0.6 rate=0.5 depth=0.6
+  SLOT 14 Bitcrush mix=0.2 bits=12 rate=16000
+  SLOT 15 Reverb mix=0.55 room=0.9 damp=0.4
+  SLOT 16 EQ low=2 mid=-2 high=-3
+  SEND 3 insert.6 level=0.4
+INSERT 8 name="Vocal" gain=0.88 pan=0.05
+  SLOT 17 Bitcrush mix=0.35 bits=10 rate=14000
+  SLOT 18 Reverb mix=0.5 room=0.85 damp=0.45
+  SEND 4 insert.5 level=0.5
+  SEND 5 insert.6 level=0.35
+INSERT 9 name="Snare" gain=0.7
+  SLOT 19 Distortion mix=0.6 drive=5
+  SLOT 20 Reverb mix=0.4 room=0.7 damp=0.3
+INSERT 10 name="Hat" gain=0.4 pan=0.12
+  SLOT 21 Bitcrush mix=0.4 bits=6 rate=10000
+ROUTE insert.2 -> insert.1
+ROUTE insert.3 -> insert.1
+ROUTE insert.4 -> insert.1
+ROUTE insert.5 -> insert.1
+ROUTE insert.6 -> insert.1
+ROUTE insert.7 -> insert.1
+ROUTE insert.8 -> insert.1
+ROUTE insert.9 -> insert.1
+ROUTE insert.10 -> insert.1
+
+[MARKERS]
+0:0:0 "Intro"
+8:0:0 "Verse"
+16:0:0 "Chorus"
+24:0:0 "Breakdown"
+28:0:0 "Chorus2"
+36:0:0 "Outro"

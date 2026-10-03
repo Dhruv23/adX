@@ -1,0 +1,90 @@
+[PROJECT]
+ADX_VERSION=2
+TUNING=440
+
+[TEMPO]
+0:0:0 150
+
+[METER]
+0:0:0 4/4
+
+[CHANNEL Hardstyle Kick]
+INSTRUMENT=additive
+OUTPUT=insert.2
+POLYPHONY=16
+VOLUME=1
+PAN=0
+PARAM env.attack=0.001
+PARAM env.decay=0.35
+PARAM env.sustain=0
+PARAM env.release=0.06
+PARAM harmonic.1=1
+PARAM harmonic.2=0.7
+PARAM harmonic.3=0.5
+PARAM harmonic.4=0.4
+PARAM harmonic.5=0.3
+PARAM harmonic.6=0.25
+PARAM harmonic.7=0.2
+PARAM harmonic.8=0.15
+PARAM harmonic.9=0
+PARAM harmonic.10=0
+PARAM harmonic.11=0
+PARAM harmonic.12=0
+PARAM harmonic.13=0
+PARAM harmonic.14=0
+PARAM harmonic.15=0
+PARAM harmonic.16=0
+PARAM drive=12
+PARAM filter.cutoff=20000
+PARAM filter.lfoRate=0
+PARAM filter.lfoDepth=0
+PARAM sub.level=0.9
+PARAM sub.wave=0
+PARAM sub.dropSemitones=36
+PARAM sub.dropMs=45
+
+[CHANNEL Samples]
+INSTRUMENT=additive
+OUTPUT=insert.3
+POLYPHONY=16
+VOLUME=1
+PAN=0
+
+[PATTERN Hardstyle Kick]
+LENGTH=2:0:0
+NOTES "Hardstyle Kick"
+  C2 0:0:0 0:0:1920 127
+  G4 0:0:1920 0:0:960 89
+  C2 0:1:0 0:0:1920 127
+  G4 0:1:1920 0:0:960 89
+  C2 0:2:0 0:0:1920 127
+  G4 0:2:1920 0:0:960 89
+  C2 0:3:0 0:0:1920 127
+  G4 0:3:1920 0:0:960 89
+  C2 1:0:0 0:0:1920 127
+  C2 1:1:0 0:0:1920 127
+  C2 1:2:0 0:0:1920 127
+  C2 1:3:0 0:0:1920 127
+
+[PATTERN Samples]
+LENGTH=4:0:0
+
+[PLAYLIST]
+TRACK 1 name="Hardstyle Kick"
+  PATTERN "Hardstyle Kick" 0:0:0
+TRACK 2 name="Samples"
+  AUDIO "samples/kick_C3.wav" 1:0:0
+  AUDIO "samples/kick_C3.wav" 1:2:0
+  AUDIO "samples/kick_Ds3.wav" 2:0:0 pitch=-3 reverse=yes
+
+[MIXER]
+INSERT 1 name="Master" gain=0.8
+  SLOT 1 Distortion drive=6
+  SLOT 2 Delay mix=0 timeMs=350 feedback=0.35
+  SLOT 3 Reverb mix=0.08 room=0.5 damp=0.6
+  SLOT 4 Ducker enabled=1 amount=0.7 releaseMs=100
+INSERT 2 name="Hardstyle Kick"
+INSERT 3 name="Samples"
+  SLOT 5 Distortion mix=0.8 drive=6
+ROUTE insert.2 -> insert.1
+ROUTE insert.3 -> insert.1

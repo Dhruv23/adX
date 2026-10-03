@@ -1,0 +1,73 @@
+[PROJECT]
+ADX_VERSION=2
+TUNING=440
+
+[TEMPO]
+0:0:0 90
+
+[METER]
+0:0:0 4/4
+
+[CHANNEL Kalimba]
+INSTRUMENT=additive
+OUTPUT=insert.2
+POLYPHONY=16
+VOLUME=1
+PAN=0
+PARAM env.attack=0.005
+PARAM env.decay=0.3
+PARAM env.sustain=0
+PARAM env.release=0.15
+PARAM harmonic.1=1
+PARAM harmonic.2=0.2
+PARAM harmonic.3=0
+PARAM harmonic.4=0.4
+PARAM harmonic.5=0
+PARAM harmonic.6=0
+PARAM harmonic.7=0
+PARAM harmonic.8=0.4
+PARAM harmonic.9=0
+PARAM harmonic.10=0
+PARAM harmonic.11=0
+PARAM harmonic.12=0
+PARAM harmonic.13=0
+PARAM harmonic.14=0
+PARAM harmonic.15=0
+PARAM harmonic.16=0
+PARAM drive=0
+PARAM filter.cutoff=7000
+PARAM filter.lfoRate=0
+PARAM filter.lfoDepth=0
+PARAM sub.level=0
+PARAM sub.wave=0
+PARAM sub.dropSemitones=0
+PARAM sub.dropMs=50
+ARP mode=up rate=1/16 octaves=2 gate=0.8
+
+[PATTERN Kalimba]
+LENGTH=4:0:0
+NOTES Kalimba
+  A3 0:0:0 1:0:0 102
+  C4 0:0:0 1:0:0 102
+  E4 0:0:0 1:0:0 102
+  C4 1:0:0 1:0:0 102
+  E4 1:0:0 1:0:0 102
+  G4 1:0:0 1:0:0 102
+  F3 2:0:0 1:0:0 102
+  A3 2:0:0 1:0:0 102
+  C4 2:0:0 1:0:0 102
+  G3 3:0:0 1:0:0 102
+  B3 3:0:0 1:0:0 102
+  D4 3:0:0 1:0:0 102
+
+[PLAYLIST]
+TRACK 1 name="Kalimba"
+  PATTERN Kalimba 0:0:0
+
+[MIXER]
+INSERT 1 name="Master" gain=0.75
+  SLOT 1 Delay mix=0.3 timeMs=333 feedback=0.45
+  SLOT 2 Reverb mix=0.35 room=0.85 damp=0.4
+  SLOT 3 Ducker enabled=0 amount=0.6 releaseMs=120
+INSERT 2 name="Kalimba"
+ROUTE insert.2 -> insert.1

@@ -52,7 +52,7 @@ void ManualRender::compile(const graph::Graph& graph) {
 
     tracks.clear();
     for (const auto& list : events) {
-        tracks.push_back(project::EventTrack{.events = list});
+        tracks.push_back(project::EventTrack{.events = list, .lyrics = {}});
     }
     cursors.assign(tracks.size(), project::EventCursor{});
     if (params.empty()) {
@@ -114,6 +114,7 @@ std::vector<float> runChannelNode(graph::ChannelNode& node, std::vector<graph::B
                                       .sampleRate = 48000,
                                       .events = here,
                                       .params = params,
+                                      .automation = {},
                                       .arena = arena};
         node.process(context);
     }

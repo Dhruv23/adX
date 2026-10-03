@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <span>
+#include <string_view>
 
 #include "engine/graph/Node.h"
 
@@ -28,7 +29,13 @@ inline constexpr std::uint32_t kSlotParamCount = static_cast<std::uint32_t>(Slot
 class SlotNode : public Node {
 public:
     void prepare(const PrepareInfo& info) override;
-    void process(ProcessContext& context) noexcept final;
+    void process(ProcessContext& context) noexcept override;
+
+    /// The effect type this node implements, as the catalog names it; empty for the
+    /// identity. What the node store compares when a slot's type changes.
+    [[nodiscard]] virtual std::string_view typeName() const noexcept {
+        return {};
+    }
     void reset() noexcept override;
     [[nodiscard]] PortSpec ports() const noexcept override;
 

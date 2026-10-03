@@ -106,17 +106,33 @@ constexpr auto kPatchFieldAliases = std::to_array<std::pair<std::string_view, st
 
 /// v1 wrote formant vowels as letters. The v2 model holds a number, so the letters
 /// become indices in the order v1's own vowel table used.
+/// v1's FORMANT vowel names onto the formant bank's a e i o u (0..4).
+///
+/// By whole name, not first letter: v1 had six names (AudioEngine.cpp,
+/// GetVowelFormants), and keying on the first letter sent `Oo` to `Oh` and `Ee` to
+/// `Eh` - two different vowels each - which is how Phase 2 shipped it. `Uh`, v1's
+/// schwa, is nearest `Ah` and goes there; anything unrecognised was `Ah` in v1 too.
 [[nodiscard]] double vowelIndex(std::string_view text) noexcept {
-    constexpr std::string_view kVowels = "aeiou";
-    if (text.empty()) {
-        return 0.0;
+    // ASCII case-insensitive, without building a lowered copy.
+    const auto is = [text](std::string_view name) noexcept {
+        return std::ranges::equal(text, name, [](char a, char b) {
+            const char lower = a >= 'A' && a <= 'Z' ? static_cast<char>(a + ('a' - 'A')) : a;
+            return lower == b;
+        });
+    };
+    if (is("eh") || is("e")) {
+        return 1.0;
     }
-    char first = text.front();
-    if (first >= 'A' && first <= 'Z') {
-        first = static_cast<char>(first + ('a' - 'A'));
+    if (is("ee") || is("i")) {
+        return 2.0;
     }
-    const std::size_t at = kVowels.find(first);
-    return at == std::string_view::npos ? 0.0 : static_cast<double>(at);
+    if (is("oh") || is("o")) {
+        return 3.0;
+    }
+    if (is("oo") || is("u")) {
+        return 4.0;
+    }
+    return 0.0; // ah, uh, and anything else
 }
 
 [[nodiscard]] std::string_view trim(std::string_view text) noexcept {
@@ -280,6 +296,11 @@ private:
     std::vector<RawLane> m_lanes;
 
     core::InsertId m_master;
+    /// Where tracks route: the "Master FX" insert carrying v1's master delay and
+    /// reverb when the file had either, else the master itself.
+    core::InsertId m_mixTarget;
+    /// Which insert each master slot type landed on, for automation paths.
+    std::unordered_map<std::string, core::InsertId> m_masterSlotOwners;
     std::unordered_map<std::string, core::InsertId> m_buses;
     /// Per v1 track name: the insert, channel and pattern it expanded into.
     // MSVC's unordered_map allocates a sentinel node in its default constructor,
@@ -297,6 +318,9 @@ private:
                             const Expanded& expanded);
     std::unordered_map<std::string, Expanded> m_expanded;
     std::unordered_map<std::string, core::SlotId> m_masterSlots;
+    /// The first [TRACK]'s insert: v1's sidechain key, always (AudioEngine.cpp,
+    /// "Track 1's bus ducks the master").
+    core::InsertId m_firstTrackInsert;
     std::unordered_set<std::string> m_usedNames;
     bool m_velocityRescaled{false};
 };
@@ -426,6 +450,26 @@ void V1Migration::collectPatch(Section& section) {
                    std::string(line.key) + "= became " + std::to_string(mapping->count) +
                        " named parameters");
         line.claimed = true;
+    }
+
+    // v1 ran a release from the patch's sustain level, never from where the envelope
+    // was (AudioEngine.cpp: releaseTable is a ramp from sustainLevel to 0), so with zero
+    // sustain the release is silence and a note-off is a cut - the percussive patches
+    // were tuned by their note lengths against that. v2 releases from the current level,
+    // so the same release time would add a tail v1 never played (+5 dB at 39 Hz on
+    // suffocation.adx's kick). Zero sustain therefore migrates with zero release.
+    constexpr std::array<std::pair<std::string_view, std::string_view>, 2> kReleases{
+        {{"env.sustain", "env.release"}, {"filterEnv.sustain", "filterEnv.release"}}};
+    for (const auto& [sustain, release] : kReleases) {
+        const auto level = std::ranges::find(patch.params, sustain, &project::ParamValue::name);
+        const auto time = std::ranges::find(patch.params, release, &project::ParamValue::name);
+        if (level != patch.params.end() && time != patch.params.end() && level->value == 0.0 &&
+            time->value != 0.0) {
+            time->value = 0.0;
+            m_diag.add(code::kV1ReleaseSilent, section.span,
+                       "[PATCH " + patch.name + "] " + std::string(release) +
+                           " became 0: v1 released from the sustain level, which is 0");
+        }
     }
 
     m_patches.push_back(std::move(patch));
@@ -639,14 +683,34 @@ void V1Migration::buildMaster() {
     execute(std::move(command));
     m_master = raw->created();
 
-    // Order is normative: drive, delay, reverb, ducker. It is the order v1's own
-    // master chain processed them in, and a reordering here would change the sound
-    // of every migrated project.
+    // Order is normative, and it is v1's: AudioEngine.cpp's master chain ran delay,
+    // reverb, the sidechain duck, the drive, then a 4:1 peak compressor at -3 dB, the
+    // master volume and a hard clamp at +-1. Phase 2's shim put the drive first,
+    // which changed the sound of every migrated project with MASTER_DRIVE; fixed in
+    // Phase 4 (phase_4.md §11).
     // `mix` is the slot's own wet/dry field, not one of its named parameters. Putting
     // it in params as well would give the file two spellings of one value, and the
     // parser reads `mix=` back into the field - so a save/load cycle would move it
     // and `fmt` would stop being idempotent.
-    const auto addSlot = [&](std::string_view type, std::vector<project::SlotParam> params) {
+    // v1's master delay and reverb ran on the sum of the tracks, and its send buses fed
+    // their *inputs*: the reverb send's tail was added after the reverb's own dry/wet,
+    // never through it. A separate insert reproduces that topology - tracks into
+    // "Master FX" (delay, reverb), that and the reverb bus into the master (duck,
+    // drive, compressor, clamp). Phase 2 put everything on one insert, so a send bus's
+    // tail went back through the master reverb's dry/wet and was reverberated twice.
+    m_mixTarget = m_master;
+    if (m_global.hasDelay || m_global.hasReverb) {
+        project::Insert fx;
+        fx.name = "Master FX";
+        auto fxCommand = std::make_unique<project::AddInsert>(std::move(fx));
+        const project::AddInsert* fxRaw = fxCommand.get();
+        execute(std::move(fxCommand));
+        m_mixTarget = fxRaw->created();
+        execute(std::make_unique<project::AddRoute>(m_mixTarget, m_master));
+    }
+
+    const auto addSlotTo = [&](core::InsertId owner, std::string_view type,
+                               std::vector<project::SlotParam> params) {
         project::Slot slot;
         slot.type = std::string(type);
         for (project::SlotParam& param : params) {
@@ -656,44 +720,54 @@ void V1Migration::buildMaster() {
             }
             slot.params.push_back(std::move(param));
         }
-        auto slotCommand = std::make_unique<project::AddSlot>(m_master, std::move(slot));
+        auto slotCommand = std::make_unique<project::AddSlot>(owner, std::move(slot));
         const project::AddSlot* slotRaw = slotCommand.get();
         execute(std::move(slotCommand));
         m_masterSlots[std::string(type)] = slotRaw->created();
+        m_masterSlotOwners[std::string(type)] = owner;
+    };
+    const auto addSlot = [&](std::string_view type, std::vector<project::SlotParam> params) {
+        addSlotTo(m_master, type, std::move(params));
     };
 
     const auto param = [](std::string_view name, double value) {
         return project::SlotParam{.name = std::string(name), .value = value};
     };
 
-    bool any = false;
-    if (m_global.masterDrive != 0.0) {
-        addSlot("Distortion", {param("drive", m_global.masterDrive), param("mix", 1.0)});
-        any = true;
-    }
     if (m_global.hasDelay) {
-        addSlot("Delay", {param("timeMs", m_global.delay[0]), param("feedback", m_global.delay[1]),
-                          param("mix", m_global.delay[2])});
-        any = true;
+        // v1 added the echoes on top of the untouched mix, at `mix` loud: the slot
+        // fully wet, the effect passing its dry through and the echoes at `level`.
+        addSlotTo(m_mixTarget, "Delay",
+                  {param("timeMs", m_global.delay[0]), param("feedback", m_global.delay[1]),
+                   param("mix", 1.0), param("dry", 1.0), param("level", m_global.delay[2])});
     }
     if (m_global.hasReverb) {
-        addSlot("Reverb", {param("room", m_global.reverb[0]), param("damp", m_global.reverb[1]),
-                           param("mix", m_global.reverb[2])});
-        any = true;
-    }
-    if (any) {
-        m_diag.add(code::kV1MasterFxMigrated, Span{},
-                   "v1's master FX are now slots on the master insert, in the order v1 "
-                   "processed them");
+        addSlotTo(m_mixTarget, "Reverb",
+                  {param("room", m_global.reverb[0]), param("damp", m_global.reverb[1]),
+                   param("mix", m_global.reverb[2])});
     }
     if (m_global.hasSidechain) {
         addSlot("Ducker",
                 {param("enabled", m_global.sidechain[0]), param("amount", m_global.sidechain[1]),
                  param("releaseMs", m_global.sidechain[2])});
         m_diag.add(code::kV1SidechainMigrated, Span{},
-                   "SIDECHAIN= became a Ducker slot on the master insert. v1 always keyed it "
-                   "from the first track; the key input is Phase 4's to route");
+                   "SIDECHAIN= became a Ducker slot on the master insert, keyed from the first "
+                   "track's insert as v1 always keyed it");
     }
+    if (m_global.masterDrive != 0.0) {
+        // v1's master drive was tanh(x * (1 + drive)): one more than the number in the
+        // file, unlike a track's DISTORTION effect, which used the number as given.
+        addSlot("Distortion", {param("drive", 1.0 + m_global.masterDrive), param("mix", 1.0)});
+    }
+    // v1's peak compressor and clamp, which every v1 render went through. The clamp
+    // becomes a limiter at 0 dBFS: v1 clipped what got past its compressor; this
+    // catches it without the distortion (P3-1).
+    addSlot("Compressor", {param("threshold", -3.0), param("ratio", 4.0), param("knee", 0.0),
+                           param("attack", 5.0), param("release", 50.0), param("smoothing", 1.0)});
+    addSlot("Limiter", {param("ceiling", 0.0)});
+    m_diag.add(code::kV1MasterFxMigrated, Span{},
+               "v1's master FX are now slots on the master insert, in the order v1 processed "
+               "them; its fixed peak compressor and output clamp are a Compressor and a Limiter");
 }
 
 core::InsertId V1Migration::ensureBus(std::string_view name) {
@@ -701,14 +775,37 @@ core::InsertId V1Migration::ensureBus(std::string_view name) {
     if (existing != m_buses.end()) {
         return existing->second;
     }
+    // v1's sends fed only the *input* of its master delay or reverb, never the dry
+    // mix. So the bus carries that effect fully wet, at the master effect's own level
+    // - the send's signal reaches the master as echo or tail, not a second time dry.
+    // Phase 2's empty buses passed every sent track through twice (phase_4.md §11).
+    const bool delay = name == "Delay Bus";
     project::Insert bus;
     bus.name = std::string(name);
-    bus.gain = 1.0F;
+    double level = 0.0;
+    if (delay && m_global.hasDelay) {
+        level = m_global.delay[2];
+    } else if (!delay && m_global.hasReverb) {
+        level = m_global.reverb[2];
+    }
+    bus.gain = static_cast<float>(level);
     auto command = std::make_unique<project::AddInsert>(std::move(bus));
     const project::AddInsert* raw = command.get();
     execute(std::move(command));
     const core::InsertId id = raw->created();
-    execute(std::make_unique<project::AddRoute>(id, m_master));
+    project::Slot effect;
+    effect.mix = 1.0F;
+    if (delay) {
+        effect.type = "Delay";
+        effect.params = {project::SlotParam{.name = "timeMs", .value = m_global.delay[0]},
+                         project::SlotParam{.name = "feedback", .value = m_global.delay[1]}};
+    } else {
+        effect.type = "Reverb";
+        effect.params = {project::SlotParam{.name = "room", .value = m_global.reverb[0]},
+                         project::SlotParam{.name = "damp", .value = m_global.reverb[1]}};
+    }
+    execute(std::make_unique<project::AddSlot>(id, std::move(effect)));
+    execute(std::make_unique<project::AddRoute>(id, delay ? m_mixTarget : m_master));
     m_buses.emplace(std::string(name), id);
     m_diag.add(code::kV1SendCreatedBus, Span{},
                "created the aux insert '" + std::string(name) +
@@ -754,7 +851,7 @@ void V1Migration::buildTrackMixer(const RawTrack& track, const std::string& name
         execute(std::move(command));
         expanded.slotsByType.emplace(effect.type, raw->created());
     }
-    execute(std::make_unique<project::AddRoute>(expanded.insert, m_master));
+    execute(std::make_unique<project::AddRoute>(expanded.insert, m_mixTarget));
 
     if (track.sendDelay != 0.0) {
         execute(std::make_unique<project::AddSend>(expanded.insert, ensureBus("Delay Bus"),
@@ -833,6 +930,9 @@ void V1Migration::buildTrack(const RawTrack& track) {
         expanded.channel = raw->created();
     }
     execute(std::make_unique<project::SetChannelOutput>(expanded.channel, expanded.insert));
+    if (!m_firstTrackInsert.valid()) {
+        m_firstTrackInsert = expanded.insert;
+    }
 
     // One pattern holding the whole track, placed once at the start. v1 had no
     // pattern concept at all - its notes *were* the arrangement - so a faithful
@@ -899,7 +999,8 @@ std::string V1Migration::v2PathFor(const RawLane& lane) {
             if (match == m_masterSlots.end()) {
                 return {};
             }
-            return "insert." + std::to_string(m_master.value) + ".slot." +
+            const auto owner = m_masterSlotOwners.find(std::string(type));
+            return "insert." + std::to_string(owner->second.value) + ".slot." +
                    std::to_string(match->second.value) + "." + std::string(leaf);
         };
         // v1 spelled these `master.<field>`: the section header is
@@ -917,7 +1018,7 @@ std::string V1Migration::v2PathFor(const RawLane& lane) {
             return slot("Reverb", "mix");
         }
         if (field == "delayMix") {
-            return slot("Delay", "mix");
+            return slot("Delay", "level");
         }
         if (field == "masterDrive") {
             return slot("Distortion", "drive");
@@ -937,11 +1038,16 @@ std::string V1Migration::v2PathFor(const RawLane& lane) {
         return {};
     }
 
+    // v1's mix lanes write the track's live volume and pan, which replace MIX= and are
+    // applied after the track's effects (AudioEngine.cpp, applyTrackAutomationTarget).
+    // MIX= became the insert's gain and pan, so that is what a lane drives - not the
+    // channel's, which would multiply MIX= by the lane and sit before the effects.
+    const std::string insert = "insert." + std::to_string(expanded->second.insert.value);
     if (lane.param == "mix.volume") {
-        return "channel." + quote(channel->name) + ".volume";
+        return insert + ".gain";
     }
     if (lane.param == "mix.pan") {
-        return "channel." + quote(channel->name) + ".pan";
+        return insert + ".pan";
     }
     constexpr std::string_view kPatchPrefix = "patch.";
     if (lane.param.starts_with(kPatchPrefix)) {
@@ -1061,6 +1167,10 @@ void V1Migration::build() {
     buildMaster();
     for (const RawTrack& track : m_tracks) {
         buildTrack(track);
+    }
+    const auto ducker = m_masterSlots.find("Ducker");
+    if (ducker != m_masterSlots.end() && m_firstTrackInsert.valid()) {
+        execute(std::make_unique<project::SetSlotSidechain>(ducker->second, m_firstTrackInsert));
     }
     buildAutomation();
 

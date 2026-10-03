@@ -182,6 +182,24 @@ private:
     bool m_existed{false};
 };
 
+/// Keys a slot's effect from an insert, or (with an invalid id) unkeys it.
+class SetSlotSidechain final : public Command {
+public:
+    SetSlotSidechain(core::SlotId id, core::InsertId key);
+
+    void apply(Project& project) override;
+    void revert(Project& project) override;
+    [[nodiscard]] std::string_view name() const noexcept override;
+    [[nodiscard]] CommandId kind() const noexcept override;
+    [[nodiscard]] DirtyMask dirty() const noexcept override;
+
+private:
+    core::SlotId m_id;
+    core::InsertId m_key;
+    core::InsertId m_previous;
+    bool m_applied{false};
+};
+
 class AddSend final : public Command {
 public:
     /// `wanted` adopts the id the file gave this send, so `insert.2.send.5.level`

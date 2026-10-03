@@ -136,4 +136,28 @@ private:
     bool m_moved{false};
 };
 
+/// Replaces a placement's clip envelopes wholesale. One gesture in the editor - drawing
+/// a point, dragging one - is one envelope list, so this is one command rather than a
+/// per-point family; it coalesces like a drag.
+class SetClipEnvelopes final : public Command {
+public:
+    SetClipEnvelopes(core::PlaylistTrackId track, core::ItemId item,
+                     std::vector<ClipEnvelope> envelopes);
+
+    void apply(Project& project) override;
+    void revert(Project& project) override;
+    [[nodiscard]] std::string_view name() const noexcept override;
+    [[nodiscard]] CommandId kind() const noexcept override;
+    [[nodiscard]] DirtyMask dirty() const noexcept override;
+    [[nodiscard]] std::uint64_t targetKey() const noexcept override;
+    [[nodiscard]] bool coalesceWith(const Command& next) override;
+
+private:
+    core::PlaylistTrackId m_track;
+    core::ItemId m_item;
+    std::vector<ClipEnvelope> m_envelopes;
+    std::vector<ClipEnvelope> m_previous;
+    bool m_applied{false};
+};
+
 } // namespace adx::project

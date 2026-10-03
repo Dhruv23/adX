@@ -65,6 +65,9 @@ project::Project syntheticProject(const SyntheticSpec& spec) {
         project::Channel channel;
         channel.id = out.newChannelId();
         channel.name = "Ch" + std::to_string(c);
+        // The test tone, explicitly: the load this project carries is the scheduler's
+        // and the graph's, and the default "additive" is a real instrument since Phase 4.
+        channel.instrument.type = "testtone";
         channel.output = bus.id;
         channel.maxPolyphony = 8;
         out.channels.push_back(channel);
@@ -73,7 +76,8 @@ project::Project syntheticProject(const SyntheticSpec& spec) {
         pattern.id = out.newPatternId();
         pattern.name = "P" + std::to_string(c);
         pattern.length = spec.length;
-        pattern.noteClips.push_back(project::NoteClip{.channel = channel.id, .notes = {}});
+        pattern.noteClips.push_back(
+            project::NoteClip{.channel = channel.id, .notes = {}, .extras = {}});
         patterns.push_back(std::move(pattern));
     }
 
@@ -101,7 +105,8 @@ project::Project syntheticProject(const SyntheticSpec& spec) {
                                                     .length = core::Ticks{0},
                                                     .sourceOffset = core::Ticks{0},
                                                     .content = project::PatternRef{patterns[c].id},
-                                                    .muted = false});
+                                                    .muted = false,
+                                                    .envelopes = {}});
         out.playlist.tracks.push_back(std::move(track));
     }
     out.patterns = std::move(patterns);
@@ -122,6 +127,9 @@ project::Project toneProject(const std::vector<NoteSpec>& notes, double bpm,
     project::Channel channel;
     channel.id = out.newChannelId();
     channel.name = "Tone";
+    // The test tone, explicitly: the scheduler's sample-accuracy tests find a note's
+    // onset as its first non-zero sample, which only the test tone guarantees.
+    channel.instrument.type = "testtone";
     channel.output = master.id;
     channel.maxPolyphony = polyphony;
     out.channels.push_back(channel);
@@ -129,7 +137,7 @@ project::Project toneProject(const std::vector<NoteSpec>& notes, double bpm,
     project::Pattern pattern;
     pattern.id = out.newPatternId();
     pattern.name = "Notes";
-    project::NoteClip clip{.channel = channel.id, .notes = {}};
+    project::NoteClip clip{.channel = channel.id, .notes = {}, .extras = {}};
     std::int64_t end = core::kPpq;
     for (const NoteSpec& spec : notes) {
         project::Note note;
@@ -152,7 +160,8 @@ project::Project toneProject(const std::vector<NoteSpec>& notes, double bpm,
                                                 .length = core::Ticks{0},
                                                 .sourceOffset = core::Ticks{0},
                                                 .content = project::PatternRef{pattern.id},
-                                                .muted = false});
+                                                .muted = false,
+                                                .envelopes = {}});
     out.patterns.push_back(std::move(pattern));
     out.playlist.tracks.push_back(std::move(track));
     return out;

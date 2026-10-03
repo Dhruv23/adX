@@ -221,4 +221,22 @@ private:
     ArpSettings m_previous;
 };
 
+/// Replaces a sampler channel's whole zone map: one gesture (a drag in the mapping
+/// editor, a dropped multi-sample) is one command.
+class SetChannelZones final : public Command {
+public:
+    SetChannelZones(core::ChannelId id, std::vector<SampleZone> zones);
+
+    void apply(Project& project) override;
+    void revert(Project& project) override;
+    [[nodiscard]] std::string_view name() const noexcept override;
+    [[nodiscard]] CommandId kind() const noexcept override;
+    [[nodiscard]] DirtyMask dirty() const noexcept override;
+
+private:
+    core::ChannelId m_id;
+    std::vector<SampleZone> m_zones;
+    std::vector<SampleZone> m_previous;
+};
+
 } // namespace adx::project

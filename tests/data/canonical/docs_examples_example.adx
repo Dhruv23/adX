@@ -1,0 +1,70 @@
+[PROJECT]
+ADX_VERSION=2
+TUNING=440
+
+[TEMPO]
+0:0:0 120
+
+[METER]
+0:0:0 4/4
+
+[CHANNEL LeadSynth]
+INSTRUMENT=additive
+OUTPUT=insert.2
+POLYPHONY=16
+VOLUME=1
+PAN=0
+PARAM env.attack=0.01
+PARAM env.decay=0.4
+PARAM env.sustain=0.6
+PARAM env.release=0.3
+PARAM harmonic.1=1
+PARAM harmonic.2=0.5
+PARAM harmonic.3=0.33
+PARAM harmonic.4=0.25
+PARAM harmonic.5=0.1
+PARAM harmonic.6=0
+PARAM harmonic.7=0
+PARAM harmonic.8=0
+PARAM harmonic.9=0
+PARAM harmonic.10=0
+PARAM harmonic.11=0
+PARAM harmonic.12=0
+PARAM harmonic.13=0
+PARAM harmonic.14=0
+PARAM harmonic.15=0
+PARAM harmonic.16=0
+
+[CHANNEL BassLine]
+INSTRUMENT=additive
+OUTPUT=insert.3
+POLYPHONY=16
+VOLUME=1
+PAN=0
+
+[PATTERN LeadSynth]
+LENGTH=2:0:0
+NOTES LeadSynth
+  C4 0:0:0 0:1:0 114
+  E4 0:1:0 0:1:0 102
+  G4 0:2:0 0:1:0 102
+  C5 0:3:0 0:2:0 127
+
+[PATTERN BassLine]
+LENGTH=2:0:0
+NOTES BassLine
+  C2 0:0:0 1:0:0 89
+  F2 1:0:0 1:0:0 0
+
+[PLAYLIST]
+TRACK 1 name="LeadSynth"
+  PATTERN LeadSynth 0:0:0
+TRACK 2 name="BassLine"
+  PATTERN BassLine 0:0:0
+
+[MIXER]
+INSERT 1 name="Master" gain=0.75
+INSERT 2 name="LeadSynth"
+INSERT 3 name="BassLine"
+ROUTE insert.2 -> insert.1
+ROUTE insert.3 -> insert.1

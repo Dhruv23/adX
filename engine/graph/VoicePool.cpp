@@ -130,6 +130,15 @@ Voice* VoicePool::allocate(VoiceKey key, project::VoiceStealMode mode) noexcept 
     return slot;
 }
 
+Voice* VoicePool::findSounding(VoiceKey key) noexcept {
+    for (Voice& voice : m_voices) {
+        if (sounding(voice) && voice.key == key) {
+            return &voice;
+        }
+    }
+    return nullptr;
+}
+
 Voice* VoicePool::find(VoiceKey key) noexcept {
     for (Voice& voice : m_voices) {
         if (voice.phase == VoicePhase::Active && voice.key == key) {

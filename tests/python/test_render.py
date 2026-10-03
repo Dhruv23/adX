@@ -19,10 +19,7 @@ def suffocation(repo_root: pathlib.Path) -> adx_engine.Project:
 
 
 def test_render_suffocation_to_wav(suffocation: adx_engine.Project, tmp_path: pathlib.Path) -> None:
-    """phase_3.md 7: render 30 s of suffocation.adx offline to a WAV, and it makes sound.
-
-    Test tones, not the real patch - Phase 4 makes it sound right.
-    """
+    """phase_3.md 7: render 30 s of suffocation.adx offline to a WAV, and it makes sound."""
     out = tmp_path / "suffocation.wav"
     ticks_per_second = adx_engine.PPQ * 120 // 60  # suffocation is 120 bpm
     stats = adx_engine.render_offline(suffocation, str(out), end=30 * ticks_per_second)
@@ -80,6 +77,39 @@ def test_transport_moves_on_a_null_stream(suffocation: adx_engine.Project) -> No
     assert adx_engine.rt_violation_count() == 0 or not adx_engine.rt_guard_enabled()
 
 
+def test_levels_reads_every_strip_in_one_call(suffocation: adx_engine.Project) -> None:
+    """P3-7: one call returns every strip's latest meter frame, as an N x 9 array."""
+    engine = adx_engine.Engine(null_backend=True)
+    engine.set_project(suffocation)
+    idle = engine.levels()
+    assert idle.dtype.name == "float32"
+    assert idle.ndim == 2
+    assert idle.shape[1] == 9
+    strips = idle.shape[0]
+    assert strips >= 2  # the master and at least one track's insert
+    assert sorted(set(idle[:, 0].tolist())) == sorted(idle[:, 0].tolist())  # one row per insert
+
+    engine.transport.play()
+    engine.start()
+    try:
+        deadline = time.monotonic() + 10.0
+        levels = engine.levels()
+        while time.monotonic() < deadline:
+            time.sleep(1 / 60)
+            engine.pump()
+            levels = engine.levels()
+            # The kick plays from the first beat; wait for the loudness window to fill.
+            if levels[:, 1].max() > 0.01 and levels[:, 5].max() > -70.0:
+                break
+    finally:
+        engine.stop()
+    assert levels.shape == (strips, 9)
+    assert levels[:, 1].max() > 0.01  # peak left
+    assert levels[:, 3].max() > 0.001  # RMS left
+    assert levels[:, 5].max() > -70.0  # momentary LUFS, not silence (-200)
+    assert (levels[:, 1] <= 4.0).all()
+
+
 def test_knob_turn_does_not_rebuild(suffocation: adx_engine.Project) -> None:
     """set_param edits the project and posts the value; no snapshot is rebuilt."""
     engine = adx_engine.Engine(null_backend=True)
@@ -94,11 +124,15 @@ def test_knob_turn_does_not_rebuild(suffocation: adx_engine.Project) -> None:
 
 
 def test_sample_accurate_render_through_python(tmp_path: pathlib.Path) -> None:
-    """A note at tick 1000 at 120 bpm starts on frame 6250, exactly."""
+    """A note at tick 1000 at 120 bpm starts on frame 6250, exactly.
+
+    On the test tone, whose first sample is never zero: a sine-phase instrument's is.
+    """
     text = """[PROJECT]
 ADX_VERSION=2
 
 [CHANNEL Tone]
+INSTRUMENT=testtone
 OUTPUT=insert.1
 
 [PATTERN P]

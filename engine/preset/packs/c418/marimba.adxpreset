@@ -1,0 +1,17 @@
+# docs/C418.md §2.3: wooden bars - the fundamental and the strong 4th partial, the
+# marimba's "double octave", with a trace of the 8th.
+[PRESET]
+NAME="Marimba"
+TYPE=additive
+PACK=c418
+TAGS=mallet, wood, pluck
+
+[PARAMS]
+harmonic.1=1
+harmonic.2=0.05
+harmonic.4=0.5
+harmonic.8=0.1
+env.attack=0.003
+env.decay=0.25 curve=exponential(0.14)
+env.sustain=0
+env.release=0.12 curve=exponential(0)

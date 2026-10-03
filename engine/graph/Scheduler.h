@@ -96,6 +96,12 @@ private:
                   std::uint32_t outChannels) noexcept;
     static void applyAutomation(project::Snapshot& snapshot,
                                 const transport::TimeSource& arrangement) noexcept;
+    /// The per-frame values of the automated parameters among a step's, from the
+    /// per-callback arena; empty when none of them is automated.
+    [[nodiscard]] static std::span<const float* const>
+    automationFor(const NodeStep& step, project::Snapshot& snapshot,
+                  const transport::TimeSource& arrangement, rt::BlockArena& arena,
+                  std::uint32_t frames) noexcept;
     [[nodiscard]] EventView eventsFor(const NodeStep& step, project::Snapshot& snapshot,
                                       transport::TransportSet& transport, rt::BlockArena& arena,
                                       std::uint32_t frames) noexcept;

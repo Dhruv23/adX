@@ -40,11 +40,15 @@ class TestToneNode final : public ChannelNode {
 public:
     using ChannelNode::ChannelNode;
 
+    [[nodiscard]] std::string_view typeName() const noexcept override {
+        return "testtone";
+    }
+
 protected:
     void startVoice(Voice& voice, const BlockEvent& event,
-                    std::uint32_t sampleRate) noexcept override;
+                    const VoiceRender& render) noexcept override;
     bool renderVoice(Voice& voice, std::span<float> left, std::span<float> right,
-                     std::uint32_t sampleRate, float pitchCents) noexcept override;
+                     const VoiceRender& render) noexcept override;
 };
 
 } // namespace adx::graph

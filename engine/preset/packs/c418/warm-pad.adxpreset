@@ -1,0 +1,17 @@
+# docs/C418.md §2.2/§2.3: the "Dreiton" backdrop - the full 1/n stack, a slow swell
+# and a long tail, under a 2.5 kHz lowpass breathing on a 0.1 Hz LFO.
+[PRESET]
+NAME="Warm Pad"
+TYPE=additive
+PACK=c418
+TAGS=pad, ambient, slow, dreiton
+
+[PARAMS]
+harmonics.series=1
+env.attack=1.2 curve=exponential(-0.32)
+env.decay=0.001
+env.sustain=1
+env.release=2.5 curve=exponential(-0.15)
+filter.cutoff=2500
+filter.lfoRate=0.1
+filter.lfoDepth=0.4

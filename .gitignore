@@ -47,3 +47,9 @@ Thumbs.db
 third_party_assets/
 
 token.txt
+
+# Phase 4 A/B: the archived engine build and reference renders stay local.
+tools/ab/*.exe
+tools/ab/*.obj
+tools/ab/*.wav
+tools/ab/fixed/

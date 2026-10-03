@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "engine/project/Project.h"
+#include "engine/project/TypeCatalog.h"
 
 namespace adx::project {
 namespace {
@@ -418,6 +419,37 @@ const ParamDescriptor& ParamRegistry::describe(ParamKind kind) noexcept {
 const ParamDescriptor* ParamRegistry::describeNamed(std::string_view name) noexcept {
     const auto match = std::ranges::find(kNamedParams, name, &ParamDescriptor::name);
     return match == kNamedParams.end() ? nullptr : &*match;
+}
+
+const ParamDescriptor* ParamRegistry::descriptorFor(ParamRef ref, const Project& project) noexcept {
+    switch (ref.kind) {
+    case ParamKind::None:
+        return nullptr;
+    case ParamKind::ChannelInstrumentParam: {
+        const Channel* channel = project.find(core::ChannelId{ref.owner});
+        if (channel == nullptr || ref.index >= channel->instrument.params.size()) {
+            return nullptr;
+        }
+        const std::string_view name = channel->instrument.params[ref.index].name;
+        if (const TypeInfo* type = findInstrumentType(channel->instrument.type)) {
+            return findParam(*type, name);
+        }
+        return describeNamed(name);
+    }
+    case ParamKind::SlotParam: {
+        const Slot* slot = project.mixer.findSlot(core::SlotId{ref.owner});
+        if (slot == nullptr || ref.index >= slot->params.size()) {
+            return nullptr;
+        }
+        const std::string_view name = slot->params[ref.index].name;
+        if (const TypeInfo* type = findEffectType(slot->type)) {
+            return findParam(*type, name);
+        }
+        return describeNamed(name);
+    }
+    default:
+        return &describe(ref.kind);
+    }
 }
 
 std::string ParamRegistry::quoteSegment(std::string_view name) {

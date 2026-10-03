@@ -14,12 +14,11 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
-#include <sstream>
 
 #include "engine/format/adx/Parser.h"
 #include "engine/render/RenderHash.h"
 #include "tests/cpp/Corpus.h"
-#include "tests/cpp/Env.h"
+#include "tests/cpp/render/GoldenHashes.h"
 #include "tests/cpp/render/RenderEvidence.h"
 #include "tests/cpp/render/RenderFixtures.h"
 
@@ -36,29 +35,6 @@ TEST_CASE("render_bit_identical_200x100k", "[render][gate][.slow]") {
 }
 
 namespace {
-
-std::filesystem::path goldenDirectory() {
-    return adx::tests::repoRoot() / "tests" / "golden";
-}
-
-std::map<std::string, std::string> readHashes(const std::filesystem::path& file) {
-    std::map<std::string, std::string> hashes;
-    std::ifstream in(file);
-    std::string line;
-    while (std::getline(in, line)) {
-        if (line.empty() || line.front() == '#') {
-            continue;
-        }
-        std::istringstream fields(line);
-        std::string name;
-        std::string hash;
-        fields >> name >> hash;
-        if (!name.empty()) {
-            hashes[name] = hash;
-        }
-    }
-    return hashes;
-}
 
 /// Renders one corpus file the way the corpus always has: 48 kHz, 256-frame blocks,
 /// from the start to the end of the arrangement plus a quarter second of tail, capped
@@ -93,7 +69,7 @@ TEST_CASE("golden_corpus_stable", "[render][golden]") {
     // deliberate change to what adX sounds like; in the second case, regenerate with
     // ADX_UPDATE_GOLDEN=1 and say why in the commit.
     std::vector<std::filesystem::path> files;
-    for (const auto& entry : std::filesystem::directory_iterator(goldenDirectory())) {
+    for (const auto& entry : std::filesystem::directory_iterator(adx::tests::goldenDirectory())) {
         if (entry.path().extension() == ".adx") {
             files.push_back(entry.path());
         }
@@ -104,32 +80,16 @@ TEST_CASE("golden_corpus_stable", "[render][golden]") {
     std::ranges::sort(files);
     REQUIRE(files.size() >= 5);
 
-    const std::filesystem::path hashFile = goldenDirectory() / "hashes.txt";
-    const std::map<std::string, std::string> committed = readHashes(hashFile);
-
     std::map<std::string, std::string> actual;
     for (const auto& file : files) {
         const std::string name =
             std::filesystem::relative(file, adx::tests::repoRoot()).generic_string();
         actual[name] = renderHash(file);
     }
-
-    if (adx::tests::environment("ADX_UPDATE_GOLDEN")) {
-        std::ofstream out(hashFile, std::ios::binary);
-        out << "# Render hashes for the golden corpus: 48 kHz, 256-frame blocks, stereo,\n"
-               "# FNV-1a 128 over the raw float bytes. Regenerate with ADX_UPDATE_GOLDEN=1,\n"
-               "# and only on purpose.\n";
-        for (const auto& [name, hash] : actual) {
-            out << name << ' ' << hash << '\n';
-        }
-        WARN("golden hashes rewritten: " << hashFile.string());
-        return;
-    }
-
-    for (const auto& [name, hash] : actual) {
-        INFO(name);
-        const auto found = committed.find(name);
-        REQUIRE(found != committed.end());
-        CHECK(found->second == hash);
-    }
+    adx::tests::checkGolden(
+        adx::tests::goldenDirectory() / "hashes.txt",
+        "# Render hashes for the golden corpus: 48 kHz, 256-frame blocks, stereo,\n"
+        "# FNV-1a 128 over the raw float bytes. Regenerate with ADX_UPDATE_GOLDEN=1,\n"
+        "# and only on purpose.\n",
+        actual);
 }

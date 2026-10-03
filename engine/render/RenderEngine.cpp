@@ -104,6 +104,17 @@ void RenderEngine::flushBacklog() {
     m_backlog.erase(m_backlog.begin(), m_backlog.begin() + static_cast<std::ptrdiff_t>(sent));
 }
 
+void RenderEngine::levels(std::vector<StripLevel>& out) {
+    out.clear();
+    m_builder.nodes().forEachMeter([&out](core::InsertId insert, const graph::MeterNode& meter) {
+        // A meter that has not reported yet reads as silence, so a UI gets one stable
+        // row per strip from the first call.
+        rt::LevelFrame frame;
+        static_cast<void>(meter.ring().readLatest(&frame, 1));
+        out.push_back(StripLevel{.insert = insert, .frame = frame});
+    });
+}
+
 void RenderEngine::pump() {
     static_cast<void>(m_audio.drainReaper());
     flushBacklog();

@@ -1,0 +1,23 @@
+# docs/STAKILLAZ.md §2.3: dark low-mid bass - moderate saturation, a rolled-off top,
+# a triangle sub underneath.
+[PRESET]
+NAME="Phonk Bass"
+TYPE=additive
+PACK=stakillaz
+TAGS=bass, phonk, dark
+
+[PARAMS]
+harmonic.1=1
+harmonic.2=0.8
+harmonic.3=0.4
+harmonic.4=0.3
+harmonic.5=0.15
+harmonic.6=0.1
+env.attack=0.004
+env.decay=0.2 curve=exponential(-0.15)
+env.sustain=0.6
+env.release=0.15 curve=exponential(0)
+drive=6
+filter.cutoff=1800
+sub.level=0.5
+sub.wave=1

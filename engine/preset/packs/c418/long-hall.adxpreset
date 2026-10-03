@@ -1,0 +1,11 @@
+# docs/C418.md §1: "space as an instrument" - a big, soft-edged room, half wet.
+[PRESET]
+NAME="Long Hall"
+TYPE=Reverb
+PACK=c418
+MIX=0.5
+TAGS=reverb, space
+
+[PARAMS]
+room=0.85
+damp=0.4

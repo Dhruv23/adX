@@ -1,0 +1,41 @@
+# suffocation.adx: 31 third-octave band levels in dB, rendered by the archived engine.
+#
+# The reference for suffocation_spectral_match (phase_4.md §4.3, the Tranche A gate).
+# Rendered by tools/ab/v1fixed.exe - _archive/src-cpp's engine with two scheduling
+# bugs removed, as tools/ab/patch_v1.py describes - at its native 44.1 kHz with a
+# 4 s tail, and measured as tools/ab/bands.py measures: the mono sum, a
+# 65536-point Hann-windowed Welch average with 50 % overlap, power summed per band.
+# Regenerate with: python tools/ab/reference_bands.py
+#
+# centre_hz level_db
+19.686 -40.1410
+24.803 -37.5888
+31.250 -34.2281
+39.373 -29.2268
+49.606 -29.7001
+62.500 -28.7903
+78.745 -21.9962
+99.213 -24.2407
+125.000 -18.4699
+157.490 -22.0887
+198.425 -20.4694
+250.000 -23.3577
+314.980 -21.7149
+396.850 -17.9316
+500.000 -20.5218
+629.961 -22.6132
+793.701 -15.9085
+1000.000 -21.2055
+1259.921 -20.4090
+1587.401 -21.5525
+2000.000 -19.9806
+2519.842 -20.6268
+3174.802 -23.1705
+4000.000 -24.0263
+5039.684 -25.4774
+6349.604 -26.5946
+8000.000 -28.0857
+10079.368 -29.6190
+12699.208 -31.0636
+16000.000 -32.4754
+20158.737 -33.7035

@@ -26,3 +26,7 @@ CMakeLists.txt text eol=lf
 *.lib binary
 *.dll binary
 *.exe binary
+
+# Batch files: cmd.exe mis-parses labels and goto in LF files.
+*.cmd text eol=crlf
+*.bat text eol=crlf

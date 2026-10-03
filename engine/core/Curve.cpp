@@ -5,6 +5,8 @@
 #include <cmath>
 #include <string_view>
 
+#include "engine/dsp/Math.h"
+
 namespace adx::core {
 namespace {
 
@@ -22,7 +24,19 @@ static_assert(kNames.size() == kCurveKindCount);
 /// not.
 [[nodiscard]] float exponentFor(float tension) noexcept {
     const float clamped = std::clamp(tension, -1.0F, 1.0F);
-    return std::exp2(clamped + 1.0F);
+    return static_cast<float>(dsp::exp2(static_cast<double>(clamped) + 1.0));
+}
+
+/// x^e for x in [0, 1]. Through engine/dsp/Math.h rather than std::pow: this is the
+/// evaluator automation and envelopes share, and its output reaches the golden
+/// hashes, which every build configuration must reproduce (dsp/Math.h explains why a
+/// library pow cannot promise that). The one include of engine/dsp from engine/core,
+/// and a header-only one.
+[[nodiscard]] float power(float x, float e) noexcept {
+    if (x <= 0.0F) {
+        return 0.0F;
+    }
+    return static_cast<float>(dsp::pow(static_cast<double>(x), static_cast<double>(e)));
 }
 
 /// x(s) for a cubic Bezier whose endpoints are 0 and 1.
@@ -113,9 +127,9 @@ float Curve::evaluate(float t) const noexcept {
     case CurveKind::Linear:
         return x;
     case CurveKind::Exponential:
-        return std::pow(x, exponentFor(tension));
+        return power(x, exponentFor(tension));
     case CurveKind::Logarithmic:
-        return 1.0F - std::pow(1.0F - x, exponentFor(tension));
+        return 1.0F - power(1.0F - x, exponentFor(tension));
     case CurveKind::Step:
         return x < 1.0F ? 0.0F : 1.0F;
     case CurveKind::Smooth:

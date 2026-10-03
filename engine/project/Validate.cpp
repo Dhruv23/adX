@@ -129,6 +129,14 @@ void checkMixer(const Project& project, format::DiagnosticList& diagnostics) {
                         "end");
     }
     for (const Insert& insert : project.mixer.inserts) {
+        for (const Slot& slot : insert.slots) {
+            if (slot.sidechain.valid() && project.mixer.find(slot.sidechain) == nullptr) {
+                diagnostics.add(kUnknownInsertRef, kNoSpan,
+                                "slot " + std::to_string(slot.id.value) + " is keyed from insert " +
+                                    std::to_string(slot.sidechain.value) +
+                                    ", which does not exist");
+            }
+        }
         for (const Send& send : insert.sends) {
             if (project.mixer.find(send.target) == nullptr) {
                 diagnostics.add(kUnknownInsertRef, kNoSpan,
@@ -162,6 +170,13 @@ void checkRoutingCycles(const Project& project, format::DiagnosticList& diagnost
         edges[route.from.value].push_back(route.to.value);
     }
     for (const Insert& insert : project.mixer.inserts) {
+        for (const Slot& slot : insert.slots) {
+            // A sidechain is an edge from its key into the slot's insert: a key that
+            // is fed by the insert it keys is a cycle like any other.
+            if (slot.sidechain.valid()) {
+                edges[slot.sidechain.value].push_back(insert.id.value);
+            }
+        }
         for (const Send& send : insert.sends) {
             edges[insert.id.value].push_back(send.target.value);
         }
@@ -335,6 +350,13 @@ void checkChannels(const Project& project, format::DiagnosticList& diagnostics) 
             diagnostics.add(kUnknownInsertRef, kNoSpan,
                             "channel '" + channel.name + "' feeds insert " +
                                 std::to_string(channel.output.value) + ", which does not exist");
+        }
+        for (const SampleZone& zone : channel.instrument.zones) {
+            if (project.resources.find(zone.sample) == nullptr) {
+                diagnostics.add(kMissingSampleFile, kNoSpan,
+                                "a zone on channel '" + channel.name +
+                                    "' references a sample that is not in the pool");
+            }
         }
     }
 }

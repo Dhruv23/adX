@@ -15,6 +15,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <pybind11/pybind11.h>
@@ -25,6 +26,7 @@
 #include "engine/format/adx/Document.h"
 #include "engine/format/adx/Parser.h"
 #include "engine/format/adx/Writer.h"
+#include "engine/project/TypeCatalog.h"
 #include "engine/project/Validate.h"
 #include "engine/project/commands/ChannelCommands.h"
 #include "engine/project/commands/NoteCommands.h"
@@ -296,6 +298,19 @@ void defineProjectIo(py::class_<ProjectHandle>& project) {
                 return names;
             },
             "Channel names, in id order.")
+        .def_property_readonly(
+            "instruments",
+            [](const ProjectHandle& handle) {
+                std::vector<std::pair<std::string, bool>> types;
+                types.reserve(handle.project.channels.size());
+                for (const auto& channel : handle.project.channels) {
+                    const std::string& type = channel.instrument.type;
+                    types.emplace_back(type, adx::project::findInstrumentType(type) != nullptr);
+                }
+                return types;
+            },
+            "Each channel's instrument type, in id order, with whether the engine has it "
+            "(an unknown type plays silence).")
         .def_property_readonly(
             "patterns",
             [](const ProjectHandle& handle) {

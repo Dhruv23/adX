@@ -1,4 +1,5 @@
-// Peak and RMS of a strip, one reading per process() call, into a ring the UI polls.
+// Peak, RMS and loudness of a strip, one reading per process() call, into a ring the UI
+// polls. The master's meter adds true peak (phase_4.md §4.10).
 //
 // Computed here, where the samples already are, so the UI's 60 Hz timer reads a few
 // dozen floats in one call rather than shipping every sample across the FFI boundary
@@ -7,6 +8,8 @@
 // misses a frame has lost nothing worth having.
 #pragma once
 
+#include "engine/dsp/Loudness.h"
+#include "engine/dsp/TruePeak.h"
 #include "engine/graph/Node.h"
 #include "engine/rt/OverwriteRing.h"
 
@@ -26,8 +29,20 @@ public:
         return m_ring;
     }
 
+    /// Main thread, before prepare(). The master's meter measures true peak too.
+    void setTruePeak(bool enabled) noexcept {
+        m_truePeakEnabled = enabled;
+    }
+    [[nodiscard]] bool truePeak() const noexcept {
+        return m_truePeakEnabled;
+    }
+
 private:
     Ring m_ring;
+    dsp::LoudnessMeter m_loudness;
+    dsp::TruePeak m_peakLeft;
+    dsp::TruePeak m_peakRight;
+    bool m_truePeakEnabled{false};
 };
 
 } // namespace adx::graph

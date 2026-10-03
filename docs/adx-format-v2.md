@@ -373,7 +373,7 @@ labelling it v1 would send the next load through the v1 shim.
 | `SOLO` | boolean | `no` |
 | `COLOR` | `#rrggbb` | `#808080` |
 
-Plus two positional lines:
+Plus three positional lines:
 
 ```ebnf
 param-line  = "PARAM" , hspace , param-name , "=" , number , [ hspace , "curve=" , curve ] ;
@@ -384,7 +384,31 @@ arp-kv      = "mode" , "=" , arp-mode
             | "gate" , "=" , number ;
 arp-mode    = "off" | "up" | "down" | "updown" | "downup" | "random" | "order" ;
 fraction    = integer , "/" , integer ;
+zone-line   = "ZONE" , hspace , string , { hspace , zone-kv } ;
+zone-kv     = "key" , "=" , key-range          (* default 0..127 *)
+            | "root" , "=" , key               (* default 60; always written *)
+            | "vel" , "=" , key-range          (* default 1..127 *)
+            | "start" , "=" , integer          (* frames into the sample *)
+            | "loop" , "=" , loop-mode         (* default off *)
+            | "loopStart" , "=" , integer
+            | "loopEnd" , "=" , integer        (* exclusive; 0 = end of sample *)
+            | "xfade" , "=" , integer          (* loop crossfade, frames *)
+            | "tune" , "=" , number            (* cents *)
+            | "gain" , "=" , number            (* dB *)
+            | "pan" , "=" , number
+            | "rr" , "=" , integer , ":" , integer ;  (* round-robin group:index *)
+key-range   = key , [ ".." , key ] ;
+key         = integer | note-name ;
+loop-mode   = "off" | "forward" | "pingpong" | "sustain" | "release" ;
 ```
+
+`ZONE` maps a sample to a sampler channel's keys and velocities (phase_4.md §4.5),
+one line per zone, in order. The path is resolved like an `AUDIO` item's - relative
+to the project file - and the same file named by several zones, or by a zone and an
+`AUDIO` item, is one entry in the sample pool. A field at its default is not
+written, except `root`. Zones in a group `rr=g:i` with `g > 0` take turns: each note
+that matches the group plays the zone whose index is next, from a counter that is
+part of the render, so an offline render and a realtime one play the same zones.
 
 `PARAM` replaces v1's positional tuples. `RESFILTER=0,1200,0.7,0.5,0.3` is
 unreadable in a diff — which field changed? — and is the reason v1's format could
@@ -410,7 +434,12 @@ notes-block = "NOTES" , hspace , name-seg , newline , { note-line } ;
 note-line   = note-name , hspace , position , hspace , duration ,
               hspace , integer , { hspace , note-kv } ;
 note-kv     = "pan" "=" number | "cutoff" "=" number | "res" "=" number
-            | "fine" "=" integer | "rel" "=" integer ;
+            | "fine" "=" integer | "rel" "=" integer
+            | "slide" "=" slide | "bend" "=" bend | "lyric" "=" string ;
+slide       = pitch-amount , "@" , duration , "+" , duration , [ "~" , curve ] ;
+bend        = bend-point , { "|" , bend-point } ;
+bend-point  = pitch-amount , "@" , duration , [ "~" , curve ] ;
+pitch-amount = number , ( "st" | "c" ) ;   (* semitones or cents; stored as whole cents *)
 
 mini-block  = "MINI" , hspace , name-seg , newline , { any-line } ;
 
@@ -429,6 +458,15 @@ breakpoint  = position , hspace , number , [ hspace , curve ] ;
   also accepted and is written back as a note name.
 - A note starting outside `[0, LENGTH)` is `ADX2004`; it is kept, because a
   shortened pattern should not silently delete work.
+- `slide`, `bend` and `lyric` are the note extensions (phase_4.md §4.0). Their
+  times are **note-relative**. `slide=3st@0:1:0+0:0:960` glides 3 semitones up,
+  starting a beat into the note and taking 960 ticks; the target is stored as an
+  amount, not as a link to another note, so moving that note never retargets the
+  slide. `bend=` is a freeform pitch curve: each point is the offset from the note's
+  pitch at that time, and its `~curve` shapes the segment it starts. `lyric=` is the
+  syllable a voice instrument sings. A pitch amount is written in semitones when it
+  is a whole number of them (`-2st`), otherwise in cents (`-50c`). An absent key is
+  not written, so a file without extensions round-trips byte for byte.
 - `MINI` carries mini-notation source, one or more indented lines, each stored
   with its indentation and any trailing comment removed. Phase 2 stores the text;
   nothing compiles it (Phase 4 owns the compiler).
@@ -452,12 +490,23 @@ auto-item    = "AUTOMATION" , hspace , param-path , hspace , position , { hspace
 item-kv     = "length" "=" duration | "offset" "=" duration
             | "stretch" "=" number | "pitch" "=" number
             | "reverse" "=" boolean | "mute" "=" boolean ;
+
+envelope-block = "ENVELOPE" , hspace , ( "gain" | "pan" | "pitch" | param-path ) ,
+                 newline , { breakpoint } ;   (* indented under a PATTERN or AUDIO item *)
 ```
 
 The integer after `TRACK` is the playlist track's id. `offset` is the source
 offset used by slip editing (Phase 8 makes it do something; the model carries it
 from here so that it does not have to be retrofitted). An omitted `length` means
 the content's natural length.
+
+An `ENVELOPE` block, indented under a `PATTERN` or `AUDIO` item, is automation that
+belongs to that placement (phase_4.md §4.0): its breakpoint times are item-relative,
+points past the item's length are not played, and a parameter it drives returns to
+its own value when the item ends. `gain`, `pan` and `pitch` (cents) are properties of
+the placement; anything else is a parameter path, resolved like an `AUTOMATION`
+lane's (`ADX3001` if it names nothing). Gain, pan and pitch envelopes are stored and
+round-trip, but are audible only on audio clips, which play from Phase 8.
 
 A pattern name that is not a `bare-name` is quoted (`PATTERN "Verse 2" 0:0:0`). An
 `AUTOMATION` item carries its breakpoints indented beneath it, in the same form as a
@@ -474,7 +523,8 @@ insert-kv   = "name" "=" string | "gain" "=" number | "pan" "=" number
             | "invert" "=" boolean | "width" "=" number ;
 
 slot-line   = "SLOT" , hspace , integer , hspace , ident , { hspace , slot-kv } ;
-slot-kv     = "mix" "=" number | "bypass" "=" boolean | ident , "=" , number ;
+slot-kv     = "mix" "=" number | "bypass" "=" boolean | "sidechain" "=" reference
+            | ident , "=" , number ;
 
 send-line   = "SEND" , hspace , integer , hspace , reference , { hspace , send-kv } ;
 send-kv     = "level" "=" number | "pre" "=" boolean ;
@@ -495,6 +545,11 @@ per insert, because a parameter path names them directly
 for one id, not two. They are written out so a path keeps meaning the same slot or
 send after a deletion elsewhere. Effect type names are opaque to Phase 2; Phase 4
 owns them. `mix=` is the slot's own wet/dry, never one of its named parameters.
+
+`sidechain=insert.N` keys the slot from another insert's output - a ducker or
+compressor listening to the kick (phase_4.md §4.9). It is an edge in the routing
+graph like a `ROUTE`, so a key that would close a cycle is `ADX3005`. An effect that
+takes no key input ignores it.
 
 A file that declares no insert at all gets a master insert named `Master`, created
 on load and written out on the next save: every channel has to feed something.
@@ -653,6 +708,7 @@ silence.
 | `ADX4010` | Info | A v1 `CLIP` start time was in seconds and was converted through the tempo map. |
 | `ADX4011` | Info | v1 `LOOP=` was present, so the loop is enabled. |
 | `ADX4012` | Warning | A v1 line was not recognised by the v1 grammar either; kept as residue. |
+| `ADX4013` | Info | A v1 `ENVELOPE=` or `FILTERENV=` with zero sustain. v1 ran a release from the sustain level, so that release was silent and the note was cut at note-off; the release became 0, which is what v1 played. |
 
 ---
 
@@ -741,29 +797,23 @@ by reading v1's documentation, which is known to be incomplete.
 | `[GLOBAL] BPM=` | `[TEMPO]`, one event at `0:0:0` |
 | `TUNING=` | `[PROJECT] TUNING=` |
 | `MASTER_VOL=` | master insert `gain=` |
-| `MASTER_DRIVE=` | a `Distortion` slot on the master insert |
-| `DELAY=t,fb,mix` | a `Delay` slot on the master insert |
-| `REVERB=room,damp,mix` | a `Reverb` slot on the master insert |
-| `SIDECHAIN=on,amt,rel` | a `Ducker` slot on the master insert with `enabled`, `amount` and `releaseMs`. v1 always keyed it from the first track; routing that key input is Phase 4's, because a sidechain input is a property of the effect Phase 4 builds, not an edge the Phase 2 graph can express |
+| `MASTER_DRIVE=x` | a `Distortion` slot on the master insert with `drive=1+x`: v1's master drive was `tanh(s * (1 + x))`, unlike a track's `DISTORTION`, which used the number as given |
+| `DELAY=t,fb,mix` | a `Delay` slot on a **`Master FX`** insert that every track routes into, fully wet, with `dry=1` and `level=mix`: v1 added its echoes on top of the untouched mix |
+| `REVERB=room,damp,mix` | a `Reverb` slot on the same `Master FX` insert, after the delay |
+| `SIDECHAIN=on,amt,rel` | a `Ducker` slot on the master insert with `enabled`, `amount` and `releaseMs`, keyed (`sidechain=`) from the first track's insert, as v1 always keyed it |
+| (implicit) | v1's fixed master compressor and output clamp become a `Compressor` (threshold −3 dB, 4:1, linear smoothing) and a `Limiter` at 0 dBFS, the last two slots on the master insert. The master's order is v1's: duck, drive, compressor, limiter (`ADX4007`) |
 | `LOOP=start,end` | `[PROJECT] LOOP=`; its presence still means enabled |
 | `MARKER=beat,name` | a `[MARKERS]` entry. v1 split on the **first** comma only, so a name may contain commas — preserved exactly |
 | `[PATCH <name>]` and its keys | one `additive` `InstrumentSpec` in the patch library; each positional tuple becomes named `PARAM`s |
 | `[TRACK <patch>]` | **one Channel + one Pattern + one PlaylistTrack + one Insert**, all named after the patch. This 1→4 expansion is the fix for the flat `Track` that blocked every DAW feature |
 | `Note Start Len Vel` | a `NoteClip` in that Pattern; velocity `0..1` → `0..127` |
 
-> **Planned v2 note extensions (not yet in the grammar):** `slide=<semitones|cents>@<start>+<len>[:shape]`,
-> `bend=<tick>:<cents>,...` and `lyric="<text>"` as optional trailing keys on a note line,
-> mapping to the `Note.slide` / `Note.pitchCurve` / `Note.lyric` additions in
-> [phase_4.md §4.0](../plans/phase_4.md) (Phases 2 and 3 are closed, so the schema change is
-> scheduled there). Absent keys serialize to nothing, so existing files are
-> byte-identical on round-trip. The `Voice` instrument's voicebank path is an
-> `InstrumentSpec` sample ref (project-relative), like any sampler asset.
 | `PATTERN=<mini>` | `Pattern.mini`, source text only |
 | `CLIP path start [pitch stretch [R]]` | a `PlaylistItem` with an audio reference; `R` → `reverse=yes`; start seconds → ticks through the tempo map |
 | `ARP mode rate oct gate` | the channel's `ARP` line; v1's integer mode maps 0→off, 1→up, 2→down, 3→updown, 4→random |
 | `EFFECT <type> <args...>` | `SLOT` entries on that track's insert, positional args → named |
 | `MIX=vol,pan` | insert `gain=` / `pan=` |
-| `SEND=Delay,amt` / `SEND=Reverb,amt` | an aux insert named `Delay Bus` / `Reverb Bus`, created on first use and reused thereafter, plus a `SEND` and a `ROUTE` to master |
+| `SEND=Delay,amt` / `SEND=Reverb,amt` | an aux insert named `Delay Bus` / `Reverb Bus`, created on first use and reused thereafter, plus a `SEND` and a `ROUTE` to master. The bus carries its effect fully wet at the master effect's level (insert `gain=`), because v1's sends fed only the effect's input, never the dry mix |
 | `[AUTOMATION <track> <param>]` | an automation clip whose target is resolved through the parameter registry; unresolvable targets are `ADX4001` and the lane is kept as residue |
 
 ### 12.1 v1 parameter tuples
@@ -790,12 +840,51 @@ exhaustive; anything not listed is residue.
 
 | v1 target | v2 parameter path |
 |---|---|
-| `mix.volume` | `channel.<track>.volume` |
-| `mix.pan` | `channel.<track>.pan` |
+| `mix.volume` | `insert.<track's insert>.gain` - v1's lane replaced `MIX=` after the track's effects, and `MIX=` is the insert's gain |
+| `mix.pan` | `insert.<track's insert>.pan` |
 | `patch.<field>` | `channel.<track>.<mapped field>`, using §12.1's names |
 | `effect.<Type>.<field>` | `insert.<id>.slot.<id>.<field>` on that track's insert |
 | `master.sidechainAmount` | `insert.1.slot.<ducker>.amount` |
-| `master.reverbMix` | `insert.1.slot.<reverb>.mix` |
-| `master.delayMix` | `insert.1.slot.<delay>.mix` |
+| `master.reverbMix` | `insert.<Master FX>.slot.<reverb>.mix` |
+| `master.delayMix` | `insert.<Master FX>.slot.<delay>.level` |
 | `master.masterDrive` | `insert.1.slot.<distortion>.drive` |
 | anything else | unresolved: `ADX4001`, lane kept as residue |
+
+---
+
+## 13. Presets: `.adxpreset`
+
+A preset is one instrument's or one effect's parameters, saved for reuse
+(phase_4.md §4.12). It is read by the same lexer as a project, so it has the same
+comments, quoting, numbers, curves and diagnostics.
+
+```
+# docs/C418.md 2.3: the "Aria Math" kalimba.
+[PRESET]
+NAME="Kalimba"
+TYPE=additive
+PACK=c418
+TAGS=mallet, pluck, metallic
+
+[PARAMS]
+harmonic.1=1
+env.decay=0.3 curve=exponential(0)
+```
+
+| `[PRESET]` key | Meaning |
+|---|---|
+| `NAME` | the preset's name, unique within its pack |
+| `TYPE` | an instrument or effect type name; an unknown one is `ADX1001` |
+| `PACK` | the pack it belongs to; a user preset keeps the pack it was saved from |
+| `MIX` | effect presets only: the slot's wet/dry, 0..1 (`ADX2001` outside it) |
+| `TAGS` | comma-separated, for browsing and search |
+
+`[PARAMS]` holds `name=value [curve=...]` lines, one per parameter, checked against
+the type's parameter table exactly as `PARAM` and `SLOT` parameters are: an unknown
+name is `ADX1004` and kept, an out-of-range value is `ADX2001`. A parameter not
+listed takes the type's default. `[ZONES]` holds a sampler preset's `ZONE` lines
+(§7.2), with paths relative to the preset file. Any other section is `ADX1002`.
+
+The shipped packs live in `engine/preset/packs/<pack>/`. User presets are saved to a
+separate user directory, laid out the same way, and a user preset with the same pack
+and name as a shipped one takes its place in the library.

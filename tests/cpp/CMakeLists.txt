@@ -1,6 +1,25 @@
 adx_add_cpp_test(adx_tests
     SOURCES
         test_smoke.cpp
+        CrtReport.cpp
+        dsp/test_convolve.cpp
+        dsp/test_envelope.cpp
+        dsp/test_fft.cpp
+        dsp/test_filters.cpp
+        dsp/test_math.cpp
+        dsp/test_noise.cpp
+        dsp/test_oscillator.cpp
+        dsp/test_resample.cpp
+        dsp/test_small_primitives.cpp
+        dsp/test_loudness.cpp
+        effects/EffectHarness.cpp
+        effects/test_effect_base.cpp
+        instruments/InstrumentHarness.cpp
+        instruments/test_instrument_base.cpp
+        instruments/test_instrument_cost.cpp
+        instruments/test_sampler.cpp
+        instruments/test_va.cpp
+        preset/test_presets.cpp
         rt/test_alloc_guard.cpp
         rt/test_spsc_ring.cpp
         rt/test_overwrite_ring.cpp
@@ -20,6 +39,9 @@ adx_add_cpp_test(adx_tests
         format/test_parser.cpp
         format/test_writer.cpp
         format/test_v1shim.cpp
+        format/test_note_extensions.cpp
+        format/test_zones.cpp
+        format/test_decode.cpp
         graph/GraphFixtures.cpp
         graph/test_buffers.cpp
         graph/test_cycle.cpp
@@ -28,13 +50,21 @@ adx_add_cpp_test(adx_tests
         graph/test_scheduler.cpp
         graph/test_toposort.cpp
         graph/test_voice_identity.cpp
+        graph/test_glides_automation.cpp
         transport/test_loop.cpp
         transport/test_seek.cpp
         transport/test_timesource.cpp
         transport/test_two_sources.cpp
+        render/GoldenHashes.cpp
         render/RenderEvidence.cpp
         render/RenderFixtures.cpp
         render/test_bit_identity.cpp
+        render/test_golden_units.cpp
+        render/test_corpus_render.cpp
+        render/test_spectral_match.cpp
+        render/test_pdc_effects.cpp
+        render/test_decode_async.cpp
+        render/test_levels.cpp
         render/test_no_alloc_under_load.cpp
         render/test_snapshot.cpp
 )

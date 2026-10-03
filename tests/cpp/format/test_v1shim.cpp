@@ -89,13 +89,15 @@ TEST_CASE("v1_shim_suffocation_fidelity", "[format][v1]") {
     CHECK(project.patterns.size() == 7);
     // Seven track lanes plus the one the migrated automation lives on.
     CHECK(project.playlist.tracks.size() == 8);
-    // Seven track inserts, the master, and the two aux buses the SEND= lines created.
-    CHECK(project.mixer.inserts.size() == 10);
+    // Seven track inserts, the master, the two aux buses the SEND= lines created, and
+    // "Master FX", which carries v1's master delay and reverb ahead of the master.
+    CHECK(project.mixer.inserts.size() == 11);
 
     CHECK(noteCount(project) == 349);
-    // Seventeen per-track EFFECT lines, plus the master's drive, delay, reverb and
-    // ducker.
-    CHECK(slotCount(project) == 21);
+    // Seventeen per-track EFFECT lines; the master's delay, reverb, ducker and drive;
+    // the Compressor and Limiter standing in for v1's peak compressor and clamp; and
+    // each aux bus's own Delay or Reverb.
+    CHECK(slotCount(project) == 25);
     CHECK(project.markers.size() == 6);
     CHECK(project.playlist.autoClips.size() == 6);
 

@@ -18,6 +18,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -29,12 +30,19 @@
 #include "engine/graph/Pdc.h"
 #include "engine/graph/TopoSort.h"
 #include "engine/graph/nodes/MeterNode.h"
+#include "engine/project/ParamDescriptor.h"
 #include "engine/project/ParamRef.h"
 #include "engine/project/Snapshot.h"
+
+namespace adx::format {
+class SamplePool;
+}
 
 namespace adx::project {
 class Project;
 struct Channel;
+struct Resources;
+struct Slot;
 } // namespace adx::project
 
 namespace adx::graph {
@@ -59,10 +67,21 @@ enum class ParamSource : std::uint8_t {
     SendLevel,
 };
 
+/// `index` for an instrument or effect parameter the model does not set: the slot
+/// then holds the descriptor's default, and nothing can automate it until it is set.
+inline constexpr std::uint16_t kAbsentParam = 0xFFFF;
+
 struct ParamBinding {
     ParamSource source{ParamSource::ChannelVolume};
     std::uint32_t owner{0};
+    /// For an instrument or effect parameter: its position in the model's named list,
+    /// or kAbsentParam.
     std::uint16_t index{0};
+    /// Which component of that parameter's curve this slot carries, if any
+    /// (ParamDescriptor.h, CurvePart).
+    project::CurvePart part{project::CurvePart::None};
+    /// The value when the model has none: the descriptor's default.
+    float fallback{0.0F};
 };
 
 /// The shape of a snapshot's parameter storage: one binding per slot, and the sorted
@@ -88,14 +107,26 @@ public:
         return m_info;
     }
 
-    [[nodiscard]] std::shared_ptr<Node> channel(const project::Channel& channel);
+    [[nodiscard]] std::shared_ptr<Node> channel(const project::Channel& channel,
+                                                const project::Resources& resources);
+
+    /// The pool instruments take their samples from. Null (the default) is
+    /// SamplePool::global(); a test may give a private one.
+    void setSamplePool(format::SamplePool* pool) noexcept {
+        m_pool = pool;
+    }
+    [[nodiscard]] format::SamplePool* samplePool() const noexcept {
+        return m_pool;
+    }
     [[nodiscard]] std::shared_ptr<Node> fader(core::InsertId id);
-    [[nodiscard]] std::shared_ptr<Node> meter(core::InsertId id);
-    [[nodiscard]] std::shared_ptr<Node> slot(core::SlotId id);
+    [[nodiscard]] std::shared_ptr<Node> meter(core::InsertId id, bool master);
+    [[nodiscard]] std::shared_ptr<Node> slot(const project::Slot& slot);
     [[nodiscard]] std::shared_ptr<Node> send(core::SendId id);
 
     /// The meter for an insert, for the UI. Null when there is none.
     [[nodiscard]] std::shared_ptr<const MeterNode> findMeter(core::InsertId id) const;
+    /// Every insert's meter, in insert-id order: what one UI frame reads (P3-7).
+    void forEachMeter(const std::function<void(core::InsertId, const MeterNode&)>& visit) const;
 
     /// Drops every node not handed out since the last call. Called after each build,
     /// so a deleted insert's nodes are released once no snapshot uses them.
@@ -121,6 +152,7 @@ private:
     template<class Make> std::shared_ptr<Node> getOrMake(Key key, Make make);
 
     PrepareInfo m_info;
+    format::SamplePool* m_pool{nullptr};
     std::map<Key, Entry> m_nodes;
     std::uint64_t m_created{0};
 };

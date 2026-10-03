@@ -16,6 +16,7 @@
 #include "engine/format/adx/Value.h"
 #include "engine/project/ParamRegistry.h"
 #include "engine/project/Project.h"
+#include "engine/project/TypeCatalog.h"
 #include "engine/project/Validate.h"
 #include "engine/project/commands/AutomationCommands.h"
 #include "engine/project/commands/ChannelCommands.h"
@@ -170,6 +171,11 @@ private:
     std::vector<project::Breakpoint> parseBreakpoints(const BlockNode& node);
     void parsePlaylist(Section& section);
     void parsePlaylistItem(core::PlaylistTrackId track, const BlockNode& node);
+    /// ADX1004 for a name `type` does not declare, ADX2001 for a value outside the
+    /// declared range (P2-4). Both keep the value. With no known type, the name is
+    /// checked against the generic table instead.
+    void checkParam(const project::TypeInfo* type, const Token& token, double value);
+    void parseClipEnvelope(const BlockNode& node, project::PlaylistItem& item);
     void parseMarkers(Section& section);
 
     [[nodiscard]] bool resolveInsert(std::string_view text, Span span, core::InsertId& out);
@@ -558,6 +564,13 @@ void V2Parser::parseInsertChildren(core::InsertId insert, const BlockNode& node)
                     }
                     continue;
                 }
+                if (token.text == "sidechain") {
+                    core::InsertId key;
+                    if (resolveInsert(token.value, token.valueSpan, key)) {
+                        slot.sidechain = key;
+                    }
+                    continue;
+                }
                 double number = 0.0;
                 if (!parseDouble(token.value, token.valueSpan, m_diag, number)) {
                     continue;
@@ -565,12 +578,8 @@ void V2Parser::parseInsertChildren(core::InsertId insert, const BlockNode& node)
                 if (token.text == "mix") {
                     slot.mix = static_cast<float>(number);
                 } else {
-                    // Effect parameters are named and opaque here; Phase 4 owns what
-                    // they mean. An unknown one is kept, not dropped.
-                    if (project::ParamRegistry::describeNamed(token.text) == nullptr) {
-                        m_diag.add(code::kUnknownParameter, token.span,
-                                   "unknown effect parameter '" + token.text + "'; kept");
-                    }
+                    // An unknown one is kept, not dropped (FINAL_PLAN §6 rule 4).
+                    checkParam(project::findEffectType(slot.type), token, number);
                     slot.params.push_back(project::SlotParam{.name = token.text, .value = number});
                 }
             }
@@ -718,6 +727,8 @@ V2Parser::ChannelBinding V2Parser::parseChannelHeader(Section& section, std::siz
 }
 
 void V2Parser::parseChannelLines(core::ChannelId id, std::span<const BlockNode> nodes) {
+    std::vector<project::SampleZone> zones;
+    bool hasZones = false;
     for (const BlockNode& node : nodes) {
         Line& line = lines()[node.line];
         if (line.claimed || line.kind != Line::Kind::Positional) {
@@ -737,9 +748,8 @@ void V2Parser::parseChannelLines(core::ChannelId id, std::span<const BlockNode> 
             if (!parseDouble(tokens[1].value, tokens[1].valueSpan, m_diag, value)) {
                 continue;
             }
-            if (project::ParamRegistry::describeNamed(tokens[1].text) == nullptr) {
-                m_diag.add(code::kUnknownParameter, tokens[1].span,
-                           "unknown parameter '" + tokens[1].text + "'; kept");
+            if (const project::Channel* channel = m_project.find(id)) {
+                checkParam(project::findInstrumentType(channel->instrument.type), tokens[1], value);
             }
             bool hasCurve = false;
             core::Curve curve;
@@ -795,6 +805,33 @@ void V2Parser::parseChannelLines(core::ChannelId id, std::span<const BlockNode> 
             line.claimed = true;
             continue;
         }
+        if (tokens.front().text == "ZONE") {
+            if (tokens.size() < 2 || tokens[1].isKeyValue()) {
+                m_diag.add(code::kWrongFieldCount, line.contentSpan(),
+                           "a zone is 'ZONE \"sample.wav\" key=... root=...'");
+                continue;
+            }
+            // The same file named by ten zones is one pool entry (Resources::findByPath),
+            // exactly as AUDIO items share theirs.
+            project::SampleZone zone;
+            if (const project::SampleRef* existing =
+                    m_project.resources.findByPath(tokens[1].text)) {
+                zone.sample = existing->id;
+            } else {
+                auto sample = std::make_unique<project::AddSample>(tokens[1].text);
+                const project::AddSample* raw = sample.get();
+                execute(std::move(sample));
+                zone.sample = raw->created();
+            }
+            parseZoneFields(std::span<const Token>{tokens}.subspan(2), m_diag, zone);
+            zones.push_back(zone);
+            hasZones = true;
+            line.claimed = true;
+            continue;
+        }
+    }
+    if (hasZones) {
+        execute(std::make_unique<project::SetChannelZones>(id, std::move(zones)));
     }
 }
 
@@ -925,6 +962,7 @@ void V2Parser::parseNotesBlock(core::PatternId pattern, const BlockNode& node) {
     const core::Ticks patternLength = owner != nullptr ? owner->length : core::Ticks{0};
 
     std::vector<project::Note> notes;
+    std::vector<project::NoteExtrasAt> extras;
     notes.reserve(node.children.size());
     for (const BlockNode& child : node.children) {
         Line& line = lines()[child.line];
@@ -956,10 +994,29 @@ void V2Parser::parseNotesBlock(core::PatternId pattern, const BlockNode& node) {
                        "this note starts past the end of the pattern; kept");
         }
 
+        project::NoteExtras extra;
         for (std::size_t i = 4; i < fields.size(); ++i) {
             const Token& token = fields[i];
             if (!token.isKeyValue()) {
                 m_diag.add(code::kWrongFieldCount, token.span, "expected key=value");
+                continue;
+            }
+            // The three extensions are not numbers, so they are taken before the
+            // numeric keys below (phase_4.md §4.0).
+            if (token.text == "slide") {
+                project::NoteSlide slide;
+                if (parseSlide(token.value, m_project.tempo, token.valueSpan, m_diag, slide)) {
+                    extra.slide = slide;
+                }
+                continue;
+            }
+            if (token.text == "bend") {
+                (void)parseBend(token.value, m_project.tempo, token.valueSpan, m_diag,
+                                extra.pitchCurve);
+                continue;
+            }
+            if (token.text == "lyric") {
+                extra.lyric = token.value;
                 continue;
             }
             double value = 0.0;
@@ -981,11 +1038,16 @@ void V2Parser::parseNotesBlock(core::PatternId pattern, const BlockNode& node) {
                            "unknown key '" + token.text + "' on a note");
             }
         }
+        if (!extra.empty()) {
+            extras.push_back(
+                project::NoteExtrasAt{.index = notes.size(), .extras = std::move(extra)});
+        }
         notes.push_back(note);
         line.claimed = true;
     }
 
-    execute(std::make_unique<project::AddNotes>(pattern, channel, std::move(notes)));
+    execute(
+        std::make_unique<project::AddNotes>(pattern, channel, std::move(notes), std::move(extras)));
     header.claimed = true;
 }
 
@@ -1225,8 +1287,72 @@ void V2Parser::parsePlaylistItem(core::PlaylistTrackId track, const BlockNode& n
         }
     }
 
+    if (!std::holds_alternative<project::AutomationRef>(item.content)) {
+        // An automation item's children are its breakpoints; anything else's are its
+        // clip envelopes (phase_4.md §4.0).
+        for (const BlockNode& child : node.children) {
+            parseClipEnvelope(child, item);
+        }
+    }
+
     execute(std::make_unique<project::AddPlaylistItem>(track, item));
     line.claimed = true;
+}
+
+void V2Parser::checkParam(const project::TypeInfo* type, const Token& token, double value) {
+    const project::ParamDescriptor* descriptor =
+        type != nullptr ? project::findParam(*type, token.text)
+                        : project::ParamRegistry::describeNamed(token.text);
+    if (descriptor == nullptr) {
+        m_diag.add(code::kUnknownParameter, token.span,
+                   type != nullptr ? "'" + std::string(type->name) + "' has no parameter '" +
+                                         token.text + "'; kept"
+                                   : "unknown parameter '" + token.text + "'; kept");
+        return;
+    }
+    if (value < descriptor->minimum || value > descriptor->maximum) {
+        m_diag.add(code::kValueOutOfRange, token.valueSpan,
+                   "'" + token.text + "' is " + formatDouble(value) + ", outside " +
+                       formatFloat(descriptor->minimum) + ".." + formatFloat(descriptor->maximum) +
+                       "; clamped when played");
+    }
+}
+
+void V2Parser::parseClipEnvelope(const BlockNode& node, project::PlaylistItem& item) {
+    Line& header = lines()[node.line];
+    const std::vector<Token> tokens = tokenize(header, m_diag);
+    if (tokens.empty() || tokens.front().text != "ENVELOPE") {
+        m_diag.add(code::kUnknownKey, header.contentSpan(),
+                   "unrecognised line under a playlist item; preserved on save");
+        return;
+    }
+    if (tokens.size() != 2) {
+        m_diag.add(code::kWrongFieldCount, header.contentSpan(),
+                   "ENVELOPE names exactly one target: gain, pan, pitch or a parameter path");
+        return;
+    }
+    project::ClipEnvelope envelope;
+    if (!project::clipTargetFromString(tokens[1].text, envelope.local)) {
+        envelope.local = project::ClipTarget::Param;
+        envelope.targetPath = tokens[1].text;
+        const project::ParamResolution resolved =
+            project::ParamRegistry::resolve(envelope.targetPath, m_project);
+        if (resolved.ok()) {
+            envelope.target = resolved.ref;
+        } else {
+            m_diag.add(code::kUnresolvedParamPath,
+                       subSpan(tokens[1].span, resolved.segmentOffset, resolved.segmentLength),
+                       "'" + envelope.targetPath + "' does not name a parameter that exists");
+        }
+    }
+    if (node.children.empty()) {
+        m_diag.add(code::kEmptyBlock, header.contentSpan(),
+                   "ENVELOPE has no indented body; breakpoints must be indented under it");
+    }
+    envelope.points = parseBreakpoints(node);
+    std::ranges::stable_sort(envelope.points, {}, &project::Breakpoint::at);
+    item.envelopes.push_back(std::move(envelope));
+    header.claimed = true;
 }
 
 void V2Parser::run() {

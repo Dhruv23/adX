@@ -1,0 +1,18 @@
+# docs/C418.md §2.3: Kontakt pizzicato double bass - fundamental and 2nd, a fast
+# rolloff above, an instant pluck.
+[PRESET]
+NAME="Pizzicato"
+TYPE=additive
+PACK=c418
+TAGS=bass, pluck, strings
+
+[PARAMS]
+harmonic.1=1
+harmonic.2=0.6
+harmonic.3=0.15
+harmonic.4=0.05
+env.attack=0.002
+env.decay=0.1 curve=exponential(0.32)
+env.sustain=0
+env.release=0.08 curve=exponential(0)
+filter.cutoff=4000

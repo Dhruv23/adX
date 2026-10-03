@@ -1,6 +1,7 @@
 #include "engine/graph/Scheduler.h"
 
 #include <algorithm>
+#include <limits>
 
 #include "engine/core/Config.h"
 #include "engine/rt/RtConfig.h"
@@ -16,6 +17,115 @@ using PortInputs =
     std::array<std::span<const float>, static_cast<std::size_t>(kMaxInputPorts) * kPortChannels>;
 using PortOutputs =
     std::array<std::span<float>, static_cast<std::size_t>(kMaxOutputPorts) * kPortChannels>;
+
+/// The source-timeline sample that output frame `frame` of this piece plays.
+[[nodiscard]] std::int64_t sampleOfFrame(const transport::TimeSource& time, std::int64_t start,
+                                         std::uint32_t frame) noexcept {
+    if (time.rate() == 1.0) {
+        return start + frame;
+    }
+    return start + static_cast<std::int64_t>(static_cast<double>(frame) * time.rate());
+}
+
+/// Writes one lane's values over the frames of [first, first + out.size()) it covers.
+///
+/// A pure function of the sample position: the knot whose segment contains a sample
+/// is found by its own sample position, and the value is interpolated from the two
+/// knots' positions in double precision. Nothing carries over from the previous
+/// block, so the values are the same whatever the block size (phase_4.md §4.0) - and
+/// a seek into the middle of a ramp lands on the ramp's value at that sample, not on
+/// a value replayed from the ramp's start.
+void evaluateLane(const project::AutomationLane& lane, const transport::TimeSource& time,
+                  std::int64_t start, std::span<float> out) noexcept {
+    const std::span<const project::Knot> knots = lane.knots;
+    if (knots.empty()) {
+        return;
+    }
+    const std::int64_t laneStart = time.samplesAt(core::Ticks{lane.startTick});
+    const std::int64_t laneEnd = lane.endTick == std::numeric_limits<std::int64_t>::max()
+                                     ? std::numeric_limits<std::int64_t>::max()
+                                     : time.samplesAt(core::Ticks{lane.endTick});
+    const auto frames = static_cast<std::uint32_t>(out.size());
+
+    // The first knot after the piece's first covered sample, found by binary search -
+    // then walked forward frame by frame.
+    std::uint32_t frame = 0;
+    while (frame < frames && sampleOfFrame(time, start, frame) < laneStart) {
+        ++frame;
+    }
+    if (frame == frames) {
+        return;
+    }
+    const std::int64_t firstSample = sampleOfFrame(time, start, frame);
+    std::size_t low = 0;
+    std::size_t high = knots.size();
+    while (low < high) {
+        const std::size_t mid = low + ((high - low) / 2);
+        if (time.samplesAt(core::Ticks{knots[mid].tick}) <= firstSample) {
+            low = mid + 1;
+        } else {
+            high = mid;
+        }
+    }
+    std::size_t next = low; // first knot strictly after firstSample
+    std::int64_t nextSample = next < knots.size() ? time.samplesAt(core::Ticks{knots[next].tick})
+                                                  : std::numeric_limits<std::int64_t>::max();
+    std::int64_t fromSample = next > 0 ? time.samplesAt(core::Ticks{knots[next - 1].tick}) : 0;
+
+    for (; frame < frames; ++frame) {
+        const std::int64_t sample = sampleOfFrame(time, start, frame);
+        if (sample >= laneEnd) {
+            break;
+        }
+        while (sample >= nextSample) {
+            fromSample = nextSample;
+            ++next;
+            nextSample = next < knots.size() ? time.samplesAt(core::Ticks{knots[next].tick})
+                                             : std::numeric_limits<std::int64_t>::max();
+        }
+        if (next == 0) {
+            out[frame] = knots.front().value;
+        } else if (next >= knots.size()) {
+            out[frame] = knots.back().value;
+        } else {
+            const project::Knot& from = knots[next - 1];
+            const project::Knot& to = knots[next];
+            const double fraction = static_cast<double>(sample - fromSample) /
+                                    static_cast<double>(nextSample - fromSample);
+            out[frame] =
+                static_cast<float>(static_cast<double>(from.value) +
+                                   (static_cast<double>(to.value - from.value) * fraction));
+        }
+    }
+}
+
+/// Parameter `param`'s values over a piece: its base, overwritten by each of its lanes
+/// in priority order where that lane applies.
+void evaluateParam(const project::Snapshot& snapshot, std::uint32_t param,
+                   const transport::TimeSource& time, std::int64_t start,
+                   std::span<float> out) noexcept {
+    std::ranges::fill(out, snapshot.paramBase[param]);
+    const std::uint32_t first = snapshot.paramLaneStart[param];
+    const std::uint32_t last = snapshot.paramLaneStart[param + 1];
+    for (std::uint32_t l = first; l < last; ++l) {
+        evaluateLane(snapshot.automation[snapshot.paramLanes[l]], time, start, out);
+    }
+}
+
+[[nodiscard]] BlockEventKind blockKindOf(project::EventKind kind) noexcept {
+    switch (kind) {
+    case project::EventKind::NoteOff:
+        return BlockEventKind::NoteOff;
+    case project::EventKind::PitchGlide:
+        return BlockEventKind::PitchGlide;
+    case project::EventKind::Lyric:
+        return BlockEventKind::Lyric;
+    case project::EventKind::NoteOn:
+    case project::EventKind::Param:
+        break;
+    }
+    return BlockEventKind::NoteOn;
+}
 
 } // namespace
 
@@ -115,10 +225,21 @@ std::uint32_t Scheduler::fillEvents(const transport::TimeSource& time, std::uint
         block.instance = event.instance;
         block.timeSource = timeSource;
         block.endTick = event.endTick;
-        block.kind = event.kind == project::EventKind::NoteOn ? BlockEventKind::NoteOn
-                                                              : BlockEventKind::NoteOff;
+        block.kind = blockKindOf(event.kind);
         block.pitch = event.pitch;
         block.velocity = event.velocity;
+        block.value = event.value;
+        block.duration = 0;
+        if (event.kind == project::EventKind::PitchGlide && event.endTick > event.tick) {
+            // The glide's length on this source's timeline, in output frames. Converted
+            // here, per source, because two sources at two tempos play one tick span in
+            // two different numbers of samples.
+            auto length = static_cast<double>(time.samplesAt(core::Ticks{event.endTick}) - at);
+            if (rate != 1.0) {
+                length /= rate;
+            }
+            block.duration = static_cast<std::uint32_t>(std::max(0.0, length));
+        }
         ++written;
     }
     m_stats.eventsDispatched += written - first;
@@ -161,6 +282,8 @@ EventView Scheduler::eventsFor(const NodeStep& step, project::Snapshot& snapshot
                                        .instance = 0,
                                        .timeSource = source,
                                        .endTick = 0,
+                                       .value = 0.0F,
+                                       .duration = 0,
                                        .kind = BlockEventKind::ReleaseAll,
                                        .pitch = 0,
                                        .velocity = 0};
@@ -171,6 +294,8 @@ EventView Scheduler::eventsFor(const NodeStep& step, project::Snapshot& snapshot
                                        .instance = 0,
                                        .timeSource = source,
                                        .endTick = time.loop().end.value,
+                                       .value = 0.0F,
+                                       .duration = 0,
                                        .kind = BlockEventKind::LoopWrap,
                                        .pitch = 0,
                                        .velocity = 0};
@@ -184,18 +309,53 @@ EventView Scheduler::eventsFor(const NodeStep& step, project::Snapshot& snapshot
 
 void Scheduler::applyAutomation(project::Snapshot& snapshot,
                                 const transport::TimeSource& arrangement) noexcept {
-    if (snapshot.automation.empty() || !arrangement.rolling()) {
+    if (snapshot.automation.empty() || !arrangement.rolling() ||
+        snapshot.paramLaneStart.size() != snapshot.params.size() + 1) {
         return;
     }
-    // Control rate: once per piece, at its first sample. Sample-accurate parameter
-    // smoothing is DSP and belongs to the Phase 4 nodes that consume the values.
-    const std::int64_t tick = arrangement.positionTicks().value;
-    for (const project::AutomationLane& lane : snapshot.automation) {
-        if (tick >= lane.startTick && tick < lane.endTick &&
-            lane.paramIndex < snapshot.params.size()) {
-            snapshot.params[lane.paramIndex] = lane.valueAt(tick);
+    // Every automated parameter's block value is its value at the piece's first frame,
+    // for the nodes that read `params` rather than the per-frame view. Each parameter
+    // is evaluated once however many lanes drive it.
+    const std::int64_t start = arrangement.positionSamples();
+    std::uint32_t previous = graph::kNone;
+    for (std::uint32_t l = 0; l < snapshot.paramLanes.size(); ++l) {
+        const std::uint32_t param = snapshot.automation[snapshot.paramLanes[l]].paramIndex;
+        if (param == previous || param >= snapshot.params.size()) {
+            continue;
+        }
+        previous = param;
+        float value = 0.0F;
+        evaluateParam(snapshot, param, arrangement, start, std::span<float>{&value, 1});
+        snapshot.params[param] = value;
+    }
+}
+
+std::span<const float* const> Scheduler::automationFor(const NodeStep& step,
+                                                       project::Snapshot& snapshot,
+                                                       const transport::TimeSource& arrangement,
+                                                       rt::BlockArena& arena,
+                                                       std::uint32_t frames) noexcept {
+    if (!arrangement.rolling() || !snapshot.anyAutomated(step.paramBase, step.paramCount)) {
+        return {};
+    }
+    const std::span<const float*> tracks = arena.allocate<const float*>(step.paramCount);
+    if (tracks.size() != step.paramCount) {
+        return {};
+    }
+    const std::int64_t start = arrangement.positionSamples();
+    for (std::uint32_t i = 0; i < step.paramCount; ++i) {
+        const std::uint32_t param = step.paramBase + i;
+        tracks[i] = nullptr;
+        if (snapshot.paramLaneStart[param + 1] == snapshot.paramLaneStart[param]) {
+            continue;
+        }
+        const std::span<float> values = arena.allocate<float>(frames);
+        if (values.size() == frames) {
+            evaluateParam(snapshot, param, arrangement, start, values);
+            tracks[i] = values.data();
         }
     }
+    return tracks;
 }
 
 void Scheduler::runPiece(project::Snapshot& snapshot, transport::TransportSet& transport,
@@ -242,6 +402,9 @@ void Scheduler::runPiece(project::Snapshot& snapshot, transport::TransportSet& t
                                      ? eventsFor(step, snapshot, transport, arena, frames)
                                      : EventView{};
 
+        const std::span<const float* const> automation =
+            automationFor(step, snapshot, transport.arrangement(), arena, frames);
+
         ProcessContext context{
             .time = transport.get(transport::TimeSourceId{step.timeSource}),
             .outputs =
@@ -254,6 +417,7 @@ void Scheduler::runPiece(project::Snapshot& snapshot, transport::TransportSet& t
             .sampleRate = snapshot.sampleRate,
             .events = events,
             .params = snapshot.params.subspan(step.paramBase, step.paramCount),
+            .automation = automation,
             .arena = arena,
         };
         step.node->process(context);

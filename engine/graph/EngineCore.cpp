@@ -44,6 +44,11 @@ void EngineCore::drain() noexcept {
                 const std::uint32_t index = m_current->findParam(message.param);
                 if (index < m_current->params.size()) {
                     m_current->params[index] = message.value;
+                    // The base too: a knob turn on an automated parameter is what the
+                    // parameter returns to where no lane covers it.
+                    if (index < m_current->paramBase.size()) {
+                        m_current->paramBase[index] = message.value;
+                    }
                 }
             }
             break;

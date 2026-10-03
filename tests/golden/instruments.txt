@@ -1,0 +1,17 @@
+# Golden hashes per unit (tests/cpp/render/test_golden_units.cpp): each instrument
+# and shipped preset playing one phrase, each effect at three settings on one
+# signal. 48 kHz, 64-frame blocks, FNV-1a 128 over interleaved floats.
+# Regenerate with ADX_UPDATE_GOLDEN=1, and only on purpose.
+instrument/additive de77ea7baa7133c3c50ab299cec0415d
+instrument/sampler 56b732f014083cf37b99c13585d11449
+instrument/testtone b37fe25846b9c3e1366576dab912cb55
+instrument/va 6b433b6daf2adcfb64bbb52e5d12497d
+preset/c418/Giant_Piano aa9bae3f16e05ecd716804d7f1bb142d
+preset/c418/Kalimba 87413cd1250a7c8dd748eb03b59b1911
+preset/c418/Marimba 75f023d2c9ca3a9748b0f6dec812f8f9
+preset/c418/Pizzicato 7bc2947a1743f3910716b067130831f9
+preset/c418/Warm_Pad 3cd6493d19f045801629172054a8c0c5
+preset/stakillaz/808_Sub 790c4e7f59f908a354ea518ffdf079e5
+preset/stakillaz/Hardstyle_Kick 30c61410baf15daa36e40d2cd6d280ed
+preset/stakillaz/Phonk_Bass 592833dfd2e4411bd479f9b7e4e3c345
+preset/stakillaz/Screech_Lead 5e281f2ac041381548bf105785fbb54d

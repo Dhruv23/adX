@@ -25,6 +25,8 @@ BlockEvent noteOn(std::uint32_t offset, std::uint32_t noteId, std::uint8_t pitch
                       .instance = 1,
                       .timeSource = 0,
                       .endTick = 1'000'000,
+                      .value = 0.0F,
+                      .duration = 0,
                       .kind = BlockEventKind::NoteOn,
                       .pitch = pitch,
                       .velocity = 100};

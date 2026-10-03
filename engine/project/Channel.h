@@ -15,6 +15,7 @@
 #include "engine/core/Ids.h"
 #include "engine/core/Rational.h"
 #include "engine/project/Color.h"
+#include "engine/project/SampleZone.h"
 #include "engine/project/VoiceStealMode.h"
 
 namespace adx::project {
@@ -44,6 +45,8 @@ struct InstrumentSpec {
     /// what Phase 4 will define; anything else round-trips untouched.
     std::string type{"additive"};
     std::vector<ParamValue> params;
+    /// A sampler's key/velocity map (phase_4.md §4.5). Empty for every other type.
+    std::vector<SampleZone> zones;
 
     [[nodiscard]] const ParamValue* find(std::string_view name) const noexcept;
     [[nodiscard]] ParamValue* find(std::string_view name) noexcept;

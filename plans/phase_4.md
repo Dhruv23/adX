@@ -823,3 +823,139 @@ Phase 5 inherits a complete sound engine and, specifically:
 | Async decode introduces a race on `SampleBuffer` lifetime | Refcount + `Reaper`; a node holds a borrowed span valid for the snapshot's lifetime, and the snapshot pins the sample |
 | RubberBand's realtime mode allocates | Verified under the allocator hook; if it allocates, it is used offline-only and the phase-vocoder path becomes the realtime one. Decide by measurement, not assumption |
 | Golden hashes churn constantly during active DSP work | Golden tests run as a separate ctest label; regenerating is one command and every regeneration is a reviewed commit |
+
+---
+
+## 11. Corrections made while executing this plan
+
+### Tranche A0
+
+**Note extras are a side table, not fields on `Note`.** §4.0 sketches `slide`,
+`pitchCurve` and `lyric` on `Note`. They live in `NoteClip::extras`, sorted by note id,
+so `Note` stays trivially copyable - which undo, the snapshot cache and Phase 5's
+zero-copy note view all rely on. The grammar is `slide=<amount>@<start>+<len>[~curve]`,
+`bend=<amount>@<at>[~curve]|...` and `lyric="..."`, with amounts in `st` or `c`
+(docs/adx-format-v2.md §7.3).
+
+**Automation is compiled knot lanes, not `ParamRamp` events.** `CurveCompile` turns
+each lane into straight-line pieces (adaptive, at most 32 per segment, 0.1 % of range),
+and a node reads its value per frame as a pure function of sample position
+(`ProcessContext::automation`, `graph::paramAt()`). That is block-size independent and
+makes seek correct by construction; `ParamRamp` would have been neither.
+`ScheduledEvent` stays 32 bytes: a glide's end rides in `endTick`, and a lyric is an
+index into a per-track table, because tracks are cached across snapshots. Clip
+envelopes become lanes scoped to their item.
+
+**The arpeggiator plays.** `Channel.arp` was stored since Phase 2 and owned by no
+phase; `suffocation.adx` and `c418_demo.adx` need it. `arpeggiate()` is in
+`EventCompile`.
+
+**Not done from §4.0:** split-divides-envelope (no split command exists yet; Phase 6's).
+Clip gain/pan/pitch envelopes are stored and round-trip but are audible only on audio
+clips, which play from Phase 8. Project `TUNING` does not reach instruments yet; every
+corpus file uses 440.
+
+### Tranche A
+
+**Determinism comes from `engine/dsp/Math.h`, enforced by a gate.** Vectorised library
+transcendentals differ between Debug and Release, which would make every golden hash
+per-configuration. DSP code calls `Math.h`'s own `exp2`, `log2`, `sin`, `tanh` and
+friends, as does `core::Curve::evaluate`; `tools/lint.py dsp-math` bans the library
+ones in `engine/{dsp,instruments,effects,mixer,graph/nodes}` and runs in CI. It found
+one (`TestToneNode`'s cents offset) on its first run. Corollary: control-rate work runs
+on a node's or voice's own 32-frame clock, never at block starts - a
+`i == 0 || control(i)` bug of exactly that kind was found and fixed.
+
+**polyBLEP cannot meet -60 dBc.** Measured: v1's polyBLEP aliases at -33 dBc at 440 Hz
+and -21 dBc at 10 kHz. The band-limited mipmap tables meet -60 dBc and are what VA uses;
+`dsp_polyblep_aliasing` pins both measurements.
+
+**Mix law.** Equal power is the default (§4.2), but the ported v1 effects and Delay use
+the linear law: v1 files' `mix` values were tuned against it, and equal power made the
+correlated ones 3-4 dB loud in the A/B.
+
+**Parameters.** `ParamDescriptor` moved to its own realtime-safe header and gained
+`RateClass` and `CurvePart` (an envelope stage's `curve=` reaches a node as hidden
+floats). `engine/project/TypeCatalog` lists every type with its table; the builder binds
+parameters by name in table order with defaults for absent ones. Delay gained
+`dry`/`level` (v1's master delay was additive) and Compressor gained `smoothing` (linear
+is v1's). Lookahead is structural - set at node creation, so it fixes latency at graph
+build - and `clone()` lives in `effects/Factory` on the main thread, because `<memory>`
+is banned in realtime headers.
+
+**Latent effects keep running while bypassed.** `effect_bypass_is_click_free` found
+that un-bypassing a Limiter replayed its frozen lookahead line: a 0.31 step. A
+lookahead effect now processes through bypass; only a latency-free one goes silent.
+The Limiter's latency is its lookahead plus the true-peak detector's delay (6-7
+samples), and `effect_declares_latency` measures it rather than trusting it.
+
+**Sampler zones are a model field and a format line.** §4.5 left their representation
+open. `InstrumentSpec::zones` holds `project::SampleZone`s; the format has a
+`ZONE "file.wav" key=.. root=.. vel=.. loop=.. rr=g:i` line under `[CHANNEL]`
+(docs §7.2) and a `SetChannelZones` command. One voice plays one zone: overlapping
+zones outside a round-robin group do not stack. Round-robin counters reset with the
+node, so offline and realtime renders choose the same zones.
+
+**Decode.** miniaudio is pinned to 0.11.25 (the archive tracked master; its header said
+0.11.25), compiled decode-only from a generated translation unit in the build tree, with
+stb_vorbis for Ogg and dr_wav for AIFF. `SamplePool` keys entries by path and shares
+buffers by content hash; decode runs on worker threads, and a node holds a handle whose
+atomic ready flag it checks per block. Buffers carry 8 guard frames each side so the
+sinc kernel never branches at the edges. Offline render waits for the pool.
+
+**Metering has no `engine/mixer/`.** The insert strip already existed as Phase 3's
+`InsertNode` (gain, pan, width, polarity, mute/solo), now with per-frame gain/pan/width
+when automated. Loudness is `engine/dsp/Loudness` (BS.1770-4: K-weighting, 400 ms and
+3 s windows on 100 ms steps, integrated gating on a 0.01 LU histogram) inside
+`MeterNode`; true peak runs on the master meter only. `LevelFrame` gained momentary,
+short-term and integrated LUFS and true peak, and `Engine.levels()` returns every
+strip's latest frame as one N x 9 array - P3-7's single FFI call.
+
+**Presets live with the engine.** The packs are `engine/preset/packs/<pack>/`, as §2
+says; the preset format is documented as docs/adx-format-v2.md §13. A preset carries an
+optional `MIX` for an effect slot and a `[ZONES]` section for a sampler. The plan's
+`additive.harmonic[1].level` spelling became the parameter table's `harmonic.1`.
+
+**The suffocation gate is measured against a fixed v1, not the archived binary.**
+v1 has two scheduling bugs that the archived render contains: a note-off releases every
+voice at that pitch on every track (the Lead's note-offs cut the Vocal), and one shared
+64-voice pool steals across tracks. Those moved the 62-250 Hz bands by up to 5 dB. The
+reference (`tools/ab/build_v1.cmd`, `patch_v1.py`) is the archive with track-scoped
+note-offs and 512 voices; its DSP is untouched. Against it, all 31 bands are within
+1.5 dB (worst +1.45 dB at 99 Hz, from the SubBass track; not control rate, not unison
+phases - unexplained). Against the archived binary, 4 bands are over: 62, 125 and
+157 Hz (the bugs) and 20 kHz (44.1 kHz versus 48 kHz Nyquist). The committed reference
+is the band levels (`tests/data/reference/suffocation_v1_bands.txt`), not 30 MB of
+WAV; the test agrees with `tools/ab/bands.py` to 0.002 dB.
+
+**v1 shim corrections**, all found by the A/B (docs §12): master order duck, drive,
+compressor, limiter; master drive is `1 + x`; v1's peak compressor and clamp are a
+Compressor and a 0 dBFS Limiter (closing P3-1); v1's master delay and reverb sit on a
+"Master FX" insert the tracks route into, so a send bus's tail is not reverberated
+twice; aux buses carry their effect fully wet at the master effect's level; the Ducker
+is keyed from the first track; vowels map by whole name; `master.delayMix` drives
+`Delay.level`; `mix.volume`/`mix.pan` lanes drive the track's insert, not its channel
+(the Pad was 5 dB down); a zero-sustain envelope gets release 0, because v1's release
+ran from the sustain level and was silent (`ADX4013`; the kick was 5 dB up at 39 Hz).
+
+**Known residual difference:** v1's master ran compressor, master volume, clamp; adX
+runs compressor, limiter, master gain. It matters only for a hot master without drive;
+suffocation normalises through `tanh` first.
+
+**Layout.** `Db.h` folded into `Math.h`; `TruePeak.h` added; Effect `EQ` keeps v1's
+type name (the plan says Eq3) and the five ported effects share `Ported.*`; there is no
+`engine/instruments/Voice.h` (voices are `graph/VoicePool.h`, the base is `ChannelNode`
+plus `Instrument<State>`); the sampler is `SamplerInstrument` plus `SamplerSetup` (the
+main-thread half that resolves zones against the pool).
+
+**Golden corpus.** `golden_all_instruments` and `golden_all_effects`
+(`tests/cpp/render/test_golden_units.cpp`) hash every instrument type and shipped
+instrument preset on one phrase, and every effect at its defaults and at a quarter and
+three quarters of every range, into `tests/golden/{instruments,effects}.txt`. The 9
+corpus hashes moved when `additive` became real (it had played the test tone).
+
+**CI** (2026-10-02, at the user's request): clang-tidy per push checks only what a
+change can reach, notes-only pushes run nothing, Debug skips `[.slow]`, and the nightly
+became a per-phase full check (`full-check.yml`, on a `phase-N` tag). STATE.md "When
+you finish a phase" has the procedure. P3-8's 1 % CI deadline slack applies to every
+build.

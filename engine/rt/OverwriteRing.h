@@ -101,6 +101,13 @@ struct LevelFrame {
     float peakRight{};
     float rmsLeft{};
     float rmsRight{};
+    /// BS.1770-4 loudness in LUFS (phase_4.md §4.10); -200 is silence.
+    float momentary{-200.0F};
+    float shortTerm{-200.0F};
+    float integrated{-200.0F};
+    /// 4x-oversampled peak of either channel, linear. Zero on strips that do not
+    /// measure it: true peak is the master's (and the limiter's) - not free.
+    float truePeak{};
 };
 
 } // namespace adx::rt

@@ -18,6 +18,7 @@
 #include "engine/graph/EngineCore.h"
 #include "engine/project/ParamRef.h"
 #include "engine/project/SnapshotBuilder.h"
+#include "engine/rt/OverwriteRing.h"
 #include "engine/transport/LoopRegion.h"
 #include "engine/transport/TransportSet.h"
 
@@ -94,6 +95,17 @@ public:
     [[nodiscard]] core::Ticks positionTicks() const noexcept;
     [[nodiscard]] std::int64_t positionSamples() const noexcept;
     [[nodiscard]] transport::PlayState state() const noexcept;
+
+    // --- metering ---
+
+    struct StripLevel {
+        core::InsertId insert;
+        rt::LevelFrame frame;
+    };
+    /// Every insert's latest meter reading, in insert-id order: one call per UI frame,
+    /// whatever the number of strips (P3-7; phase_5.md §4.9 counts it). Main thread.
+    /// Reuses `out`'s storage, so a steady caller does not allocate.
+    void levels(std::vector<StripLevel>& out);
 
     // --- housekeeping ---
 

@@ -1,0 +1,28 @@
+# docs/STAKILLAZ.md §2.3 and _archive PatchLibrary "Hardstyle Kick": dense low
+# harmonics driven hard, a three-octave pitch drop over 45 ms for the "tok", and a
+# sine sub welded under it. The DrumSynth's hardstyle model is the other half of this
+# lineage (phase_4.md §4.7).
+[PRESET]
+NAME="Hardstyle Kick"
+TYPE=additive
+PACK=stakillaz
+TAGS=kick, drum, hardstyle, distorted
+
+[PARAMS]
+harmonic.1=1
+harmonic.2=0.7
+harmonic.3=0.5
+harmonic.4=0.4
+harmonic.5=0.3
+harmonic.6=0.25
+harmonic.7=0.2
+harmonic.8=0.15
+env.attack=0.001
+env.decay=0.35 curve=exponential(-0.15)
+env.sustain=0
+env.release=0.06 curve=exponential(0)
+drive=12
+sub.level=0.9
+sub.wave=0
+sub.dropSemitones=36
+sub.dropMs=45

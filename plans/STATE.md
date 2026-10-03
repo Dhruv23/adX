@@ -86,7 +86,7 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 1 — RT core | M | **Done** 2026-09-13 |
 | 2 — Project model, commands, `.adx` v2 | L | **Done** 2026-09-25 (CI found one clang-tidy finding; fixed in Phase 3) |
 | 3 — Audio graph & scheduling | L | **Done** 2026-10-01 (CI green, run 36835905774) |
-| 4 — Instruments & effects | XL | In progress 2026-10-01 |
+| 4 — Instruments & effects | XL | In progress 2026-10-01; **Tranche A done** 2026-10-03 (Phase 5 may start) |
 | 5 — Frontend foundation | L | Not started |
 | 6 — The DAW proper | XL | Not started |
 | 7 — Text-first layer | M | Not started |
@@ -449,16 +449,73 @@ Fixed in Phase 3, for the record:
 | **Plan** | [phase_4.md](phase_4.md) |
 | **Entry** | Phase 3 §7 complete |
 | **Done when** | [phase_4.md](phase_4.md) §7 |
-| **Status** | In progress (2026-10-01) |
+| **Status** | In progress (2026-10-01). **Tranche A0 and Tranche A done 2026-10-03: Phase 5 may start.** Tranches B, C and D remain (below) |
 | **Completed** | — |
 
 > Three tranches ([phase_4.md](phase_4.md) §3). Phase 5 may start once
 > **Tranche A** is complete; B and C can run alongside it. If you hand off at
 > Tranche A, say so in Status and list what B and C still owe.
 
+**Tranche A evidence** (2026-10-03, local, all three configurations): every C++ test
+green on Debug, RelWithDebInfo and Release (225 cases), golden hashes identical in all
+three; clang-tidy over every file on all three compile databases; clang-format, ruff,
+mypy, headers, format-safety, positions and the new `dsp-math` gate clean; pytest 37
+passed against a fresh `pip install -e .[dev]`; `adx info` names each channel's instrument.
+`suffocation_spectral_match`: 31 of 31 third-octave bands within 1.5 dB of the fixed-v1
+reference (worst +1.45 dB at 99 Hz); phase_4.md §11 says why the reference is v1 with
+two scheduling bugs fixed. EBU TECH 3341 cases 1-5 within 0.1 LU. CPU per voice, Release:
+Additive 0.084 % of a core per voice, VA 0.23 %, test tone 0.015 % (`adx_tests "[.perf]"`, 16 held voices; the sampler's default one-shot ends early, so its 0.012 % is not a sustained figure). Corrections to the plan: phase_4.md §11.
+
+**Still owed by Phase 4** (Phase 5 does not wait for these):
+
+- **Tranche B** · Slicer, DrumSynth + HardstyleKick, Granular, FM, Wavetable,
+  SamplePoolChannel.
+- **Tranche C** · MultibandComp, TransientShaper, Flanger, Phaser, Tremolo,
+  Convolution, Saturation, Vocoder, PitchShifter, FormantFilter, StereoImager,
+  FrequencyShifter, RingMod, GrossBeat, SpectralFreeze. (Ducker landed in A.)
+- **Tranche D** · Voice/UTAU (§4.13), and Overdrive.
+- **Human A/B** · `BLOCKER` for marking Phase 4 done (§7), not for Phase 5. The user
+  listens to `suffocation.adx` against the archived render and records the verdict
+  here. `tools/ab/render.py` and `tools/ab/build_v1.cmd` make both WAVs.
+
 **Open issues for Phase 5:**
 
-- _to be filled in by the agent that completes this phase_
+- **P4-1** · `Engine.levels()` is one call for every strip (P3-7 closed), but it copies
+  into a fresh array each time. If the 60 Hz timer shows it in a profile, Phase 5
+  binds a persistent buffer instead. Fixed when: measured, either way.
+- **P4-2** · Presets carry no samples on their own: `preset::instrumentOf()` leaves a
+  sampler preset's zones for the caller to register in the project's sample table.
+  Phase 5/6's browser needs one command that applies a preset, samples included.
+  Fixed when: dragging a sampler preset onto a channel plays it.
+- **P4-3** · Project `TUNING` does not reach instruments; they assume A4 = 440 Hz.
+  Every corpus file uses 440. Fixed when: `ProcessContext` carries it and a test at
+  432 Hz passes.
+- **P4-4** · v1's master ran compressor, master volume, clamp; the shim builds
+  compressor, limiter, master gain. Audible only for a hot v1 master without drive.
+  Fixed when: someone hears it matter, by moving the gain before the limiter.
+- **P4-5** · The SubBass track is +1.7 dB at 99 Hz against v1 (within the gate, but
+  unexplained: not control rate, not unison phases).
+- **P3-3** · `CARRIED` · Channel and insert gain, pan and width are per frame when
+  automated (closed for those); a **send level** is still applied per block.
+  Fixed when: send level ramps across a block.
+- **P3-5** · `CARRIED` · `resetPositionalDsp` is still consumed by nothing. The
+  tempo-synced LFO (`dsp::Lfo`, sync mode) needs no reset - its phase is a function of
+  position - and no node uses it yet. A Delay's or Reverb's tail does carry across a
+  seek, as in every DAW that does not flush; decide in Phase 5 whether a seek flushes
+  effect tails. Fixed when: decided, and `test_seek.cpp` covers it.
+- **P1-1** · `CARRIED` · `_CrtSetAllocHook` is not installed. miniaudio now decodes,
+  but on SamplePool worker threads, never on the callback, so still nothing is
+  exposed. Fixed when: as stated under Phase 1.
+- **P2-2** · `CARRIED` · Invariant diagnostics have no position. Phase 7's.
+- **P2-5** · `CARRIED` · Mini-notation is stored, not compiled. phase_4.md §8 gives the
+  compiler to Phase 7, which this file had as Phase 4's: Phase 7's.
+
+Fixed in Phase 4, for the record: **P2-3** and **P3-4** (sidechain: `sidechain=` on a
+slot, a real graph edge, cycle-checked), **P2-4** (descriptor ranges: `ADX1004`,
+`ADX2001`), **P3-1** (master Limiter; the corpus peaks at or below 1.0), **P3-2** (node
+reuse compares instrument and effect type; goldens regenerated), **P3-6** (per-voice
+state arrays in `Instrument<State>`), **P3-7** (`Engine.levels()`), **P3-3** for
+channel and insert gain/pan/width.
 
 ---
 

@@ -133,7 +133,7 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pytest
 
-      # Steps 7-13 are the lint gates, and they all carry `if: !cancelled()`.
+      # Steps 7-14 are the lint gates, and they all carry `if: !cancelled()`.
       #
       # By default Actions stops a job at the first failing step, which means a run
       # reports one broken gate and hides the rest - a developer then needs one push
@@ -192,3 +192,9 @@ jobs:
       - name: No global position
         if: ${{ !cancelled() }}
         run: python tools/lint.py positions
+
+      # 14. Phase 4: DSP code calls engine/dsp/Math.h, never a library transcendental,
+      # so golden hashes agree across Debug, RelWithDebInfo and Release.
+      - name: Deterministic DSP math
+        if: ${{ !cancelled() }}
+        run: python tools/lint.py dsp-math

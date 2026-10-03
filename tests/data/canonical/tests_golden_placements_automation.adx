@@ -1,0 +1,71 @@
+[PROJECT]
+ADX_VERSION=2
+TITLE="Golden: placements, mute, solo, automation"
+TUNING=440
+
+[TEMPO]
+0:0:0 128
+
+[METER]
+0:0:0 4/4
+
+[CHANNEL Arp]
+INSTRUMENT=additive
+OUTPUT=insert.2
+POLYPHONY=16
+VOLUME=1
+PAN=0
+
+[CHANNEL Muted]
+INSTRUMENT=additive
+OUTPUT=insert.2
+POLYPHONY=16
+VOLUME=1
+PAN=0
+MUTE=yes
+
+[CHANNEL Drone]
+INSTRUMENT=additive
+OUTPUT=insert.3
+POLYPHONY=16
+VOLUME=1
+PAN=0
+
+[PATTERN Motif]
+LENGTH=1:0:0
+NOTES Arp
+  C5 0:0:0 0:0:960 100
+  E5 0:0:960 0:0:960 100
+  G5 0:0:1920 0:0:960 100
+  C6 0:0:2880 0:0:960 100
+  G5 0:1:0 0:0:960 100
+  E5 0:1:960 0:0:960 100
+NOTES Muted
+  C3 0:0:0 1:0:0 127
+
+[PATTERN Hold]
+LENGTH=2:0:0
+NOTES Drone
+  C3 0:0:0 2:0:0 90
+
+[PLAYLIST]
+TRACK 1
+  PATTERN Motif 0:0:0
+  PATTERN Motif 0:2:0 length=0:2:0 offset=0:1:0
+  PATTERN Motif 1:0:0
+TRACK 2
+  PATTERN Hold 0:0:0
+TRACK 3 mute=yes
+  PATTERN Hold 1:0:0
+TRACK 4
+  AUTOMATION insert.2.gain 0:0:0
+    0:0:0 0.2
+    1:0:0 1 smooth
+    2:0:0 0.5 step
+
+[MIXER]
+INSERT 1 name="Master"
+INSERT 2 name="Arp bus" solo=yes
+INSERT 3 name="Drone bus"
+ROUTE insert.2 -> insert.1
+ROUTE insert.3 -> insert.1

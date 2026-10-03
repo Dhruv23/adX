@@ -1,0 +1,25 @@
+# docs/STAKILLAZ.md §2.3: the trashwave lead - an abrasive odd-harmonic stack driven
+# hard, a 4 Hz wobble on the lowpass.
+[PRESET]
+NAME="Screech Lead"
+TYPE=additive
+PACK=stakillaz
+TAGS=lead, distorted, trashwave
+
+[PARAMS]
+harmonic.1=1
+harmonic.3=0.8
+harmonic.5=0.6
+harmonic.7=0.5
+harmonic.9=0.4
+harmonic.11=0.3
+harmonic.13=0.25
+harmonic.15=0.2
+env.attack=0.01
+env.decay=0.08 curve=exponential(-0.42)
+env.sustain=0.8
+env.release=0.12 curve=exponential(0)
+drive=18
+filter.cutoff=12000
+filter.lfoRate=4
+filter.lfoDepth=0.25

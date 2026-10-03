@@ -1,0 +1,13 @@
+# docs/STAKILLAZ.md §2.2: "in phonk/trashwave the pump IS the groove" - the bus ducks
+# hard on every kick and recovers over 130 ms. Key it from the kick's insert.
+[PRESET]
+NAME="Kick Pump"
+TYPE=Ducker
+PACK=stakillaz
+MIX=1
+TAGS=sidechain, pump, dynamics
+
+[PARAMS]
+enabled=1
+amount=0.7
+releaseMs=130

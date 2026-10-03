@@ -1,0 +1,17 @@
+# docs/C418.md §2.1: "old synthesisers rhythmically dancing to ping pong delays" -
+# a stereo ping-pong at a dotted eighth of the project tempo, repeats darkening in
+# the feedback path. The echoes ride on top of the dry signal.
+[PRESET]
+NAME="Ping-Pong Echo"
+TYPE=Delay
+PACK=c418
+MIX=0.28
+TAGS=delay, space, tempo
+
+[PARAMS]
+sync=5
+feedback=0.42
+pingPong=1
+highCut=6000
+dry=1
+level=1

@@ -1,0 +1,44 @@
+[PROJECT]
+ADX_VERSION=2
+TITLE="Golden: tempo ramp and meter change"
+TUNING=440
+
+[TEMPO]
+0:0:0 90 ramp
+2:0:0 150
+3:0:0 75
+
+[METER]
+0:0:0 4/4
+2:0:0 7/8
+
+[CHANNEL Click]
+INSTRUMENT=additive
+OUTPUT=insert.1
+POLYPHONY=16
+VOLUME=1
+PAN=0
+
+[PATTERN Ticks]
+LENGTH=4:0:0
+NOTES Click
+  C6 0:0:0 0:0:480 120
+  C5 0:1:0 0:0:480 80
+  C5 0:2:0 0:0:480 80
+  C5 0:3:0 0:0:480 80
+  C6 1:0:0 0:0:480 120
+  C5 1:1:0 0:0:480 80
+  C5 1:2:0 0:0:480 80
+  C5 1:3:0 0:0:480 80
+  C6 2:0:0 0:0:480 120
+  C5 2:1:0 0:0:480 80
+  C5 2:3:0 0:0:480 80
+  C6 3:0:0 0:0:480 120
+  C5 3:2:0 0:0:480 80
+
+[PLAYLIST]
+TRACK 1
+  PATTERN Ticks 0:0:0
+
+[MIXER]
+INSERT 1 name="Master"

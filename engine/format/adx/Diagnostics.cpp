@@ -70,6 +70,8 @@ constexpr auto kCodes = std::to_array<DiagnosticCode>({
     {code::kV1ClipSecondsConverted, Severity::Info, "A v1 CLIP start in seconds became ticks."},
     {code::kV1LoopEnabled, Severity::Info, "v1 LOOP= was present, so the loop is enabled."},
     {code::kV1Unrecognised, Severity::Warning, "A v1 line was not recognised; kept as residue."},
+    {code::kV1ReleaseSilent, Severity::Info,
+     "A v1 envelope with zero sustain released silently; its release became 0."},
 });
 // NOLINTEND(modernize-use-designated-initializers)
 

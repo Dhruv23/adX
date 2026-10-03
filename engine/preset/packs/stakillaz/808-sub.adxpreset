@@ -1,0 +1,19 @@
+# docs/STAKILLAZ.md §2.3: the 808 boom - a sine sub with an octave of pitch drop over
+# 60 ms, a long tail, a little saturation.
+[PRESET]
+NAME="808 Sub"
+TYPE=additive
+PACK=stakillaz
+TAGS=bass, 808, sub, phonk
+
+[PARAMS]
+harmonic.1=1
+env.attack=0.002
+env.decay=0.6 curve=exponential(0)
+env.sustain=0.4
+env.release=0.4 curve=exponential(0)
+drive=4
+sub.level=1
+sub.wave=0
+sub.dropSemitones=12
+sub.dropMs=60

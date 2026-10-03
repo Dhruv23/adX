@@ -1,0 +1,32 @@
+[PROJECT]
+ADX_VERSION=2
+TITLE="Golden: single tone"
+TUNING=440
+
+[TEMPO]
+0:0:0 120
+
+[METER]
+0:0:0 4/4
+
+[CHANNEL Tone]
+INSTRUMENT=additive
+OUTPUT=insert.1
+POLYPHONY=16
+VOLUME=1
+PAN=0
+
+[PATTERN Line]
+LENGTH=1:0:0
+NOTES Tone
+  A4 0:0:0 0:0:1920 100
+  C5 0:1:0 0:0:960 80
+  E5 0:2:0 0:0:480 127
+  A5 0:3:0 0:1:0 60
+
+[PLAYLIST]
+TRACK 1
+  PATTERN Line 0:0:0
+
+[MIXER]
+INSERT 1 name="Master"

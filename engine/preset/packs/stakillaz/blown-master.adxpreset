@@ -1,0 +1,11 @@
+# docs/STAKILLAZ.md §2.1: the master drive - "the final hard-clip character stage" for
+# the blown-out glue; v1's MASTER_DRIVE=3 is drive 4 here (1 + x).
+[PRESET]
+NAME="Blown Master"
+TYPE=Distortion
+PACK=stakillaz
+MIX=1
+TAGS=distortion, master, saturation
+
+[PARAMS]
+drive=4

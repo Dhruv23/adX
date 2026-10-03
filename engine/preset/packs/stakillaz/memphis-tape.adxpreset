@@ -1,0 +1,12 @@
+# docs/STAKILLAZ.md §1: "Memphis-tape hiss, lo-fi" - a ten-bit crush at 14 kHz,
+# blended in for grit rather than replacing the signal.
+[PRESET]
+NAME="Memphis Tape"
+TYPE=Bitcrush
+PACK=stakillaz
+MIX=0.35
+TAGS=lofi, bitcrush, grit
+
+[PARAMS]
+bits=10
+rate=14000

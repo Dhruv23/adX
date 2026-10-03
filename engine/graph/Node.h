@@ -33,6 +33,11 @@ enum class BlockEventKind : std::uint8_t {
     /// The source wrapped its loop. Release the voices whose note-off lies at or
     /// beyond `endTick`, the loop end: they would otherwise never see it.
     LoopWrap,
+    /// Glide the voice's pitch offset to `value` cents over `duration` samples.
+    PitchGlide,
+    /// `endTick` is the lyric's index in the snapshot's table, for the note that
+    /// follows with the same (noteId, instance).
+    Lyric,
 };
 
 /// One event, positioned in the block. Built on the audio thread from the snapshot's
@@ -48,6 +53,10 @@ struct BlockEvent {
     std::uint32_t timeSource;
     /// NoteOn: the matching note-off's tick. LoopWrap: the loop end's tick.
     std::int64_t endTick;
+    /// PitchGlide: the target, in cents from the note's pitch.
+    float value;
+    /// PitchGlide: samples until the target is reached; 0 is a jump.
+    std::uint32_t duration;
     BlockEventKind kind;
     std::uint8_t pitch;
     std::uint8_t velocity;
@@ -70,12 +79,38 @@ struct ProcessContext {
     EventView events;
     /// This node's own parameters, in the order its kind defines. A slice of the
     /// snapshot's parameter storage, so a knob turn that arrived this block is already
-    /// in it.
+    /// in it. An automated parameter holds its value at the first frame of this call.
     std::span<const float> params;
+    /// Per-frame values of the automated parameters, indexed like `params`: `frames`
+    /// values for a parameter automation moves in this call, null for one it does not.
+    /// Empty altogether when no parameter of this node is automated, which is the
+    /// common case and costs one size check. Use paramAt(). (Pointers rather than
+    /// spans because the per-callback arena hands out only trivially constructible
+    /// types, and std::span is not one.)
+    ///
+    /// Automation is a pure function of the arrangement's sample position, so a node
+    /// that reads it per frame produces the same output whatever the block size
+    /// (phase_4.md §4.0).
+    std::span<const float* const> automation;
     /// Per-callback scratch. Reset before the first node runs; anything taken from it
     /// is gone next block.
     rt::BlockArena& arena;
 };
+
+/// Parameter `index` at frame `frame` of this call: the automated value when there is
+/// one, the block value otherwise.
+[[nodiscard]] inline float paramAt(const ProcessContext& context, std::uint32_t index,
+                                   std::uint32_t frame) noexcept {
+    if (index < context.automation.size() && context.automation[index] != nullptr) {
+        return context.automation[index][frame];
+    }
+    return index < context.params.size() ? context.params[index] : 0.0F;
+}
+
+/// True when parameter `index` moves within this call.
+[[nodiscard]] inline bool paramMoves(const ProcessContext& context, std::uint32_t index) noexcept {
+    return index < context.automation.size() && context.automation[index] != nullptr;
+}
 
 class Node {
 public:

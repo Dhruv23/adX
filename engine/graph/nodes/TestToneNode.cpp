@@ -5,6 +5,8 @@
 #include <cmath>
 #include <numbers>
 
+#include "engine/dsp/Math.h"
+
 namespace adx::graph {
 namespace {
 
@@ -67,14 +69,14 @@ double testToneFrequency(std::uint8_t pitch, double cents) noexcept {
     double frequency = 440.0 * kSemitoneRatios[static_cast<std::size_t>(step)];
     frequency = std::ldexp(frequency, octave);
     if (cents != 0.0) {
-        frequency *= std::exp2(cents / 1200.0);
+        frequency *= dsp::exp2(cents / 1200.0);
     }
     return frequency;
 }
 
 void TestToneNode::startVoice(Voice& voice, const BlockEvent& /*event*/,
-                              std::uint32_t sampleRate) noexcept {
-    const double attackSamples = kTestToneAttackSeconds * static_cast<double>(sampleRate);
+                              const VoiceRender& render) noexcept {
+    const double attackSamples = kTestToneAttackSeconds * static_cast<double>(render.sampleRate);
     // Cosine phase: the note's first sample is attackStep * amplitude, never zero, so
     // an onset test can find the exact sample a note started on. The attack ramp is
     // what keeps that from being a click.
@@ -87,9 +89,13 @@ void TestToneNode::startVoice(Voice& voice, const BlockEvent& /*event*/,
 }
 
 bool TestToneNode::renderVoice(Voice& voice, std::span<float> left, std::span<float> right,
-                               std::uint32_t sampleRate, float pitchCents) noexcept {
-    const auto increment = static_cast<float>(testToneFrequency(voice.pitch, pitchCents) /
-                                              static_cast<double>(sampleRate));
+                               const VoiceRender& render) noexcept {
+    const std::uint32_t sampleRate = render.sampleRate;
+    // The increment is recomputed only when the pitch moves, so a note with no glide
+    // computes it once per segment - exactly as before slides existed.
+    float cents = render.pitchCents.empty() ? 0.0F : render.pitchCents[0];
+    auto increment =
+        static_cast<float>(testToneFrequency(voice.pitch, cents) / static_cast<double>(sampleRate));
     const float amplitude = kTestToneAmplitude * (static_cast<float>(voice.velocity) / 127.0F);
 
     float phase = voice.state[kPhase];
@@ -124,6 +130,11 @@ bool TestToneNode::renderVoice(Voice& voice, std::span<float> left, std::span<fl
             }
         } else if (envelope < 1.0F) {
             envelope = std::min(envelope + attackStep, 1.0F);
+        }
+        if (i < render.pitchCents.size() && render.pitchCents[i] != cents) {
+            cents = render.pitchCents[i];
+            increment = static_cast<float>(testToneFrequency(voice.pitch, cents) /
+                                           static_cast<double>(sampleRate));
         }
         const float sample = sineOfTurns(phase) * envelope * amplitude;
         left[i] = sample;

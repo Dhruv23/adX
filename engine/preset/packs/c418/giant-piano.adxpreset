@@ -1,0 +1,22 @@
+# docs/C418.md §2.3: NI "The Giant" character - a 1/n rolloff over eight partials
+# with the odd ones leaning forward, a long decay onto a quiet sustain.
+[PRESET]
+NAME="Giant Piano"
+TYPE=additive
+PACK=c418
+TAGS=keys, piano, warm
+
+[PARAMS]
+harmonic.1=1
+harmonic.2=0.5
+harmonic.3=0.38
+harmonic.4=0.25
+harmonic.5=0.24
+harmonic.6=0.17
+harmonic.7=0.17
+harmonic.8=0.12
+env.attack=0.008
+env.decay=0.9 curve=exponential(0.32)
+env.sustain=0.25
+env.release=0.4 curve=exponential(0.14)
+filter.cutoff=9000

@@ -23,6 +23,7 @@
 #include "engine/core/TempoMath.h"
 #include "engine/graph/RenderGraph.h"
 #include "engine/project/EventTrack.h"
+#include "engine/project/Knot.h"
 #include "engine/project/ParamRef.h"
 #include "engine/rt/Reaper.h"
 
@@ -41,13 +42,18 @@ struct AutomationPoint {
     core::Curve curve;
 };
 
-/// One automation clip as placed on the arrangement: absolute ticks, a target already
-/// resolved to a parameter index, and its breakpoints.
+/// One automation clip or clip envelope as placed on the arrangement: absolute ticks,
+/// a target already resolved to a parameter index, its breakpoints, and the straight-
+/// line chain they compile to. The lane applies in [startTick, endTick); outside it
+/// the parameter has its base value.
 struct AutomationLane {
     std::uint32_t paramIndex{graph::kNone};
     std::int64_t startTick{0};
     std::int64_t endTick{0};
     std::span<const AutomationPoint> points;
+    /// What the audio thread evaluates: `points` with every curved segment subdivided
+    /// into lines (CurveCompile.h), absolute ticks.
+    std::span<const Knot> knots;
 
     /// The lane's value at `tick`, held flat outside its first and last points. The
     /// same rule AutomationClip::valueAt uses on the main thread.
@@ -72,9 +78,21 @@ struct Snapshot {
     graph::RenderGraph graph;
 
     /// Audio thread state after publication: every resolved parameter value. A knob
-    /// turn writes here through the message queue; structural edits rebuild.
+    /// turn writes here through the message queue; structural edits rebuild. An
+    /// automated parameter's entry is rewritten at the top of every piece with its
+    /// value at that frame.
     std::span<float> params;
+    /// The values automation returns a parameter to when no lane covers it: the model's
+    /// value, plus knob turns. Same layout as `params`; written only by knob turns.
+    std::span<float> paramBase;
     std::span<const ParamSlot> paramIndex;
+
+    /// Which lanes drive each parameter, compressed: the lanes of parameter p are
+    /// paramLanes[paramLaneStart[p] .. paramLaneStart[p + 1]), in priority order - a
+    /// later lane wins where two overlap. paramLaneStart has params.size() + 1 entries,
+    /// or none when nothing is automated.
+    std::span<const std::uint32_t> paramLaneStart;
+    std::span<const std::uint32_t> paramLanes;
 
     /// What the reaper destroys when this snapshot retires: the storage that owns
     /// every span above, on the main thread. The audio thread copies it into the
@@ -84,6 +102,14 @@ struct Snapshot {
     /// The index of `ref` in `params`, or graph::kNone when the snapshot has no such
     /// parameter - the entity was deleted after the knob was grabbed.
     [[nodiscard]] std::uint32_t findParam(ParamRef ref) const noexcept;
+
+    /// True when any of params [first, first + count) has a lane. O(1).
+    [[nodiscard]] bool anyAutomated(std::uint32_t first, std::uint32_t count) const noexcept {
+        if (paramLaneStart.empty() || first + count >= paramLaneStart.size()) {
+            return false;
+        }
+        return paramLaneStart[first + count] != paramLaneStart[first];
+    }
 };
 
 /// The order ParamSlot is sorted in.

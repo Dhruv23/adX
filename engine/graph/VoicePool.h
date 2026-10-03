@@ -66,6 +66,17 @@ struct Voice {
     /// Samples left in a steal fade.
     std::uint32_t fadeRemaining{0};
     std::array<float, kVoiceStateFloats> state{};
+
+    /// Samples rendered since the note started. The voice's own clock: an instrument's
+    /// control-rate work runs on multiples of it, never on block boundaries, so the
+    /// output does not depend on the block size (phase_4.md §4.0).
+    std::uint64_t age{0};
+    /// The pitch offset glides and portamento have moved the voice by, in cents, and
+    /// the glide in progress (phase_4.md §4.2). Owned by ChannelNode.
+    float pitchOffset{0.0F};
+    float glideTarget{0.0F};
+    float glideStep{0.0F};
+    std::uint32_t glideRemaining{0};
 };
 
 class VoicePool {
@@ -91,6 +102,10 @@ public:
     /// The sounding voice with exactly this key, or nullptr. Released voices with the
     /// key are skipped: a note-off for a voice already in release has nothing to do.
     [[nodiscard]] Voice* find(VoiceKey key) noexcept;
+
+    /// The voice with exactly this key that is sounding or releasing, or nullptr. What
+    /// a pitch glide moves: a slide may still be running when the note is released.
+    [[nodiscard]] Voice* findSounding(VoiceKey key) noexcept;
 
     /// Starts the release of one voice. Idempotent.
     static void release(Voice& voice) noexcept;

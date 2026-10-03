@@ -154,6 +154,11 @@ def _cmd_info(args: argparse.Namespace) -> int:
     channels = [str(name) for name in project.channels]
     if channels:
         print("channel list:    " + ", ".join(channels))
+        width = max(len(name) for name in channels)
+        print("instruments:")
+        for name, (kind, known) in zip(channels, project.instruments, strict=True):
+            note = "" if known else "  (unknown type: plays silence)"
+            print(f"  {name:<{width}}  {kind}{note}")
     return _OK
 
 

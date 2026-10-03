@@ -1,0 +1,37 @@
+# Golden hashes per unit (tests/cpp/render/test_golden_units.cpp): each instrument
+# and shipped preset playing one phrase, each effect at three settings on one
+# signal. 48 kHz, 64-frame blocks, FNV-1a 128 over interleaved floats.
+# Regenerate with ADX_UPDATE_GOLDEN=1, and only on purpose.
+effect/Bitcrush/default 9f426af665e2e5219182624d7035d3ff
+effect/Bitcrush/high dd1c1fe573a7ec4136b21f336deb13dd
+effect/Bitcrush/low 15829f17c4bbcb9b873a00854234cfd2
+effect/Chorus/default 99f0c498cea280a71f6a29ddf22d6379
+effect/Chorus/high 9a5c04533f252406c6d135f76f29577a
+effect/Chorus/low 6da265d8a5679109d3b2a295c014a660
+effect/Compressor/default 8a4de9244484255dfaa108722e7a9ed6
+effect/Compressor/high 1a2627c20d8466f9471e549e18b5b41f
+effect/Compressor/low 8b7bda92c5fa9d375ab7c32d9036ff55
+effect/Delay/default 4fb765eb65bc3c81217b948b412ed1c4
+effect/Delay/high 71c4eed3104add4e3f8f27fce70b947d
+effect/Delay/low af9f44911efe8bca585c3dfe4a2f763e
+effect/Distortion/default 3ec60a2131d9985d8f07e57d16d23c59
+effect/Distortion/high 32ba85cea080dfc268c5cc8db6752d14
+effect/Distortion/low 3c666be36b64f783afae49a512e4cb79
+effect/Ducker/default fa45dded3355bd817342abb5d7bb0047
+effect/Ducker/high 8f72a7de29827b41c3e629f2aab63b05
+effect/Ducker/low 4b42b437718206fa04c966e054d5ca3a
+effect/EQ/default 4b42b437718206fa04c966e054d5ca3a
+effect/EQ/high 884cb7fed5596f1cf7ca103d41e9db5b
+effect/EQ/low 15d5de46370b3b6953eff1ce0c1e2b02
+effect/Gate/default 8d19ad8c46ffefc19da28dadee53dc34
+effect/Gate/high 9c1986600717e4acf8aee45810507e32
+effect/Gate/low 13a4246b0b99bae12bc7f7c7c1e65edb
+effect/Limiter/default b2ed2cea26298b36b48cc05f75df2bd2
+effect/Limiter/high a9523903c3fc26e34ac95c362d905e0d
+effect/Limiter/low d4739cf2f71083bd0bb8ecec48ad4495
+effect/ParametricEq/default 4b42b437718206fa04c966e054d5ca3a
+effect/ParametricEq/high a8007ae408f36410fcae47f996ab9abb
+effect/ParametricEq/low bb0300e299d19330fa780ee24e99db38
+effect/Reverb/default 00f11e20ad054e044131fff69ecaecd2
+effect/Reverb/high e166be388cf49cb7335a35c25bc642de
+effect/Reverb/low 98147a17db38f8ae62cb34d99b9c2a3c

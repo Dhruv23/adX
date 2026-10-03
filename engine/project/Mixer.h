@@ -33,6 +33,11 @@ struct Slot {
     float mix{1.0F};
     bool bypass{false};
     std::vector<SlotParam> params;
+    /// The insert whose post-fader signal keys this slot's effect - a ducker's trigger,
+    /// a compressor's external key - or invalid for none. An explicit connection
+    /// (FINAL_PLAN §5.2), so it is part of the routing graph: sorted, delay-compensated
+    /// and cycle-checked like a route (phase_3.md §4.4).
+    core::InsertId sidechain;
 
     [[nodiscard]] const SlotParam* find(std::string_view name) const noexcept;
     [[nodiscard]] SlotParam* find(std::string_view name) noexcept;

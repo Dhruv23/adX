@@ -143,8 +143,10 @@ TEST_CASE("validate_catches_invariants", "[validate]") {
         Pattern pattern;
         pattern.id = project.newPatternId();
         pattern.name = "P";
-        pattern.noteClips.push_back(NoteClip{.channel = project.channels.front().id, .notes = {}});
-        pattern.noteClips.push_back(NoteClip{.channel = project.channels.front().id, .notes = {}});
+        pattern.noteClips.push_back(
+            NoteClip{.channel = project.channels.front().id, .notes = {}, .extras = {}});
+        pattern.noteClips.push_back(
+            NoteClip{.channel = project.channels.front().id, .notes = {}, .extras = {}});
         project.patterns.push_back(std::move(pattern));
         DiagnosticList diagnostics;
         CHECK_FALSE(validate(project, diagnostics));

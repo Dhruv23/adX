@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <iterator>
 #include <map>
+#include <optional>
 #include <set>
 #include <string_view>
 #include <tuple>
@@ -29,6 +30,29 @@ using NoteKey = std::tuple<std::int64_t, std::uint8_t, std::int64_t, std::uint8_
 }
 
 /// Counts how many elements of `lhs` are not matched in `rhs`.
+/// A note's extras, keyed by the note's content like noteKeys, so a reload that
+/// reassigns ids is not a change.
+using ExtrasKey =
+    std::tuple<NoteKey, std::optional<NoteSlide>, std::vector<PitchPoint>, std::string>;
+
+[[nodiscard]] std::vector<ExtrasKey> extrasKeys(const NoteClip& clip) {
+    std::vector<ExtrasKey> keys;
+    for (const NoteExtras& extras : clip.extras) {
+        const auto note = std::ranges::find(clip.notes, extras.note, &Note::id);
+        if (note == clip.notes.end()) {
+            continue;
+        }
+        keys.emplace_back(
+            NoteKey{note->start.value, note->pitch, note->length.value, note->velocity},
+            extras.slide, extras.pitchCurve, extras.lyric);
+    }
+    std::ranges::sort(keys, [](const ExtrasKey& a, const ExtrasKey& b) {
+        return std::get<0>(a) < std::get<0>(b) ||
+               (std::get<0>(a) == std::get<0>(b) && std::get<3>(a) < std::get<3>(b));
+    });
+    return keys;
+}
+
 [[nodiscard]] std::size_t unmatched(const std::multiset<NoteKey>& lhs,
                                     const std::multiset<NoteKey>& rhs) {
     std::vector<NoteKey> difference;
@@ -91,6 +115,9 @@ void diffChannels(const Project& before, const Project& after, std::vector<Chang
         if (!(old.arp == now->arp)) {
             fields.emplace_back("arp");
         }
+        if (old.instrument.zones != now->instrument.zones) {
+            fields.emplace_back("zones");
+        }
         for (const ParamValue& param : old.instrument.params) {
             const ParamValue* match = now->instrument.find(param.name);
             if (match == nullptr || !(*match == param)) {
@@ -130,14 +157,22 @@ void diffPatterns(const Project& before, const Project& after, std::vector<Chang
         }
         // Clips are matched by channel *name*, the same way the file addresses them.
         std::map<std::string, std::pair<std::multiset<NoteKey>, std::multiset<NoteKey>>> clips;
+        std::map<std::string, std::pair<std::vector<ExtrasKey>, std::vector<ExtrasKey>>> extras;
         for (const NoteClip& clip : old.noteClips) {
             if (const Channel* channel = before.find(clip.channel)) {
                 clips[channel->name].first = noteKeys(clip);
+                extras[channel->name].first = extrasKeys(clip);
             }
         }
         for (const NoteClip& clip : now->noteClips) {
             if (const Channel* channel = after.find(clip.channel)) {
                 clips[channel->name].second = noteKeys(clip);
+                extras[channel->name].second = extrasKeys(clip);
+            }
+        }
+        for (const auto& [channel, sets] : extras) {
+            if (sets.first != sets.second) {
+                details.push_back(channel + ": slides, bends or lyrics");
             }
         }
         for (const auto& [channel, sets] : clips) {
@@ -200,6 +235,10 @@ void diffPlaylist(const Project& before, const Project& after, std::vector<Chang
                 old.items[i].length != now->items[i].length ||
                 old.items[i].muted != now->items[i].muted) {
                 push(out, ChangeKind::Changed, subject, "items moved or trimmed");
+                break;
+            }
+            if (old.items[i].envelopes != now->items[i].envelopes) {
+                push(out, ChangeKind::Changed, subject, "clip envelopes");
                 break;
             }
         }

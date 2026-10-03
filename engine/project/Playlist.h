@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -43,6 +44,36 @@ struct AutomationRef {
                                          const AutomationRef&) noexcept = default;
 };
 
+/// What a clip envelope drives when it does not name a project parameter: a property
+/// of the placement itself.
+enum class ClipTarget : std::uint8_t {
+    /// The envelope targets `ClipEnvelope::target`, a project parameter.
+    Param,
+    Gain,
+    Pan,
+    PitchCents,
+};
+
+/// Automation that belongs to one placement (phase_4.md §4.0). Breakpoint times are
+/// item-relative - 0 is `item.start` - and points past the item's length are not
+/// played. A Param envelope applies only while the item plays; the parameter returns to
+/// its base value afterwards.
+struct ClipEnvelope {
+    ClipTarget local{ClipTarget::Param};
+    /// As written, for a Param target - kept for the same reason AutomationClip keeps
+    /// it: an unresolvable target is preserved, not dropped.
+    std::string targetPath;
+    ParamRef target;
+    std::vector<Breakpoint> points;
+
+    [[nodiscard]] friend bool operator==(const ClipEnvelope&,
+                                         const ClipEnvelope&) noexcept = default;
+};
+
+[[nodiscard]] const char* toString(ClipTarget target) noexcept;
+/// `gain`, `pan`, `pitch`; anything else is a parameter path.
+[[nodiscard]] bool clipTargetFromString(std::string_view name, ClipTarget& out) noexcept;
+
 struct PlaylistItem {
     core::ItemId id;
     core::Ticks start;
@@ -57,6 +88,7 @@ struct PlaylistItem {
 
     std::variant<PatternRef, AudioClipRef, AutomationRef> content;
     bool muted{false};
+    std::vector<ClipEnvelope> envelopes;
 
     [[nodiscard]] friend bool operator==(const PlaylistItem&,
                                          const PlaylistItem&) noexcept = default;

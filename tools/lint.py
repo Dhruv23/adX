@@ -587,12 +587,56 @@ def cmd_positions(_args: argparse.Namespace) -> int:
     return 0
 
 
+#: phase_4.md: the audio a render produces is pinned by golden hashes, and they must
+#: hold in every build configuration. Library transcendentals do not allow that - a
+#: vectorising optimiser may call a different std::sin in Release than in Debug, and
+#: two standard libraries disagree in the last bit - so DSP code uses engine/dsp/Math.h's
+#: deterministic ones. sqrt, floor, fabs and friends are exactly rounded by IEEE 754
+#: and stay allowed.
+_DSP_MATH_ROOTS = (
+    "engine/dsp",
+    "engine/instruments",
+    "engine/effects",
+    "engine/mixer",
+    "engine/graph/nodes",
+)
+_DSP_MATH_BANNED = re.compile(
+    r"\bstd::(sin|cos|tan|sinh|cosh|tanh|asin|acos|atan|atan2|exp|exp2|expm1|log|log2|log10"
+    r"|log1p|pow|cbrt|hypot|erf|tgamma|lgamma)[fl]?\s*\("
+)
+
+
+def cmd_dsp_math(_args: argparse.Namespace) -> int:
+    """Ban library transcendentals in DSP code: use engine/dsp/Math.h."""
+    findings: list[str] = []
+    files = [
+        path
+        for path in _first_party_cpp_files()
+        if any(_relative(path).startswith(root + "/") for root in _DSP_MATH_ROOTS)
+    ]
+    for path in files:
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            match = _DSP_MATH_BANNED.search(_strip_comments(line))
+            if match:
+                findings.append(f"{_relative(path)}:{number}: 'std::{match.group(1)}'")
+    if findings:
+        for finding in findings:
+            print(finding, file=sys.stderr)
+        return _fail(
+            f"{len(findings)} library transcendental(s) in DSP code. Use engine/dsp/Math.h, "
+            "whose results are identical in every build configuration (golden hashes)."
+        )
+    print(f"dsp-math: {len(files)} DSP files use only deterministic math")
+    return 0
+
+
 _GATES = {
     "format": cmd_format,
     "tidy": cmd_tidy,
     "headers": cmd_headers,
     "format-safety": cmd_format_safety,
     "positions": cmd_positions,
+    "dsp-math": cmd_dsp_math,
 }
 
 
@@ -622,6 +666,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     subparsers.add_parser(
         "positions", help="no engine-global playback position outside engine/transport"
     )
+    subparsers.add_parser("dsp-math", help="no library transcendentals in DSP code")
 
     args = parser.parse_args(argv)
     return _GATES[str(args.gate)](args)

@@ -126,6 +126,7 @@ inline constexpr std::uint16_t kV1NameSuffixed = 4009;
 inline constexpr std::uint16_t kV1ClipSecondsConverted = 4010;
 inline constexpr std::uint16_t kV1LoopEnabled = 4011;
 inline constexpr std::uint16_t kV1Unrecognised = 4012;
+inline constexpr std::uint16_t kV1ReleaseSilent = 4013;
 } // namespace code
 
 /// The full table. Sorted by code.

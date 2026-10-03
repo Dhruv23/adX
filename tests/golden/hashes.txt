@@ -1,12 +1,12 @@
 # Render hashes for the golden corpus: 48 kHz, 256-frame blocks, stereo,
 # FNV-1a 128 over the raw float bytes. Regenerate with ADX_UPDATE_GOLDEN=1,
 # and only on purpose.
-docs/examples/c418_demo.adx 46c6e5d6622c960cbcfc0c541bf16a7d
-docs/examples/example.adx 9e83c556d78a0cbe9f2c71e8bc0e94c1
-docs/examples/stakillaz_demo.adx d438e5f910affab820d1f9ad21cf51cd
-docs/examples/suffocation.adx 34af1c3a25baf397b56fbb6f687a8008
-tests/golden/chord_steal.adx 954adff93b7dbc9f5aa105dbe4e5a51a
-tests/golden/placements_automation.adx 8a624d52aaf19aaa8828884d93707d55
-tests/golden/routing_sends.adx 5012788be66800336c9268ae207e4e03
-tests/golden/single_tone.adx 0b6c0602ef5612e6e72d9c88d8e593f5
-tests/golden/tempo_ramp.adx 5292fb148634b5578a6f61a67738f681
+docs/examples/c418_demo.adx 1586dba1eb11596ea8d93f407f77c83e
+docs/examples/example.adx 6602fb5b224e7a1a5044a72317c42c95
+docs/examples/stakillaz_demo.adx 2ac2fb22fda038d0f4aac545d1e56d9b
+docs/examples/suffocation.adx 06477321ef2fc1e18045dfb38da9c0a3
+tests/golden/chord_steal.adx 3f6c03a9146c83e2834328450f0a9108
+tests/golden/placements_automation.adx 09f31fe1423b4797e3dafe3753c77049
+tests/golden/routing_sends.adx 80c09ddc8f7cdfc47c13233762825626
+tests/golden/single_tone.adx ea408551981e787b5323c0dd65389cf9
+tests/golden/tempo_ramp.adx f4937fecfc46251d93fc72b4bec0ebb1
