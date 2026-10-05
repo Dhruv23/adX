@@ -600,6 +600,8 @@ void parseZoneFields(std::span<const Token> fields, DiagnosticList& diagnostics,
             }
         } else if (key == "start") {
             (void)parseFrames(token, diagnostics, zone.start);
+        } else if (key == "end") {
+            (void)parseFrames(token, diagnostics, zone.end);
         } else if (key == "loopStart") {
             (void)parseFrames(token, diagnostics, zone.loopStart);
         } else if (key == "loopEnd") {
@@ -667,6 +669,9 @@ std::string formatZoneFields(const project::SampleZone& zone) {
     }
     if (zone.start != 0) {
         text += " start=" + std::to_string(zone.start);
+    }
+    if (zone.end != 0) {
+        text += " end=" + std::to_string(zone.end);
     }
     if (zone.loop != project::LoopMode::Off) {
         text += " loop=";

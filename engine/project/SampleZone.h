@@ -42,6 +42,9 @@ struct SampleZone {
     std::uint8_t velocityHigh{127};
     /// Where playback starts, in the sample's own frames.
     std::uint32_t start{0};
+    /// Exclusive: where playback stops, in the sample's own frames. Zero means the end
+    /// of the sample. A Slicer's slice is a zone from `start` to `end`.
+    std::uint32_t end{0};
     LoopMode loop{LoopMode::Off};
     std::uint32_t loopStart{0};
     /// Exclusive. Zero means the end of the sample.

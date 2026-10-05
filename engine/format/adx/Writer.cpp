@@ -168,6 +168,9 @@ std::string formatZone(const Project& project, const project::SampleZone& zone) 
 void writeChannel(Emitter& emitter, const Project& project, const project::Channel& channel) {
     emitter.section("[CHANNEL " + channel.name + "]");
     emitter.line(keyValue("INSTRUMENT", channel.instrument.type));
+    if (!channel.instrument.voicebank.empty()) {
+        emitter.line(keyValue("VOICEBANK", quoteAlways(channel.instrument.voicebank)));
+    }
     emitter.line(keyValue("OUTPUT", "insert." + std::to_string(channel.output.value)));
     emitter.line(keyValue("POLYPHONY", std::to_string(channel.maxPolyphony)));
     if (channel.stealMode != project::VoiceStealMode::OldestReleased) {
@@ -458,6 +461,9 @@ void writeMixer(Emitter& emitter, const Project& project) {
             appendIfChanged(body, "bypass", slot.bypass, false);
             if (slot.sidechain.valid()) {
                 body += " sidechain=insert." + std::to_string(slot.sidechain.value);
+            }
+            if (const project::SampleRef* impulse = project.resources.find(slot.impulse)) {
+                body += " ir=" + quoteAlways(impulse->path);
             }
             for (const project::SlotParam& param : slot.params) {
                 body += ' ';

@@ -571,6 +571,19 @@ void V2Parser::parseInsertChildren(core::InsertId insert, const BlockNode& node)
                     }
                     continue;
                 }
+                if (token.text == "ir") {
+                    // One pool entry per file, shared with zones and AUDIO items.
+                    if (const project::SampleRef* existing =
+                            m_project.resources.findByPath(token.value)) {
+                        slot.impulse = existing->id;
+                    } else {
+                        auto sample = std::make_unique<project::AddSample>(token.value);
+                        const project::AddSample* raw = sample.get();
+                        execute(std::move(sample));
+                        slot.impulse = raw->created();
+                    }
+                    continue;
+                }
                 double number = 0.0;
                 if (!parseDouble(token.value, token.valueSpan, m_diag, number)) {
                     continue;
@@ -662,6 +675,9 @@ V2Parser::ChannelBinding V2Parser::parseChannelHeader(Section& section, std::siz
 
     if (Line* line = keys.take(lines(), "INSTRUMENT")) {
         channel.instrument.type = decodeValue(line->value);
+    }
+    if (Line* line = keys.take(lines(), "VOICEBANK")) {
+        channel.instrument.voicebank = decodeValue(line->value);
     }
     if (Line* line = keys.take(lines(), "POLYPHONY")) {
         std::int64_t value = channel.maxPolyphony;

@@ -1,6 +1,7 @@
 // engine/dsp/Math.h: the deterministic transcendentals, against the library.
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cmath>
 
 #include "engine/dsp/Math.h"
@@ -57,4 +58,25 @@ TEST_CASE("dsp_math_matches_library", "[dsp][math]") {
     CHECK(dsp::gainToDb(0.0) == -200.0);
     CHECK(std::abs(dsp::midiToHz(69.0F) - 440.0F) < 1e-4F);
     CHECK(std::abs(dsp::midiToHz(81.0F) - 880.0F) < 1e-3F);
+}
+
+TEST_CASE("dsp_atan2_turns_matches_library", "[dsp][math]") {
+    // Every octant, the axes, and the origin: within 1e-10 turns of the library.
+    namespace dsp = adx::dsp;
+    double worst = 0.0;
+    for (int a = 0; a < 3600; ++a) {
+        const double angle = (static_cast<double>(a) * 0.1 - 180.0) * dsp::kPi / 180.0;
+        for (const double radius : {1e-6, 0.3, 1.0, 1e6}) {
+            const double y = radius * std::sin(angle);
+            const double x = radius * std::cos(angle);
+            const double expected = std::atan2(y, x) / dsp::kTwoPi;
+            double error = std::abs(dsp::atan2Turns(y, x) - expected);
+            error = std::min(error, std::abs(error - 1.0)); // -1/2 and 1/2 are one angle
+            worst = std::max(worst, error);
+        }
+    }
+    CHECK(worst < 1e-10);
+    CHECK(dsp::atan2Turns(0.0, 0.0) == 0.0);
+    CHECK(dsp::atan2Turns(1.0, 0.0) == 0.25);
+    CHECK(dsp::atan2Turns(0.0, -1.0) == 0.5);
 }

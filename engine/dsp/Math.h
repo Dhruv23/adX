@@ -176,6 +176,42 @@ inline constexpr double kLog2Of10 = 3.32192809488736234787;
     return x < 0.0 ? -value : value;
 }
 
+/// atan2(y, x) in turns, in (-0.5, 0.5]: the angle of (x, y) over 2 pi. What a phase
+/// vocoder reads a bin's phase with. Octant reduction to |u| <= tan(pi / 8), then the
+/// odd series to u^25: error below 1e-10 turns. 0 at the origin.
+[[nodiscard]] inline double atan2Turns(double y, double x) noexcept {
+    const double ax = x < 0.0 ? -x : x;
+    const double ay = y < 0.0 ? -y : y;
+    if (ax == 0.0 && ay == 0.0) {
+        return 0.0;
+    }
+    // The angle of (ax, ay) in [0, pi/2], from atan of the smaller over the larger.
+    const bool swap = ay > ax;
+    double z = swap ? ax / ay : ay / ax; // 0 .. 1
+    double base = 0.0;
+    if (z > 0.41421356237309503) {
+        // atan(z) = pi/4 + atan((z - 1) / (z + 1))
+        z = (z - 1.0) / (z + 1.0);
+        base = kPi / 4.0;
+    }
+    const double z2 = z * z;
+    double series = 0.0;
+    for (int k = 12; k >= 0; --k) {
+        series = (series * z2) + ((k % 2 == 0 ? 1.0 : -1.0) / static_cast<double>((2 * k) + 1));
+    }
+    double angle = base + (z * series);
+    if (swap) {
+        angle = (kPi / 2.0) - angle;
+    }
+    if (x < 0.0) {
+        angle = kPi - angle;
+    }
+    if (y < 0.0) {
+        angle = -angle;
+    }
+    return angle / kTwoPi;
+}
+
 // --- float, per sample ------------------------------------------------------
 
 /// 2^x in float. Relative error below 2e-7 (float rounding) for x in [-126, 126].

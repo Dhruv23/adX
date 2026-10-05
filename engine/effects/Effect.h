@@ -121,6 +121,13 @@ protected:
     [[nodiscard]] virtual bool usesSidechain() const noexcept {
         return false;
     }
+    /// True for an effect whose wet output is built from recent input - a short
+    /// feedback delay, envelope followers - so that history stopped at a bypass would
+    /// play back stale on un-bypass, inside the crossfade. Such an effect keeps
+    /// processing while bypassed, as a latent one does.
+    [[nodiscard]] virtual bool runsWhileBypassed() const noexcept {
+        return false;
+    }
 
     [[nodiscard]] std::uint32_t preparedRate() const noexcept {
         return m_sampleRate;

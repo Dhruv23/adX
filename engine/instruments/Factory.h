@@ -16,8 +16,9 @@ namespace adx::format {
 class SamplePool;
 }
 namespace adx::project {
+class Project;
 struct Resources;
-}
+} // namespace adx::project
 
 namespace adx::instruments {
 
@@ -27,6 +28,9 @@ struct InstrumentContext {
     const project::Resources* resources{nullptr};
     /// Null means SamplePool::global().
     format::SamplePool* pool{nullptr};
+    /// The whole project, for an instrument built from the notes it will play (the
+    /// Voice renders them ahead). Null when there is none: a Voice then plays nothing.
+    const project::Project* project{nullptr};
 };
 
 /// A new, unprepared node for `type`. An unknown type gets a SilentChannelNode.

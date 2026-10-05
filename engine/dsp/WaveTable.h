@@ -50,6 +50,15 @@ public:
     /// level through the FFT.
     void buildFromCycles(std::span<const float> samples, std::size_t frameLength);
 
+    /// Main thread. The same cycles with `steps - 1` frames inserted between each
+    /// adjacent pair, interpolated spectrally: each harmonic's magnitude moves
+    /// geometrically (linearly in dB) and its phase along the shorter arc. A linear
+    /// crossfade between two frames dips the harmonics they do not share; this moves a
+    /// formant from one place to another instead. Reading frame f * steps of the
+    /// result is source frame f.
+    void buildSpectralMorph(std::span<const float> samples, std::size_t frameLength,
+                            std::size_t steps);
+
     [[nodiscard]] std::size_t frames() const noexcept {
         return m_frames;
     }

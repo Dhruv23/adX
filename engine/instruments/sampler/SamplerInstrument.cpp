@@ -34,16 +34,6 @@ using project::LoopMode;
 
 } // namespace
 
-SamplerInstrument::~SamplerInstrument() {
-    destroySamplerPins(m_pins);
-}
-
-void SamplerInstrument::setZones(rt::OwnedArray<SamplerZone> zones, SamplerPins* pins) noexcept {
-    m_zones = std::move(zones);
-    destroySamplerPins(m_pins);
-    m_pins = pins;
-}
-
 void SamplerInstrument::prepareInstrument(const graph::PrepareInfo& /*info*/) {
     m_sinc = &dsp::sincTable();
 }
@@ -56,7 +46,7 @@ void SamplerInstrument::reset() noexcept {
 }
 
 const SamplerZone* SamplerInstrument::choose(std::uint8_t key, std::uint8_t velocity) noexcept {
-    const std::span<const SamplerZone> zones = m_zones.view();
+    const std::span<const SamplerZone> zones = this->zones();
     const SamplerZone* first = nullptr;
     for (const SamplerZone& candidate : zones) {
         if (candidate.zone.matches(key, velocity)) {
@@ -110,7 +100,9 @@ void SamplerInstrument::startVoice(graph::Voice& voice, const graph::BlockEvent&
     state.zone = choose(voice.pitch, voice.velocity);
     state.position = state.zone != nullptr ? static_cast<double>(state.zone->zone.start) : 0.0;
     state.direction = 1.0;
+    state.cut = 1.0F;
     state.released = false;
+    m_latest = voice.key;
     state.tailStarted = false;
     const float sensitivity = std::clamp(render.param(idx(P::Velocity)), 0.0F, 1.0F);
     const float velocity = static_cast<float>(voice.velocity) / 127.0F;
@@ -138,6 +130,9 @@ bool SamplerInstrument::renderVoice(graph::Voice& voice, std::span<float> left,
     const SamplerZone& zone = *state.zone;
     const project::SampleZone& map = zone.zone;
     const bool oneShot = render.param(idx(P::OneShot)) >= 0.5F;
+    // A newer note chokes this one: a 2 ms fade, so the cut is not a click.
+    const bool choked = render.param(kSamplerChokeIndex) >= 0.5F && !(voice.key == m_latest);
+    const float cutStep = 1.0F / (0.002F * static_cast<float>(sampleRate()));
 
     if (voice.phase == graph::VoicePhase::Released && !state.released) {
         state.released = true;
@@ -157,7 +152,17 @@ bool SamplerInstrument::renderVoice(graph::Voice& voice, std::span<float> left,
     // where it would have been rather than late.
     const bool ready = zone.sample != nullptr && zone.sample->ready();
     const format::SampleView view = ready ? zone.sample->view() : format::SampleView{};
-    const auto frames = static_cast<double>(ready ? view.frames : 0);
+    // A slice's end, when it has one, is the end of the sample as far as this voice goes.
+    std::size_t playable = ready ? view.frames : 0;
+    if (map.end != 0) {
+        playable = std::min<std::size_t>(playable, map.end);
+    }
+    const auto frames = static_cast<double>(playable);
+    // The fade before a slice's end: 2 ms, or a quarter of a very short slice.
+    const double endFade =
+        map.end != 0 ? std::max(1.0, std::min(0.002 * static_cast<double>(view.sampleRate),
+                                              (frames - static_cast<double>(map.start)) * 0.25))
+                     : 0.0;
     const auto loopStart = static_cast<double>(map.loopStart);
     const double loopEnd = map.loopEnd != 0 ? static_cast<double>(map.loopEnd) : frames;
     const double loopLength = loopEnd - loopStart;
@@ -165,8 +170,11 @@ bool SamplerInstrument::renderVoice(graph::Voice& voice, std::span<float> left,
     const float gain = dsp::dbToGainF(render.param(idx(P::Gain)));
     const bool gainAutomated =
         idx(P::Gain) < render.automation.size() && render.automation[idx(P::Gain)] != nullptr;
+    const bool fixedPitch = render.param(kSamplerFixedPitchIndex) >= 0.5F;
     const float rootOffset =
-        ((static_cast<float>(voice.pitch) - static_cast<float>(map.rootKey)) * 100.0F) +
+        (fixedPitch
+             ? 0.0F
+             : (static_cast<float>(voice.pitch) - static_cast<float>(map.rootKey)) * 100.0F) +
         map.tuneCents + render.param(idx(P::Tune));
     const double rateRatio = ready ? static_cast<double>(view.sampleRate) / sampleRate() : 1.0;
 
@@ -239,14 +247,21 @@ bool SamplerInstrument::renderVoice(graph::Voice& voice, std::span<float> left,
         }
 
         env = oneShot ? 1.0F : state.env.next(state.shape);
+        if (choked) {
+            state.cut = std::max(0.0F, state.cut - cutStep);
+        }
+        float cut = state.cut;
+        if (endFade > 0.0 && state.position > frames - endFade) {
+            cut *= static_cast<float>(std::max(0.0, (frames - state.position) / endFade));
+        }
         const float level =
-            env * state.velocityGain *
+            cut * env * state.velocityGain *
             (gainAutomated ? dsp::dbToGainF(render.paramAt(idx(P::Gain), i)) : gain);
         left[i] = sampleLeft * level * zone.gainLeft;
         right[i] = sampleRight * level * zone.gainRight;
 
         state.position += increment * state.direction;
-        if (!oneShot && state.env.finished()) {
+        if ((!oneShot && state.env.finished()) || state.cut <= 0.0F) {
             alive = false;
         }
     }

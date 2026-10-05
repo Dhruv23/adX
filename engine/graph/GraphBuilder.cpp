@@ -37,14 +37,16 @@ template<class Make> std::shared_ptr<Node> NodeStore::getOrMake(Key key, Make ma
 }
 
 std::shared_ptr<Node> NodeStore::channel(const project::Channel& channel,
-                                         const project::Resources& resources) {
+                                         const project::Resources& resources,
+                                         const project::Project* project) {
     const Key key{Kind::Channel, channel.id.value};
     // A channel node is reusable only while the things its voice pool was sized and
     // configured from are unchanged. Anything else - a new polyphony, a new steal
     // mode - is a new pool, and a new pool is a new node. The instrument type is part
     // of it (P3-2), and so is an instrument's structure: a Sampler's zones and the
     // files they resolve to (instruments::configMatches).
-    const instruments::InstrumentContext context{.resources = &resources, .pool = m_pool};
+    const instruments::InstrumentContext context{
+        .resources = &resources, .pool = m_pool, .project = project};
     const auto found = m_nodes.find(key);
     if (found != m_nodes.end() && found->second.node) {
         const auto* existing = static_cast<const ChannelNode*>(found->second.node.get());
@@ -85,18 +87,19 @@ void NodeStore::forEachMeter(
     }
 }
 
-std::shared_ptr<Node> NodeStore::slot(const project::Slot& slot) {
+std::shared_ptr<Node> NodeStore::slot(const project::Slot& slot,
+                                      const project::Resources& resources) {
     const Key key{Kind::Slot, slot.id.value};
     // A slot whose effect type changed is a new node: the old effect's state means
     // nothing to the new one.
     const auto found = m_nodes.find(key);
     if (found != m_nodes.end() && found->second.node) {
         const auto* existing = static_cast<const SlotNode*>(found->second.node.get());
-        if (!effects::configMatches(*existing, slot)) {
+        if (!effects::configMatches(*existing, slot, &resources)) {
             m_nodes.erase(found);
         }
     }
-    return getOrMake(key, [&slot] { return effects::makeEffect(slot); });
+    return getOrMake(key, [&slot, &resources] { return effects::makeEffect(slot, &resources); });
 }
 
 std::shared_ptr<Node> NodeStore::send(core::SendId id) {
@@ -400,7 +403,8 @@ std::string insertLabel(core::InsertId id) {
 /// exists. The master's meter measures true peak as well.
 std::pair<NodeId, NodeId> addInsertChain(const project::Insert& insert, bool master, Graph& graph,
                                          ParamLayout& layout, NodeStore& nodes,
-                                         std::vector<std::pair<NodeId, core::InsertId>>& keyed) {
+                                         std::vector<std::pair<NodeId, core::InsertId>>& keyed,
+                                         const project::Resources& resources) {
     const std::string label = insertLabel(insert.id);
 
     std::vector<const project::Slot*> slots;
@@ -414,7 +418,7 @@ std::pair<NodeId, NodeId> addInsertChain(const project::Insert& insert, bool mas
     NodeId entry{kNone};
     NodeId previous{kNone};
     for (const project::Slot* slot : slots) {
-        const NodeId id = graph.add(nodes.slot(*slot), label);
+        const NodeId id = graph.add(nodes.slot(*slot, resources), label);
         if (slot->sidechain.valid()) {
             keyed.emplace_back(id, slot->sidechain);
         }
@@ -494,8 +498,8 @@ GraphBuild buildGraph(const project::Project& project, NodeStore& nodes) {
 
     const auto addChannel = [&](std::size_t ordinal) {
         const project::Channel& channel = project.channels[ordinal];
-        const NodeId id =
-            graph.add(nodes.channel(channel, project.resources), "channel." + channel.name);
+        const NodeId id = graph.add(nodes.channel(channel, project.resources, &project),
+                                    "channel." + channel.name);
         GraphNode& node = *graph.find(id);
         node.eventTrack = static_cast<std::uint32_t>(ordinal);
         const std::uint32_t owner = channel.id.value;
@@ -525,8 +529,8 @@ GraphBuild buildGraph(const project::Project& project, NodeStore& nodes) {
         for (const std::size_t ordinal : channelsByInsert[insert.id.value]) {
             pendingOutputs.emplace_back(addChannel(ordinal), insert.id);
         }
-        const auto [entry, fader] =
-            addInsertChain(insert, insert.id == project.mixer.master, graph, layout, nodes, keyed);
+        const auto [entry, fader] = addInsertChain(insert, insert.id == project.mixer.master, graph,
+                                                   layout, nodes, keyed, project.resources);
         entries[insert.id.value] = entry;
         faders[insert.id.value] = fader;
         for (const project::Send& send : insert.sends) {

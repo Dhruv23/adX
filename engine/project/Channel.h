@@ -41,12 +41,17 @@ struct ParamValue {
 };
 
 struct InstrumentSpec {
-    /// Opaque to Phase 2. `additive`, `sampler`, `va`, `drumsynth`, `granular` are
-    /// what Phase 4 will define; anything else round-trips untouched.
+    /// A TypeCatalog instrument name; anything else round-trips untouched and plays
+    /// as silence.
     std::string type{"additive"};
     std::vector<ParamValue> params;
-    /// A sampler's key/velocity map (phase_4.md §4.5). Empty for every other type.
+    /// The key/velocity map of an instrument that plays pool samples - sampler,
+    /// slicer, pool, granular - or a wavetable's file (phase_4.md §4.5, §4.6, §4.8).
     std::vector<SampleZone> zones;
+    /// The Voice instrument's UTAU voicebank (phase_4.md §4.13): a folder, relative to
+    /// the project like a sample. Only a path - a project never carries a bank, whose
+    /// licence usually forbids redistributing it. Empty for every other type.
+    std::string voicebank;
 
     [[nodiscard]] const ParamValue* find(std::string_view name) const noexcept;
     [[nodiscard]] ParamValue* find(std::string_view name) noexcept;

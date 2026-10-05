@@ -82,8 +82,10 @@ void Effect::process(graph::ProcessContext& context) noexcept {
     // lookahead line that stopped at the moment of bypass would, on un-bypass, play the
     // audio it held from then, and then jump to the present as that drained: a click
     // whatever the crossfade (effect_bypass_is_click_free found it on the Limiter). So a
-    // latent effect keeps running while bypassed, its output discarded.
-    const bool silentWet = m_bypass >= 1.0F && bypassTarget >= 1.0F && m_latency == 0;
+    // latent effect keeps running while bypassed, its output discarded - and so does one
+    // whose output is built from the last few milliseconds of input (runsWhileBypassed).
+    const bool silentWet =
+        m_bypass >= 1.0F && bypassTarget >= 1.0F && m_latency == 0 && !runsWhileBypassed();
     const MixLaw law = mixLaw();
 
     if (!silentWet) {

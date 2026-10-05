@@ -53,4 +53,49 @@ inline constexpr auto kSamplerParams = std::to_array<project::ParamDescriptor>({
 
 static_assert(kSamplerParams.size() == static_cast<std::size_t>(SamplerParam::Count));
 
+/// Where a table built on the Sampler's carries `choke` and `fixedPitch`: right after
+/// the Sampler's own parameters. The Sampler's table stops before them, so a Sampler
+/// reads both as 0: it never chokes, and the key sets the pitch.
+inline constexpr std::uint32_t kSamplerChokeIndex = static_cast<std::uint32_t>(SamplerParam::Count);
+inline constexpr std::uint32_t kSamplerFixedPitchIndex = kSamplerChokeIndex + 1;
+
+namespace detail {
+/// The Sampler's table with other defaults and a `choke` row: the Slicer's and the
+/// sample-pool channel's (phase_4.md §4.6; both are the Sampler under another name).
+constexpr auto samplerVariant(float attack, float release, float oneShot, float choke,
+                              float fixedPitch) {
+    std::array<project::ParamDescriptor, kSamplerParams.size() + 2> table{};
+    for (std::size_t i = 0; i < kSamplerParams.size(); ++i) {
+        table[i] = kSamplerParams[i];
+    }
+    table[static_cast<std::size_t>(SamplerParam::EnvAttack)].defaultValue = attack;
+    table[static_cast<std::size_t>(SamplerParam::EnvRelease)].defaultValue = release;
+    table[static_cast<std::size_t>(SamplerParam::OneShot)].defaultValue = oneShot;
+    // A new note fades out the voices already sounding: one pad at a time.
+    table[kSamplerChokeIndex] = project::ParamDescriptor{.name = "choke",
+                                                         .minimum = 0.0F,
+                                                         .maximum = 1.0F,
+                                                         .defaultValue = choke,
+                                                         .unit = project::Unit::Boolean,
+                                                         .scale = project::ScaleKind::Stepped,
+                                                         .rate = project::RateClass::Block,
+                                                         .curve = project::CurvePart::None};
+    // 1: every key plays the sample at its recorded pitch, whatever the zone's root.
+    table[kSamplerFixedPitchIndex] = project::ParamDescriptor{.name = "fixedPitch",
+                                                              .minimum = 0.0F,
+                                                              .maximum = 1.0F,
+                                                              .defaultValue = fixedPitch,
+                                                              .unit = project::Unit::Boolean,
+                                                              .scale = project::ScaleKind::Stepped,
+                                                              .rate = project::RateClass::Block,
+                                                              .curve = project::CurvePart::None};
+    return table;
+}
+} // namespace detail
+
+/// The Slicer: slices play to their end and choke one another, as a chopped loop does.
+inline constexpr auto kSlicerParams = detail::samplerVariant(0.0F, 0.005F, 1.0F, 1.0F, 0.0F);
+/// The sample-pool channel: plain one-shots at their recorded pitch, which overlap.
+inline constexpr auto kPoolParams = detail::samplerVariant(0.0F, 0.005F, 1.0F, 0.0F, 1.0F);
+
 } // namespace adx::instruments

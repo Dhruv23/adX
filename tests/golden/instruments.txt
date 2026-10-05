@@ -3,9 +3,16 @@
 # signal. 48 kHz, 64-frame blocks, FNV-1a 128 over interleaved floats.
 # Regenerate with ADX_UPDATE_GOLDEN=1, and only on purpose.
 instrument/additive de77ea7baa7133c3c50ab299cec0415d
+instrument/drumsynth 59b03538510256859554712137b53a8d
+instrument/fm a7b2179c6be4ff54eb9e9275f457a84d
+instrument/granular e19229e7901fb74c74df1572fe0e01b7
+instrument/pool 4c9028340fe310e3d1d75d7984f46769
 instrument/sampler 56b732f014083cf37b99c13585d11449
+instrument/slicer cb444e04a5455f5e8d884fab2feb6e3d
 instrument/testtone b37fe25846b9c3e1366576dab912cb55
 instrument/va 6b433b6daf2adcfb64bbb52e5d12497d
+instrument/voice 291de927a4bb878ddf07c126bb3ab72d
+instrument/wavetable 758a4724fe8bf59811ebf9042b1a7801
 preset/c418/Giant_Piano aa9bae3f16e05ecd716804d7f1bb142d
 preset/c418/Kalimba 87413cd1250a7c8dd748eb03b59b1911
 preset/c418/Marimba 75f023d2c9ca3a9748b0f6dec812f8f9
@@ -13,5 +20,6 @@ preset/c418/Pizzicato 7bc2947a1743f3910716b067130831f9
 preset/c418/Warm_Pad 3cd6493d19f045801629172054a8c0c5
 preset/stakillaz/808_Sub 790c4e7f59f908a354ea518ffdf079e5
 preset/stakillaz/Hardstyle_Kick 30c61410baf15daa36e40d2cd6d280ed
+preset/stakillaz/Hardstyle_Kick_DS d6b00cc5e21a20a1cd4d8d65814e32a9
 preset/stakillaz/Phonk_Bass 592833dfd2e4411bd479f9b7e4e3c345
 preset/stakillaz/Screech_Lead 5e281f2ac041381548bf105785fbb54d

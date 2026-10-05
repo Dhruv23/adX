@@ -767,18 +767,21 @@ hash within one CI run.
 
 ## 7. Definition of done
 
-- [ ] Every §5.3 instrument and every §5.4 effect exists, is tested, and has a
+- [x] Every §5.3 instrument and every §5.4 effect exists, is tested, and has a
       golden hash.
 - [ ] `suffocation_spectral_match` passes **and** a human A/B has been done and
       recorded.
-- [ ] `instrument_no_alloc_in_process` passes for all twelve instruments.
-- [ ] `effect_declares_latency` passes for every effect with lookahead, and
+      *(2026-10-04: the match passes - 31/31 bands within 1.45 dB - and the A/B files
+      are rendered and level-matched in `build/ab_listen/`; the listening is the user's,
+      and so is this box. The Voice demo, §4.13's second human gate, is beside them.)*
+- [x] `instrument_no_alloc_in_process` passes for all twelve instruments.
+- [x] `effect_declares_latency` passes for every effect with lookahead, and
       `pdc_compensates_limiter` confirms PDC handles it.
-- [ ] Every DSP primitive in `engine/dsp/` has a numerical test (FINAL_PLAN §9).
-- [ ] LUFS metering validated against EBU TECH 3341.
-- [ ] C418 and STAKILLAZ preset packs ship and load clean.
-- [ ] `adx info suffocation.adx` reports the real instruments, not test tones.
-- [ ] FINAL_PLAN.md §10 Phase 4 row updated.
+- [x] Every DSP primitive in `engine/dsp/` has a numerical test (FINAL_PLAN §9).
+- [x] LUFS metering validated against EBU TECH 3341.
+- [x] C418 and STAKILLAZ preset packs ship and load clean.
+- [x] `adx info suffocation.adx` reports the real instruments, not test tones.
+- [x] FINAL_PLAN.md §10 Phase 4 row updated.
 
 ---
 
@@ -959,3 +962,114 @@ change can reach, notes-only pushes run nothing, Debug skips `[.slow]`, and the 
 became a per-phase full check (`full-check.yml`, on a `phase-N` tag). STATE.md "When
 you finish a phase" has the procedure. P3-8's 1 % CI deadline slack applies to every
 build.
+
+### Tranche B
+
+**Zones are shared, not the Sampler's.** `ZoneSet` (sampler/ZoneSet.h) holds the resolved
+zones and their pins; Sampler, Slicer, the sample-pool channel and Granular all derive
+from it, and the factory configures any `ZoneSet` the same way. Zones gained `end=`
+(docs §7.2), which is what a slice is.
+
+**Slicer and sample-pool channel are the Sampler under another name**, as §4.6 asks
+("a front end over the Sampler, not a second playback engine"). They differ only in
+their parameter tables (`samplerVariant`): one-shot by default, plus `choke` (a new note
+fades the sounding ones over 2 ms) and `fixedPitch` (the pool plays every sample at its
+recorded pitch on any key). A slice ending mid-waveform fades over 2 ms. The Slicer's own
+code is main-thread: `evenSlices`, `slicesAt` (Phase 10's onset detector plugs in here)
+and `slicePattern`, which lays slices out in *beats* of the source loop - so a tempo
+change respaces them and re-slices and re-pitches nothing (`slicer_tempo_change`, through
+the whole engine at 120 and 150 BPM).
+
+**The archived hardstyle kick generator was a placement routine, not a sound.**
+`GenerateHardstyleKicks` (SampleBrowser.cpp, not main.cpp as §5 says) put a kick sample
+every half beat over the melody, pitch-shifted by RubberBand to the root of the covering
+note, wrapped into -5..+6. It is absorbed as both halves: `hardstyleKickNotes()` ports
+the placement as a pure function, and the sound is a preset lineage of the DrumSynth
+kick (`hardstyleKickParams()`, shipped as `stakillaz/hardstyle-kick-ds.adxpreset`) whose
+key tracking makes a note's pitch the shift.
+
+**DrumSynth** latches its parameters at the hit, as a drum machine does; only `level`
+is per frame. Model 5 is a General MIDI kit. **Granular** keeps a 32-grain pool per
+voice (polyphony x 32, 256 at the default 8) rather than one 256-grain node pool: voices
+render independently, and a shared pool would mean a scan of every grain per voice per
+frame. A sample source falls back to a built-in sine or saw when the channel has no
+zone. **FM**'s 32 algorithms are the DX7's, written as edge strings ("21 65 54 43");
+`fm_algorithms_are_the_dx7s` checks the carrier counts and that modulation always runs
+from a higher operator to a lower one; carriers sum at 1/sqrt(n). **Wavetable** ships
+four built-in tables (classic, pulse width, harmonic sweep, vowel formants) and imports a
+channel's `.wav` (its first zone) on the main thread when the node is built - tables are
+small. The spectral morph is a second table with three spectrally interpolated frames
+between each pair (magnitudes in dB, phase by normalised lerp: `std::arg` and `std::polar`
+are library transcendentals the `dsp-math` gate rightly refuses).
+
+### Tranche C
+
+**Files group by technique, not one per effect**: `Modulation.*` (Flanger, Phaser,
+Tremolo, RingMod, FrequencyShifter, StereoImager), `Drive.*` (Saturation, Overdrive),
+`Multiband.*` (MultibandComp, TransientShaper), `Spectral.*` (PitchShifter,
+SpectralFreeze), `Vocal.*` (Vocoder, FormantFilter), `GrossBeat.*`, `Convolution.*`.
+`Params.h` holds the table-row helpers. `dsp/Oversampler` (4x, two Kaiser half-band
+stages, 40 samples of latency by choice of tap counts) and `dsp::atan2Turns` are new
+primitives, each with a numerical test.
+
+**Found by the tests:** the Flanger read its line before writing it (a 1 ms delay was
+49 samples); the FrequencyShifter's sideband sign shifted down; the STFT effects' latency
+is one frame (N), not N - hop as first declared (`effect_declares_latency_fixed`
+measured it); and un-bypassing the Flanger or Vocoder clicked, because the base stops a
+latency-free effect's wet path while bypassed and their short histories went stale.
+`Effect::runsWhileBypassed()` now keeps such an effect running, as a latent one already
+was. Block-rate parameters are read on the control grid in every new effect, never at a
+call's first frame.
+
+**Convolution** needs a file, so a slot gained `ir="file.wav"` (docs §7.5), resolved and
+pooled like a zone; `effects::makeEffect` and `configMatches` now take the project's
+resources. Without a file it plays a synthetic room built from `size` and `damping`, which
+are structure like a lookahead. **PitchShifter** is the phase vocoder only: RubberBand is
+not a dependency of this tree yet (it arrives with Phase 8's offline stretch), so the
+"RubberBand realtime mode" half of §4.9 is open (P4-9). **Vocoder**'s built-in saw has a
+`carrierPitch` parameter rather than tracking MIDI: an effect sees no notes. Its filter bank
+is IIR and declares no latency. **Overdrive**'s pre-emphasis and tone filters run at the
+base rate either side of the oversampler (equivalent for linear filters); hard mode adds
+first-order ADAA and measures -93 dBc of aliasing at 1 kHz, 12 dB drive. **Saturation**
+oversamples 4x always; there is no oversampling knob, so its latency is fixed. **GrossBeat**
+has seven time patterns and four gate patterns rather than drawable curves (the curve
+editor is Phase 6's), and reads position in fractional beats from the tempo map, not from
+integer ticks, which would step the delay.
+
+### Tranche D
+
+**Voice renders from the project, not from lyric events.** The node needs every note's
+render before its note-on, so the factory hands it the project (`InstrumentContext::project`)
+and `VoiceSetup` walks the channel's note clips on the main thread: resolve each lyric
+against the previous note (VCV after a joined vowel, `- x` after a rest), take its length
+at the tempo where its pattern is first placed, cut it where the next note's overlap ends,
+and ask `VoiceRenderCache` (two worker threads, content-addressed) for it. The A0 Lyric
+events still compile; nothing reads them. One pattern placed twice plays one render, so
+the previous-note context is the previous note *in the pattern*.
+
+**Consonants start before the beat through PDC.** A Voice node declares 0.4 s of latency
+(`kVoicePrerollSeconds`) and starts each clip `preroll - preutterance` after its note-on;
+PDC delays everything else to match, so after compensation the vowel lands on the beat
+(checked on the Teto demo: every note within a few cents, on the beat). The cost: any
+project with a Voice channel plays 0.4 s late in realtime (P4-6).
+
+**WORLD** is fetched at a pinned commit (no recent release tags) and built as its own
+library. F0 comes from the bank's `.frq` when it parses, else Harvest; analyses are cached
+per WAV in memory only - no `.adxfrq` on disk yet (P4-7). Renders are at 48 kHz; the node
+reads them linearly at other rates. Pitch follows the note, its slide/curve and the
+channel's vibrato; the recording's own micro-prosody is not carried over.
+
+**Shift-JIS** is a generated cp932 table (`tools/gen_sjis_table.py`), not an OS call.
+`VOICEBANK="folder"` is a new channel key (docs §7.2). The synthetic bank is generated by a
+C++ fixture at test time (`VoicebankFixture.cpp`) rather than committed WAVs, mirroring
+Teto's quirks. `tests/local/teto/` runs four of §4.13's five local tests (the fifth,
+offline-equals-realtime, is covered on the synthetic bank by `voice_offline_equals_realtime`);
+all four pass against the real bank: 319/887/39 lines, no warnings, the VCV phrase, `.frq`
+within 30 cents of Harvest, and the pitch sweep within 10 cents at D#4 +-12 semitones. The
+demo score is `examples/teto_demo.adx`, outside `docs/examples/`, because the golden corpus
+renders that folder and this file sounds only where the bank is.
+
+**Not done from §4.13:** baked-parameter automation evaluated per WORLD frame (baked
+parameters are read from the channel; P4-8), the external resampler adapter (off by
+default in the plan), UST/USTX import (Phase 9's import path), and the first-load
+licence dialog and export reminder (Phase 6's UI). The render cache never evicts.

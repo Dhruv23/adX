@@ -1,0 +1,22 @@
+# The DrumSynth half of the Hardstyle Kick lineage (phase_4.md §4.7): the archive's
+# generator placed a kick sample every half beat, pitch-shifted to the melody's root.
+# Here the kick is synthesised - a three-octave drop for the "tok", a sine sub, drive -
+# and key tracking makes a note's pitch the shift. engine/instruments/drumsynth/
+# HardstyleKick.cpp holds the same values and the placement rule.
+[PRESET]
+NAME="Hardstyle Kick DS"
+TYPE=drumsynth
+PACK=stakillaz
+TAGS=kick, drum, hardstyle, distorted, synthesised
+
+[PARAMS]
+model=0
+keyTrack=1
+tune=-12
+decay=0.55
+click=0.8
+tone=0.7
+pitchDrop=36
+pitchTime=0.015
+drive=12
+sub=0.9

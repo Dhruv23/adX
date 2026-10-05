@@ -150,3 +150,34 @@ target_include_directories(adx_miniaudio SYSTEM PUBLIC "${miniaudio_SOURCE_DIR}"
 target_compile_definitions(adx_miniaudio PUBLIC
     MA_NO_DEVICE_IO MA_NO_ENGINE MA_NO_NODE_GRAPH MA_NO_RESOURCE_MANAGER MA_NO_GENERATION)
 set_target_properties(adx_miniaudio PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# WORLD (modified BSD), the vocoder behind UTAU's tn_fnds and moresampler: F0 (Harvest,
+# DIO), spectral envelope (CheapTrick), aperiodicity (D4C) and resynthesis, for the
+# Voice instrument's resampler (phase_4.md §4.13, FINAL_PLAN §8). Pinned to a commit:
+# the project has no release tags past 0.2.x. Like miniaudio it is compiled as its own
+# library with the compiler's default warnings, and its own CMake project (examples,
+# tools) is not configured.
+FetchContent_Declare(world
+    GIT_REPOSITORY https://github.com/mmorise/World.git
+    GIT_TAG d625e7608ca23a870018f01e7c562ac683d9847f
+    SOURCE_SUBDIR adx-do-not-configure
+)
+FetchContent_MakeAvailable(world)
+add_library(adx_world STATIC
+    "${world_SOURCE_DIR}/src/cheaptrick.cpp"
+    "${world_SOURCE_DIR}/src/common.cpp"
+    "${world_SOURCE_DIR}/src/d4c.cpp"
+    "${world_SOURCE_DIR}/src/dio.cpp"
+    "${world_SOURCE_DIR}/src/fft.cpp"
+    "${world_SOURCE_DIR}/src/harvest.cpp"
+    "${world_SOURCE_DIR}/src/matlabfunctions.cpp"
+    "${world_SOURCE_DIR}/src/stonemask.cpp"
+    "${world_SOURCE_DIR}/src/synthesis.cpp"
+)
+target_include_directories(adx_world SYSTEM PUBLIC "${world_SOURCE_DIR}/src")
+set_target_properties(adx_world PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(MSVC)
+    target_compile_options(adx_world PRIVATE /W0)
+else()
+    target_compile_options(adx_world PRIVATE -w)
+endif()

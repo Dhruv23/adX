@@ -108,7 +108,8 @@ public:
     }
 
     [[nodiscard]] std::shared_ptr<Node> channel(const project::Channel& channel,
-                                                const project::Resources& resources);
+                                                const project::Resources& resources,
+                                                const project::Project* project = nullptr);
 
     /// The pool instruments take their samples from. Null (the default) is
     /// SamplePool::global(); a test may give a private one.
@@ -120,7 +121,8 @@ public:
     }
     [[nodiscard]] std::shared_ptr<Node> fader(core::InsertId id);
     [[nodiscard]] std::shared_ptr<Node> meter(core::InsertId id, bool master);
-    [[nodiscard]] std::shared_ptr<Node> slot(const project::Slot& slot);
+    [[nodiscard]] std::shared_ptr<Node> slot(const project::Slot& slot,
+                                             const project::Resources& resources);
     [[nodiscard]] std::shared_ptr<Node> send(core::SendId id);
 
     /// The meter for an insert, for the UI. Null when there is none.

@@ -10,6 +10,7 @@
 
 #include "engine/audio/OfflineBackend.h"
 #include "engine/format/audio/SamplePool.h"
+#include "engine/instruments/voice/VoiceRenderCache.h"
 #include "engine/project/Project.h"
 #include "engine/render/RenderEngine.h"
 #include "engine/rt/Violation.h"
@@ -64,6 +65,7 @@ std::vector<float> renderOffline(const project::Project& project,
     // project would export differently depending on the decoder's speed. So it waits
     // (phase_4.md §4.11, and §4.13's "export waits for the cache").
     format::SamplePool::global().waitAll();
+    instruments::VoiceRenderCache::global().waitAll();
     // An export plays straight through: the project's loop is a playback aid, not
     // part of the render. Stated explicitly so the render does not depend on whatever
     // the transport defaults to.

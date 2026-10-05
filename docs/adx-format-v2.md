@@ -363,6 +363,7 @@ labelling it v1 would send the next load through the v1 shim.
 | Key | Type | Default |
 |---|---|---|
 | `INSTRUMENT` | ident | `additive` |
+| `VOICEBANK` | string: a folder, resolved like a sample path | none; `voice` channels only |
 | `OUTPUT` | reference | `master` |
 | `POLYPHONY` | integer 1..256 | `16` |
 | `STEAL` | `oldest-released` \| `oldest` \| `quietest` \| `none` | `oldest-released` |
@@ -389,6 +390,7 @@ zone-kv     = "key" , "=" , key-range          (* default 0..127 *)
             | "root" , "=" , key               (* default 60; always written *)
             | "vel" , "=" , key-range          (* default 1..127 *)
             | "start" , "=" , integer          (* frames into the sample *)
+            | "end" , "=" , integer            (* exclusive; 0 = end of sample *)
             | "loop" , "=" , loop-mode         (* default off *)
             | "loopStart" , "=" , integer
             | "loopEnd" , "=" , integer        (* exclusive; 0 = end of sample *)
@@ -524,6 +526,7 @@ insert-kv   = "name" "=" string | "gain" "=" number | "pan" "=" number
 
 slot-line   = "SLOT" , hspace , integer , hspace , ident , { hspace , slot-kv } ;
 slot-kv     = "mix" "=" number | "bypass" "=" boolean | "sidechain" "=" reference
+            | "ir" "=" string                    (* a Convolution's impulse response *)
             | ident , "=" , number ;
 
 send-line   = "SEND" , hspace , integer , hspace , reference , { hspace , send-kv } ;
@@ -545,6 +548,11 @@ per insert, because a parameter path names them directly
 for one id, not two. They are written out so a path keeps meaning the same slot or
 send after a deletion elsewhere. Effect type names are opaque to Phase 2; Phase 4
 owns them. `mix=` is the slot's own wet/dry, never one of its named parameters.
+
+`ir="hall.wav"` names the file a Convolution slot convolves with, resolved like a
+`ZONE` path and sharing its pool entry; it is structure, so a different file makes a
+new effect node. Without one, a Convolution builds a synthetic room from its `size`
+and `damping`.
 
 `sidechain=insert.N` keys the slot from another insert's output - a ducker or
 compressor listening to the kick (phase_4.md §4.9). It is an edge in the routing

@@ -3,11 +3,18 @@
 
 #include <algorithm>
 
+#include "engine/effects/ConvolutionSetup.h"
 #include "engine/effects/Delay.h"
+#include "engine/effects/Drive.h"
 #include "engine/effects/Dynamics.h"
 #include "engine/effects/Effect.h"
+#include "engine/effects/GrossBeat.h"
+#include "engine/effects/Modulation.h"
+#include "engine/effects/Multiband.h"
 #include "engine/effects/ParametricEq.h"
 #include "engine/effects/Ported.h"
+#include "engine/effects/Spectral.h"
+#include "engine/effects/Vocal.h"
 #include "engine/project/TypeCatalog.h"
 
 namespace adx::effects {
@@ -62,10 +69,69 @@ std::shared_ptr<graph::SlotNode> makeEffect(std::string_view type) {
     if (type == "ParametricEq") {
         return std::make_shared<ParametricEq>();
     }
+    if (type == "Flanger") {
+        return std::make_shared<Flanger>();
+    }
+    if (type == "Phaser") {
+        return std::make_shared<Phaser>();
+    }
+    if (type == "Tremolo") {
+        return std::make_shared<Tremolo>();
+    }
+    if (type == "RingMod") {
+        return std::make_shared<RingMod>();
+    }
+    if (type == "FrequencyShifter") {
+        return std::make_shared<FrequencyShifter>();
+    }
+    if (type == "StereoImager") {
+        return std::make_shared<StereoImager>();
+    }
+    if (type == "Saturation") {
+        return std::make_shared<Saturation>();
+    }
+    if (type == "Overdrive") {
+        return std::make_shared<Overdrive>();
+    }
+    if (type == "MultibandComp") {
+        return std::make_shared<MultibandComp>();
+    }
+    if (type == "TransientShaper") {
+        return std::make_shared<TransientShaper>();
+    }
+    if (type == "PitchShifter") {
+        return std::make_shared<PitchShifter>();
+    }
+    if (type == "SpectralFreeze") {
+        return std::make_shared<SpectralFreeze>();
+    }
+    if (type == "Vocoder") {
+        return std::make_shared<Vocoder>();
+    }
+    if (type == "FormantFilter") {
+        return std::make_shared<FormantFilter>();
+    }
+    if (type == "GrossBeat") {
+        return std::make_shared<GrossBeat>();
+    }
+    if (type == "Convolution") {
+        // A bare Convolution plays its default synthetic room.
+        auto node = std::make_shared<Convolution>();
+        project::Slot slot;
+        slot.type = "Convolution";
+        configureConvolution(*node, slot, nullptr);
+        return node;
+    }
     return std::make_shared<graph::SlotNode>();
 }
 
-std::shared_ptr<graph::SlotNode> makeEffect(const project::Slot& slot) {
+std::shared_ptr<graph::SlotNode> makeEffect(const project::Slot& slot,
+                                            const project::Resources* resources) {
+    if (slot.type == "Convolution") {
+        auto node = std::make_shared<Convolution>();
+        configureConvolution(*node, slot, resources);
+        return node;
+    }
     std::shared_ptr<graph::SlotNode> node = makeEffect(slot.type);
     if (auto* lookahead = dynamic_cast<LookaheadEffect*>(node.get())) {
         lookahead->setLookaheadMs(lookaheadOf(slot));
@@ -73,12 +139,16 @@ std::shared_ptr<graph::SlotNode> makeEffect(const project::Slot& slot) {
     return node;
 }
 
-bool configMatches(const graph::SlotNode& node, const project::Slot& slot) noexcept {
+bool configMatches(const graph::SlotNode& node, const project::Slot& slot,
+                   const project::Resources* resources) {
     if (node.typeName() != canonicalType(slot.type)) {
         return false;
     }
     if (const auto* lookahead = dynamic_cast<const LookaheadEffect*>(&node)) {
         return lookahead->lookaheadMs() == lookaheadOf(slot);
+    }
+    if (const auto* convolution = dynamic_cast<const Convolution*>(&node)) {
+        return convolutionMatches(*convolution, slot, resources);
     }
     return true;
 }

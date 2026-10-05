@@ -7,6 +7,7 @@ target_sources(adx_engine_static PRIVATE
     Interpolate.cpp
     LadderFilter.cpp
     Oscillator.cpp
+    Oversampler.cpp
     RbjFilter.cpp
     Resample.cpp
     SvFilter.cpp

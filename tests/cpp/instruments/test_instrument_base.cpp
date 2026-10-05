@@ -54,12 +54,14 @@ TEST_CASE("instrument_voice_lifecycle", "[instruments]") {
     for (const std::string& type : allInstrumentTypes()) {
         INFO(type);
         // One note: it sounds, it releases on note-off, and its voice is freed once the
-        // release has run, after which the output is exactly zero.
+        // release has run, after which the output is exactly zero. An instrument that
+        // declares latency (the Voice's preroll) sounds that much later.
         {
             const auto node = preparedInstrument(type);
+            const std::size_t latency = node->latencySamples();
             const InstrumentRun run = runInstrument(*node, {noteOn(0, 1, 69), noteOff(9600, 1, 69)},
                                                     48000 * 3, instrumentParams(type));
-            CHECK(peak(run, 0, 9600) > 0.01F);
+            CHECK(peak(run, latency, latency + 9600) > 0.01F);
             CHECK(run.sounding.front() == 1);
             CHECK(run.sounding.back() == 0);
             CHECK(silent(run, (std::size_t{48000} * 3) - 4800, std::size_t{48000} * 3));
@@ -68,13 +70,14 @@ TEST_CASE("instrument_voice_lifecycle", "[instruments]") {
         // than two voices, and the third note still plays (by stealing).
         {
             const auto node = preparedInstrument(type, 2);
+            const std::size_t latency = node->latencySamples();
             const InstrumentRun run =
                 runInstrument(*node,
                               {noteOn(0, 1, 60), noteOn(480, 2, 64), noteOn(960, 3, 67),
                                noteOff(24000, 1, 60), noteOff(24000, 2, 64), noteOff(24000, 3, 67)},
                               48000 * 3, instrumentParams(type));
             CHECK(*std::ranges::max_element(run.sounding) <= 2);
-            CHECK(peak(run, 4800, 24000) > 0.01F);
+            CHECK(peak(run, latency + 4800, latency + 24000) > 0.01F);
             CHECK(run.sounding.back() == 0);
         }
         // A note-off for a note that is not playing changes nothing.

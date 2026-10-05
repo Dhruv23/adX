@@ -9,20 +9,26 @@
 #include "engine/graph/nodes/SlotNode.h"
 #include "engine/project/Mixer.h"
 
+namespace adx::project {
+struct Resources;
+}
+
 namespace adx::effects {
 
-/// A new, unprepared node for `slot`'s type, configured from its structural
-/// parameters (a lookahead, which fixes the node's latency). An unknown type is the
-/// identity slot: it keeps its place, its mix and its parameters, and passes audio
-/// through untouched.
-[[nodiscard]] std::shared_ptr<graph::SlotNode> makeEffect(const project::Slot& slot);
+/// A new, unprepared node for `slot`'s type, configured from its structure (a
+/// lookahead, which fixes the node's latency; a Convolution's IR, a file resolved
+/// against `resources`). An unknown type is the identity slot: it keeps its place, its
+/// mix and its parameters, and passes audio through untouched.
+[[nodiscard]] std::shared_ptr<graph::SlotNode>
+makeEffect(const project::Slot& slot, const project::Resources* resources = nullptr);
 
 /// The same for a bare type with default configuration.
 [[nodiscard]] std::shared_ptr<graph::SlotNode> makeEffect(std::string_view type);
 
-/// True when `node` was configured as `slot` asks - same type, same lookahead - so a
-/// rebuild may keep it.
-[[nodiscard]] bool configMatches(const graph::SlotNode& node, const project::Slot& slot) noexcept;
+/// True when `node` was configured as `slot` asks - same type, same lookahead, same
+/// IR - so a rebuild may keep it.
+[[nodiscard]] bool configMatches(const graph::SlotNode& node, const project::Slot& slot,
+                                 const project::Resources* resources = nullptr);
 
 /// A fresh instance of `effect`'s type and configuration, with pristine DSP state and
 /// unprepared: what an offline render processes so that it never touches the instance

@@ -164,6 +164,10 @@ def _run_parallel(commands: Sequence[Sequence[str]], labels: Sequence[str]) -> i
                 list(command),
                 capture_output=True,
                 text=True,
+                # clang-tidy echoes source lines, and those may be any UTF-8 (the Voice
+                # instrument's kana): the console code page cannot decode them.
+                encoding="utf-8",
+                errors="replace",
                 check=False,
             ): label
             for command, label in zip(commands, labels, strict=True)

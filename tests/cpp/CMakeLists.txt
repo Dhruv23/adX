@@ -14,11 +14,16 @@ adx_add_cpp_test(adx_tests
         dsp/test_loudness.cpp
         effects/EffectHarness.cpp
         effects/test_effect_base.cpp
+        effects/test_tranche_c.cpp
         instruments/InstrumentHarness.cpp
         instruments/test_instrument_base.cpp
         instruments/test_instrument_cost.cpp
         instruments/test_sampler.cpp
+        instruments/test_tranche_b.cpp
         instruments/test_va.cpp
+        instruments/test_voice.cpp
+        instruments/VoicebankFixture.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../local/teto/test_teto.cpp
         preset/test_presets.cpp
         rt/test_alloc_guard.cpp
         rt/test_spsc_ring.cpp

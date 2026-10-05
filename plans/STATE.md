@@ -466,20 +466,50 @@ reference (worst +1.45 dB at 99 Hz); phase_4.md §11 says why the reference is v
 two scheduling bugs fixed. EBU TECH 3341 cases 1-5 within 0.1 LU. CPU per voice, Release:
 Additive 0.084 % of a core per voice, VA 0.23 %, test tone 0.015 % (`adx_tests "[.perf]"`, 16 held voices; the sampler's default one-shot ends early, so its 0.012 % is not a sustained figure). Corrections to the plan: phase_4.md §11.
 
-**Still owed by Phase 4** (Phase 5 does not wait for these):
+**Tranches B, C and D** (2026-10-04, local, not yet committed): every §5.3 instrument
+and §5.4 effect exists, is tested and has a golden hash - 13 instrument types, 27 effect
+types. 281-282 C++ cases green on each of Debug, Release and RelWithDebInfo, golden hashes
+identical in all three; pytest, headers, dsp-math, positions, format-safety, ruff and mypy
+clean. Voice: the four local Teto tests pass against the real bank (`ADX_TETO_DIR`).
+Corrections to the plan: phase_4.md §11, Tranche B/C/D. **clang-tidy still has six
+findings** in FM, Granular and the Voice resampler/voicebank: not done until they are
+fixed and the full check has run (P4-0).
 
-- **Tranche B** · Slicer, DrumSynth + HardstyleKick, Granular, FM, Wavetable,
-  SamplePoolChannel.
-- **Tranche C** · MultibandComp, TransientShaper, Flanger, Phaser, Tremolo,
-  Convolution, Saturation, Vocoder, PitchShifter, FormantFilter, StereoImager,
-  FrequencyShifter, RingMod, GrossBeat, SpectralFreeze. (Ducker landed in A.)
-- **Tranche D** · Voice/UTAU (§4.13), and Overdrive.
-- **Human A/B** · `BLOCKER` for marking Phase 4 done (§7), not for Phase 5. The user
-  listens to `suffocation.adx` against the archived render and records the verdict
-  here. `tools/ab/render.py` and `tools/ab/build_v1.cmd` make both WAVs.
+**Human gates (§7), recorded 2026-10-04 from the user's listening:**
+
+- **`suffocation.adx` A/B · passed on parity.** In the level-matched file that
+  alternates v1 (fixed) and adX every 4 s, the user could not hear where the switches
+  were, and heard no difference in the bass region either. But both sound "nothing like
+  Suffocation - way too loud, super distorted". That is the *file*, not the port: v1's
+  master drive is `tanh((1 + MASTER_DRIVE) x)` and the file sets `MASTER_DRIVE=3.0`, so
+  the master is a 4x tanh; the render's crest factor is about 2 dB (peak -2.7 dBFS, RMS
+  -4.7). Without the master drive it still peaks at the 0.8 limiter ceiling (RMS -11
+  dBFS): the tracks sum hot. The port reproduces v1 faithfully, which is what this gate
+  asks; the mix is opened as P4-10.
+- **Voice (Teto) · passed.** `examples/teto_demo.adx` ("Sakura"): the user can discern
+  the lyrics, and it is not too distorted.
 
 **Open issues for Phase 5:**
 
+- **P4-0** · Tranches B-D are not committed and have not been through CI or the per-phase
+  full check. Six clang-tidy findings to fix first. Fixed when: committed, pushed, CI green
+  and `full-check.yml` green on the `phase-4` tag.
+- **P4-10** · `docs/examples/suffocation.adx` is the wrong recreation: the user's
+  judgement (2026-10-04) is that the file's "stem" - its reconstruction of the Crystal
+  Castles track - does not match the original, which is why neither engine sounds like
+  Suffocation; it is also mixed far too hot (MASTER_DRIVE=3.0, hot track levels). A
+  content fix, not an engine one: the port reproduces v1 faithfully on this file. A new
+  recreation moves its golden hash and the A/B reference bands, and the v1 parity check
+  stays measured against the old file. Fixed when: the user has heard a new recreation
+  and accepted it.
+- **P4-6** · Any project with a Voice channel plays 0.4 s late in realtime (the preroll
+  PDC compensates). Fixed when: Phase 11 decides whether live play accepts it.
+- **P4-7** · WORLD analyses are cached in memory only (no `.adxfrq`); the render cache
+  never evicts.
+- **P4-8** · Baked Voice parameters (gender, breathiness...) are read from the channel;
+  their automation is not evaluated per WORLD frame.
+- **P4-9** · PitchShifter is the phase vocoder only; RubberBand is not a dependency yet
+  (Phase 8 brings it for offline stretch).
 - **P4-1** · `Engine.levels()` is one call for every strip (P3-7 closed), but it copies
   into a fresh array each time. If the 60 Hz timer shows it in a profile, Phase 5
   binds a persistent buffer instead. Fixed when: measured, either way.

@@ -6,9 +6,11 @@
 #include <filesystem>
 #include <numbers>
 #include <span>
+#include <string>
 
 #include "engine/format/audio/SamplePool.h"
 #include "engine/instruments/Factory.h"
+#include "engine/instruments/voice/VoiceInstrument.h"
 #include "engine/project/Channel.h"
 #include "engine/project/Resources.h"
 #include "engine/project/TypeCatalog.h"
@@ -150,14 +152,53 @@ struct DefaultSampler {
     }
 };
 
+/// What a table-driven test plays through a Voice: the same rendered clip - one second
+/// of a 440 Hz sine with a 100 ms lead, as if sung - for every note id up to 64. A
+/// Voice's rendering is its own tests' business (test_voice.cpp); these exercise the
+/// node that plays renders, which without any is silent by design.
+struct DefaultVoice {
+    std::vector<float> samples;
+    instruments::VoiceClip clip;
+
+    DefaultVoice() : samples(48000) {
+        for (std::size_t i = 0; i < samples.size(); ++i) {
+            samples[i] = 0.5F * static_cast<float>(std::sin(2.0 * std::numbers::pi * 440.0 *
+                                                            static_cast<double>(i) / 48000.0));
+        }
+        clip.samples = samples.data();
+        clip.frames = static_cast<std::uint32_t>(samples.size());
+        clip.lead = 4800;
+        clip.ready.store(true);
+    }
+};
+
+void giveVoiceClips(graph::ChannelNode& node) {
+    static const DefaultVoice kVoice;
+    auto* target = dynamic_cast<instruments::VoiceInstrument*>(&node);
+    if (target == nullptr) {
+        return;
+    }
+    rt::OwnedArray<instruments::VoiceNoteRef> notes;
+    notes.allocate(64);
+    for (std::uint32_t n = 0; n < 64; ++n) {
+        notes.view()[n] = instruments::VoiceNoteRef{.noteId = n, .clip = &kVoice.clip};
+    }
+    target->setNotes(std::move(notes), nullptr);
+}
+
 } // namespace
 
 std::shared_ptr<graph::ChannelNode> preparedInstrument(std::string_view type,
                                                        std::uint16_t polyphony) {
     std::shared_ptr<graph::ChannelNode> node;
-    if (type == "sampler") {
+    // The instruments that play pool samples get the same sine across the keyboard.
+    if (type == "sampler" || type == "slicer" || type == "pool") {
         static DefaultSampler sampler;
         project::Channel channel = sampler.channel;
+        channel.instrument.type = std::string(type);
+        if (type == "slicer") {
+            channel.instrument.zones.front().end = 24000; // a half-second slice
+        }
         channel.id = core::ChannelId{1};
         channel.maxPolyphony = polyphony;
         node = instruments::makeInstrument(
@@ -168,6 +209,7 @@ std::shared_ptr<graph::ChannelNode> preparedInstrument(std::string_view type,
         node = instruments::makeInstrument(type, 1, polyphony,
                                            project::VoiceStealMode::OldestReleased);
     }
+    giveVoiceClips(*node);
     node->prepare(graph::PrepareInfo{.sampleRate = 48000, .maxBlockFrames = 2048});
     return node;
 }

@@ -2,3 +2,4 @@
 # which is why this level exists rather than engine/ reaching straight into adx/.
 add_subdirectory(adx)
 add_subdirectory(audio)
+add_subdirectory(text)

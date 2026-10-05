@@ -1,0 +1,59 @@
+# The Phase 4 Voice listening gate (phase_4.md §4.13): "Sakura", a traditional
+# melody, sung by Kasane Teto. Not in docs/examples/: the golden corpus renders those, and
+# this one sounds only where the bank is. Lyrics and notes only - no audio, and no voicebank: it
+# reads the bank from third_party_assets/, which is never committed. Render it with
+#   python tools/ab/render.py examples/teto_demo.adx teto.wav --preset windows-x64-release
+# and listen: it must be intelligible Japanese. One slide (は falls a third), vibrato,
+# a dry voice.
+[PROJECT]
+ADX_VERSION=2
+TITLE="Teto demo"
+TUNING=440
+
+[TEMPO]
+0:0:0 80
+
+[METER]
+0:0:0 4/4
+
+[CHANNEL Teto]
+INSTRUMENT=voice
+VOICEBANK="../third_party_assets/voicebanks/teto"
+OUTPUT=insert.1
+POLYPHONY=4
+VOLUME=1
+PAN=0
+PARAM vibrato.depth=25
+PARAM vibrato.rate=5.5
+PARAM vibrato.delay=0.3
+
+[PATTERN Sakura]
+LENGTH=6:0:0
+NOTES Teto
+  A4 0:0:0 0:1:0 100 lyric="さ"
+  A4 0:1:0 0:1:0 100 lyric="く"
+  B4 0:2:0 0:2:0 100 lyric="ら"
+  A4 1:0:0 0:1:0 100 lyric="さ"
+  A4 1:1:0 0:1:0 100 lyric="く"
+  B4 1:2:0 0:2:0 100 lyric="ら"
+  A4 2:0:0 0:1:0 100 lyric="や"
+  B4 2:1:0 0:1:0 100 lyric="よ"
+  C5 2:2:0 0:1:0 100 lyric="い"
+  B4 2:3:0 0:1:0 100 lyric="の"
+  A4 3:0:0 0:1:0 100 lyric="そ"
+  B4 3:1:0 0:1:0 100 lyric="ら"
+  A4 3:2:0 0:2:0 100 lyric="は" slide=-4st@0:1:0+0:0:1920
+  E4 4:0:0 0:1:0 100 lyric="み"
+  C4 4:1:0 0:1:0 100 lyric="わ"
+  E4 4:2:0 0:1:0 100 lyric="た"
+  F4 4:3:0 0:1:0 100 lyric="す"
+  E4 5:0:0 0:1:0 100 lyric="か"
+  E4 5:1:0 0:1:0 100 lyric="ぎ"
+  C4 5:2:0 0:2:0 100 lyric="り"
+
+[PLAYLIST]
+TRACK 1 name="Voice"
+  PATTERN Sakura 0:0:0
+
+[MIXER]
+INSERT 1 name="Master"

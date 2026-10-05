@@ -8,7 +8,7 @@
 
 #include "engine/dsp/Math.h"
 #include "engine/format/audio/SamplePool.h"
-#include "engine/instruments/sampler/SamplerInstrument.h"
+#include "engine/instruments/sampler/ZoneSet.h"
 #include "engine/project/Resources.h"
 
 namespace adx::instruments {
@@ -24,6 +24,16 @@ struct SamplerPins {
 void destroySamplerPins(SamplerPins* pins) noexcept {
     // NOLINTNEXTLINE(cppcoreguidelines-owning-memory) - the node's opaque owner.
     delete pins;
+}
+
+ZoneSet::~ZoneSet() {
+    destroySamplerPins(m_pins);
+}
+
+void ZoneSet::setZones(rt::OwnedArray<SamplerZone> zones, SamplerPins* pins) noexcept {
+    m_zones = std::move(zones);
+    destroySamplerPins(m_pins);
+    m_pins = pins;
 }
 
 namespace {
@@ -46,7 +56,7 @@ std::vector<std::filesystem::path> resolveFiles(const project::Channel& channel,
 
 } // namespace
 
-void configureSampler(SamplerInstrument& node, const project::Channel& channel,
+void configureSampler(ZoneSet& node, const project::Channel& channel,
                       const project::Resources* resources, format::SamplePool* pool) {
     format::SamplePool& samples = pool != nullptr ? *pool : format::SamplePool::global();
     auto pins = std::make_unique<SamplerPins>();
@@ -75,7 +85,7 @@ void configureSampler(SamplerInstrument& node, const project::Channel& channel,
     node.setZones(std::move(zones), pins.release());
 }
 
-bool samplerMatches(const SamplerInstrument& node, const project::Channel& channel,
+bool samplerMatches(const ZoneSet& node, const project::Channel& channel,
                     const project::Resources* resources, format::SamplePool* pool) {
     const SamplerPins* pins = node.pins();
     if (pins == nullptr) {

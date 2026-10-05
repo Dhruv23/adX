@@ -38,6 +38,10 @@ struct Slot {
     /// (FINAL_PLAN §5.2), so it is part of the routing graph: sorted, delay-compensated
     /// and cycle-checked like a route (phase_3.md §4.4).
     core::InsertId sidechain;
+    /// A file the effect is built from - a Convolution's impulse response - as a pool
+    /// reference (Resources), or invalid for none. Structure, like a lookahead: a
+    /// different file is a different node.
+    core::SampleId impulse;
 
     [[nodiscard]] const SlotParam* find(std::string_view name) const noexcept;
     [[nodiscard]] SlotParam* find(std::string_view name) noexcept;
