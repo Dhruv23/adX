@@ -37,7 +37,9 @@ function(adx_add_cpp_test name)
     # somebody has to remember to ask for is a gate that rots. `ctest -LE slow` is the
     # fast loop, and it is documented in the README.
     add_test(NAME ${name}_slow COMMAND ${name} "[.slow]" --allow-running-no-tests)
-    set_tests_properties(${name}_slow PROPERTIES LABELS slow TIMEOUT 600)
+    # 1800 s: the whole set takes ~890 s in an unoptimised build (2026-10-04, Debug:
+    # render_bit_identical_200x100k alone is 590 s) - over the 600 s this started with.
+    set_tests_properties(${name}_slow PROPERTIES LABELS slow TIMEOUT 1800)
 
     # Skips itself where there is no audio hardware, which is every CI runner.
     add_test(NAME ${name}_device COMMAND ${name} "[.device]" --allow-running-no-tests)

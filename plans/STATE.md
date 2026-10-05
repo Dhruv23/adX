@@ -442,15 +442,15 @@ Fixed in Phase 3, for the record:
 
 ---
 
-## [ ] Phase 4 — Instruments & effects · XL
+## [x] Phase 4 — Instruments & effects · XL
 
 | | |
 |---|---|
 | **Plan** | [phase_4.md](phase_4.md) |
 | **Entry** | Phase 3 §7 complete |
 | **Done when** | [phase_4.md](phase_4.md) §7 |
-| **Status** | In progress (2026-10-01). **Tranche A0 and Tranche A done 2026-10-03: Phase 5 may start.** Tranches B, C and D remain (below) |
-| **Completed** | — |
+| **Status** | Done (2026-10-04). Every §7 box observed; both human gates passed (below); CI green on all three jobs: run 37269752424 at `3abcaa5`. Full check on the `phase-4` tag: see P4-0 |
+| **Completed** | 2026-10-04 |
 
 > Three tranches ([phase_4.md](phase_4.md) §3). Phase 5 may start once
 > **Tranche A** is complete; B and C can run alongside it. If you hand off at
@@ -466,14 +466,21 @@ reference (worst +1.45 dB at 99 Hz); phase_4.md §11 says why the reference is v
 two scheduling bugs fixed. EBU TECH 3341 cases 1-5 within 0.1 LU. CPU per voice, Release:
 Additive 0.084 % of a core per voice, VA 0.23 %, test tone 0.015 % (`adx_tests "[.perf]"`, 16 held voices; the sampler's default one-shot ends early, so its 0.012 % is not a sustained figure). Corrections to the plan: phase_4.md §11.
 
-**Tranches B, C and D** (2026-10-04, local, not yet committed): every §5.3 instrument
-and §5.4 effect exists, is tested and has a golden hash - 13 instrument types, 27 effect
-types. 281-282 C++ cases green on each of Debug, Release and RelWithDebInfo, golden hashes
-identical in all three; pytest, headers, dsp-math, positions, format-safety, ruff and mypy
-clean. Voice: the four local Teto tests pass against the real bank (`ADX_TETO_DIR`).
-Corrections to the plan: phase_4.md §11, Tranche B/C/D. **clang-tidy still has six
-findings** in FM, Granular and the Voice resampler/voicebank: not done until they are
-fixed and the full check has run (P4-0).
+**Tranches B, C and D** (2026-10-04, commit `3abcaa5`): every §5.3 instrument and §5.4
+effect exists, is tested and has a golden hash - 13 instrument types, 27 effect types.
+Observed locally: 282 C++ cases green on each of Debug, Release and RelWithDebInfo (4
+skipped: the Teto tests, without `ADX_TETO_DIR`), golden hashes identical in all three;
+clang-tidy clean over all 196 files on all three compile databases; pytest, headers,
+dsp-math, positions, format-safety, ruff and mypy clean. Phase completion, locally in
+Debug: `ADX_FULL_EVIDENCE=1 ctest --preset windows-x64-debug -L slow` passed in 887.67 s
+(the ctest timeout was 600 s and is now 1800: `render_bit_identical_200x100k` alone takes
+590 s unoptimised). Voice: the four local Teto tests pass against the real bank. CI: run
+37269752424 green on all three jobs. Corrections to the plan: phase_4.md §11, Tranches
+B/C/D. Clang-tidy's run had been hiding findings in four files behind a crash in
+`tools/lint.py`, which decoded clang-tidy's output in the console code page and failed on
+the kana in the Voice sources; fixed (UTF-8). It also caught Slicer.h and
+SamplePoolChannel.h putting `<vector>` within reach of realtime code; their main-thread
+halves moved to SliceLayout.h and PoolZones.h.
 
 **Human gates (§7), recorded 2026-10-04 from the user's listening:**
 
@@ -491,9 +498,10 @@ fixed and the full check has run (P4-0).
 
 **Open issues for Phase 5:**
 
-- **P4-0** · Tranches B-D are not committed and have not been through CI or the per-phase
-  full check. Six clang-tidy findings to fix first. Fixed when: committed, pushed, CI green
-  and `full-check.yml` green on the `phase-4` tag.
+- **P4-0** · `full-check.yml` (clang-tidy over every file, the 10-minute loader fuzz) on
+  the `phase-4` tag was pushed with this commit and had not finished when Phase 4 was
+  marked done. Per-push CI is green (run 37269752424). Fixed when: the full-check run is
+  seen green and its id recorded here. Also closes P2-1.
 - **P4-10** · `docs/examples/suffocation.adx` is the wrong recreation: the user's
   judgement (2026-10-04) is that the file's "stem" - its reconstruction of the Crystal
   Castles track - does not match the original, which is why neither engine sounds like

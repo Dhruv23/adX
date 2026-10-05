@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | In progress (2026-10-01) |
+| **Status** | Done (2026-10-04) |
 | **Governs** | `engine/dsp/`, `engine/instruments/`, `engine/effects/`, `engine/format/audio/` (decode), the preset system |
 | **FINAL_PLAN refs** | §3.1 (synthesis half, effects, SimpleFFT), §5.3 in full, §5.4 in full, §5.2 per-insert processing, §7 Phase 4 |
 | **Entry criteria** | [phase_3.md](phase_3.md) §7 complete |
@@ -769,7 +769,7 @@ hash within one CI run.
 
 - [x] Every §5.3 instrument and every §5.4 effect exists, is tested, and has a
       golden hash.
-- [ ] `suffocation_spectral_match` passes **and** a human A/B has been done and
+- [x] `suffocation_spectral_match` passes **and** a human A/B has been done and
       recorded.
       *(2026-10-04: the match passes - 31/31 bands within 1.45 dB - and the A/B files
       are rendered and level-matched in `build/ab_listen/`; the listening is the user's,
