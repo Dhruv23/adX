@@ -449,7 +449,7 @@ Fixed in Phase 3, for the record:
 | **Plan** | [phase_4.md](phase_4.md) |
 | **Entry** | Phase 3 §7 complete |
 | **Done when** | [phase_4.md](phase_4.md) §7 |
-| **Status** | Done (2026-10-04). Every §7 box observed; both human gates passed (below); CI green on all three jobs: run 37269752424 at `3abcaa5`. Full check on the `phase-4` tag: see P4-0 |
+| **Status** | Done (2026-10-04). Every §7 box observed; both human gates passed (below); CI green on all three jobs: run 37269752424 at `3abcaa5`. Full check green: run 37273504347 on the `phase-4` tag |
 | **Completed** | 2026-10-04 |
 
 > Three tranches ([phase_4.md](phase_4.md) §3). Phase 5 may start once
@@ -498,10 +498,10 @@ halves moved to SliceLayout.h and PoolZones.h.
 
 **Open issues for Phase 5:**
 
-- **P4-0** · `full-check.yml` (clang-tidy over every file, the 10-minute loader fuzz) on
-  the `phase-4` tag was pushed with this commit and had not finished when Phase 4 was
-  marked done. Per-push CI is green (run 37269752424). Fixed when: the full-check run is
-  seen green and its id recorded here. Also closes P2-1.
+- **P4-0** · **Closed 2026-10-05** · Full check run 37273504347 on the `phase-4` tag
+  (`f89ce07`) green: clang-tidy over every file in Debug and Release, and the 10-minute
+  loader fuzz. Per-push CI green on `3abcaa5` (run 37269752424) and `f89ce07` (run
+  37273504332). This is the first full-check run seen green, which also closes **P2-1**.
 - **P4-10** · `docs/examples/suffocation.adx` is the wrong recreation: the user's
   judgement (2026-10-04) is that the file's "stem" - its reconstruction of the Crystal
   Castles track - does not match the original, which is why neither engine sounds like
