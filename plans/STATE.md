@@ -609,7 +609,7 @@ Inherited issues: **P4-1** fixed (`Engine.frame()` fills a caller-owned array);
 - **P5-0** · **Closed 2026-10-06** · Per-push CI green: run 37509766570 at `6338bda`,
   all three jobs (it fetches the Qt SDK, builds the plugin and runs the rules gate).
   Full check green: run 37512932612 on the `phase-5` tag (`4765ca3`) - clang-tidy over
-    every file in Debug and Release, and the 10-minute loader fuzz. The first push
+  every file in Debug and Release, and the 10-minute loader fuzz. The first push
   (`406f1e9`, run 37502991839) was red on all three jobs: `ruff` on `test_waveform.py`
   (written after the local format pass), and on Release the
   Phase 1 `overwrite_ring_concurrent` slow test. That test's writer spun unthrottled
