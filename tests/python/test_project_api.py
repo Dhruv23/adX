@@ -64,9 +64,13 @@ def test_unknown_names_raise(suffocation: adx_engine.Project) -> None:
 
 
 def test_notes_are_counts_not_objects(suffocation: adx_engine.Project) -> None:
-    """Rule 2: the API offers a count, never a list of note objects."""
+    """Rule 2: a count, or one structured array for a whole clip - never a list of note
+    objects. (Phase 2 had no notes() at all; Phase 5 adds the array, phase_5.md 4.7.)"""
     assert suffocation.note_count("Kick") == 80
-    assert not hasattr(suffocation, "notes")
+    notes = suffocation.notes("Kick", "Kick")
+    assert not isinstance(notes, list)
+    assert notes.dtype == adx_engine.NOTE_DTYPE
+    assert len(notes) == 80
 
 
 def test_validate_is_clean(suffocation: adx_engine.Project) -> None:

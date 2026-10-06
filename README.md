@@ -19,6 +19,7 @@ phase gets built lives in [plans/](plans/). This file is only how to run it.
 ## Build and test
 
 ```
+python tools/fetch_qt.py
 pip install -e ".[dev]"
 cmake --preset windows-x64-debug && cmake --build --preset windows-x64-debug
 ctest --preset windows-x64-debug --output-on-failure
@@ -26,7 +27,17 @@ pytest
 ```
 
 `windows-x64-release` and `windows-x64-relwithdebinfo` are the other two presets.
-`python -m adx` prints the app and engine versions.
+
+`python tools/fetch_qt.py` puts the Qt C++ SDK that matches PySide6 into `.qt/`
+(gitignored, about 2 GB extracted). The piano roll and waveform view draw through a
+small C++ Qt Quick plugin (`bindings/qml/`), and PySide6 ships Qt's DLLs but not the
+headers and import libraries a C++ plugin compiles against. Without the SDK, everything
+except that plugin still builds, and the application says at start-up what is missing.
+
+`python -m adx` opens the application (`adx gui [FILE]`, with `--null-audio` to render
+on a timer instead of an audio device); `adx version` prints the app and engine
+versions. `pytest -m gpu` runs the frame-rate measurement, which needs a real GPU and
+display (CI deselects it).
 
 `ctest` includes the slow gates: the realtime gates, which run 60-second audio
 streams under the allocator hook, the 100-seed undo test, the 100k-case parser fuzz,
@@ -55,6 +66,8 @@ adx fmt [--check | -i] FILE   canonical formatting
 adx fmt --upgrade IN -o OUT   migrate a v1 file (v1 files are never rewritten in place)
 adx diff A B                  semantic diff; exit 1 if the projects differ
 adx info FILE                 counts, duration, tempo range
+adx gui [FILE]                the application (the default with no command)
+adx version                   app and engine versions
 ```
 
 The format is specified in [docs/adx-format-v2.md](docs/adx-format-v2.md).
@@ -73,7 +86,8 @@ engine.start()
 engine.transport.position_ticks()        # poll it; one atomic read
 ```
 
-Instruments are test tones until Phase 4.
+Inside the application, only `app/adx/engine_bridge.py` imports `adx_engine`
+(`tools/lint.py rules` enforces it); everything else goes through the bridge.
 
 ## Lint
 
@@ -85,6 +99,7 @@ python tools/lint.py tidy --build-dir build/windows-x64-debug
 python tools/lint.py headers
 python tools/lint.py format-safety
 python tools/lint.py positions
+python tools/lint.py rules
 ruff check app tests/python tools && ruff format --check app tests/python tools
 mypy --strict app
 ```

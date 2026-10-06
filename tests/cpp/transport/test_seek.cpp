@@ -2,6 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <random>
 
@@ -97,4 +98,51 @@ TEST_CASE("seek_no_stuck_notes", "[transport][seek]") {
     for (std::size_t frame = 24000; frame < 48000; ++frame) {
         REQUIRE(scratch[frame * 2] == 0.0F);
     }
+}
+
+TEST_CASE("seek_keeps_effect_tails", "[transport][seek]") {
+    // P3-5, decided in Phase 5: a seek does not flush effect tails. A delay or reverb
+    // still ringing when the playhead jumps keeps ringing - cutting it sounds broken, and
+    // it is what Seek.h's policy has said since Phase 3 ("only DSP whose output depends
+    // on the timeline position is reset"). One short note into a feedback delay, a seek
+    // into silence while the echoes ring: the echoes must still be there after the seek,
+    // long after the note's own voice has released.
+    auto loaded = adx::tests::loadText(R"([PROJECT]
+ADX_VERSION=2
+
+[TEMPO]
+0:0:0 120
+
+[CHANNEL Tone]
+OUTPUT=insert.1
+
+[PATTERN P]
+LENGTH=4:0:0
+NOTES Tone
+  A4 0:0:0 0:0:480 100
+
+[PLAYLIST]
+TRACK 1
+  PATTERN P 0:0:0
+
+[MIXER]
+INSERT 1 name="Master"
+  SLOT 1 Delay timeMs=150 feedback=0.8 pingPong=0 dry=1
+)");
+    const OfflineRig rig{256};
+    REQUIRE(rig.engine->setProject(loaded->project, loaded->stack.revision()).rebuilt);
+    rig.engine->play();
+    std::vector<float> out;
+    rig.render(24000, out); // 0.5 s: the note is over, the echoes are not
+
+    rig.engine->seek(Ticks{kPpq * 4 * 3}); // bar 4: nothing plays here
+    rig.render(24000, out);
+
+    // From 100 ms after the seek - past the voice's 50 ms release - to the end.
+    float tail = 0.0F;
+    for (std::size_t frame = 24000 + 4800; frame < 48000; ++frame) {
+        tail = std::max(tail, std::abs(out[frame * 2]));
+    }
+    INFO("largest sample in the post-seek tail: " << tail);
+    CHECK(tail > 0.01F);
 }

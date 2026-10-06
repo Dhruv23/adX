@@ -6,6 +6,7 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include "engine/render/RenderEngine.h"
 
@@ -15,6 +16,8 @@ struct EngineHandle {
     std::unique_ptr<render::RenderEngine> engine;
     bool opened{false};
     bool running{false};
+    /// Reused by Engine.frame() so the 60 Hz read allocates nothing once warm (P4-1).
+    std::vector<render::RenderEngine::StripLevel> levelScratch;
 };
 
 /// The arrangement transport, as its own Python object: `engine.transport.play()`.

@@ -285,6 +285,7 @@ void writeNoteClip(Emitter& emitter, const Project& project, const project::Note
         appendIfChanged(text, "fine", static_cast<double>(note->fineTuneCents), 0.0);
         appendIfChanged(text, "rel", static_cast<double>(note->releaseVelocity),
                         static_cast<double>(project::kDefaultReleaseVelocity));
+        appendIfChanged(text, "mute", note->muted, false);
         appendExtras(text, project, clip.extrasFor(note->id));
         emitter.indented(1, text);
     }

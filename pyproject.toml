@@ -62,6 +62,10 @@ minversion = "8.0"
 testpaths = ["tests/python"]
 addopts = ["-q", "--strict-markers", "--strict-config"]
 xfail_strict = true
+markers = [
+    # phase_5.md 4.9: needs a real GPU and display. Non-blocking: CI runs `-m "not gpu"`.
+    "gpu: measures real frame times on a GPU; deselected in CI",
+]
 
 [tool.ruff]
 line-length = 100

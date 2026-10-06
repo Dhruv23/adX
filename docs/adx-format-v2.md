@@ -436,7 +436,7 @@ notes-block = "NOTES" , hspace , name-seg , newline , { note-line } ;
 note-line   = note-name , hspace , position , hspace , duration ,
               hspace , integer , { hspace , note-kv } ;
 note-kv     = "pan" "=" number | "cutoff" "=" number | "res" "=" number
-            | "fine" "=" integer | "rel" "=" integer
+            | "fine" "=" integer | "rel" "=" integer | "mute" "=" boolean
             | "slide" "=" slide | "bend" "=" bend | "lyric" "=" string ;
 slide       = pitch-amount , "@" , duration , "+" , duration , [ "~" , curve ] ;
 bend        = bend-point , { "|" , bend-point } ;
@@ -469,6 +469,8 @@ breakpoint  = position , hspace , number , [ hspace , curve ] ;
   syllable a voice instrument sings. A pitch amount is written in semitones when it
   is a whole number of them (`-2st`), otherwise in cents (`-50c`). An absent key is
   not written, so a file without extensions round-trips byte for byte.
+- `mute=yes` keeps a note in the clip and the file but silences it (the piano roll's
+  Mute tool, phase_5.md §4.7). Absent means `no`, and `no` is never written.
 - `MINI` carries mini-notation source, one or more indented lines, each stored
   with its indentation and any trailing comment removed. Phase 2 stores the text;
   nothing compiles it (Phase 4 owns the compiler).

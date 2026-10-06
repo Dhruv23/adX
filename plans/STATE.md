@@ -86,8 +86,8 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 1 — RT core | M | **Done** 2026-09-13 |
 | 2 — Project model, commands, `.adx` v2 | L | **Done** 2026-09-25 (CI found one clang-tidy finding; fixed in Phase 3) |
 | 3 — Audio graph & scheduling | L | **Done** 2026-10-01 (CI green, run 36835905774) |
-| 4 — Instruments & effects | XL | In progress 2026-10-01; **Tranche A done** 2026-10-03 (Phase 5 may start) |
-| 5 — Frontend foundation | L | Not started |
+| 4 — Instruments & effects | XL | **Done** 2026-10-04 (CI green, run 37269752424; full check run 37273504347) |
+| 5 — Frontend foundation | L | Implemented 2026-10-06; every §6 box observed locally; CI pending (P5-0) |
 | 6 — The DAW proper | XL | Not started |
 | 7 — Text-first layer | M | Not started |
 | 8 — Audio & export | M | Not started |
@@ -564,16 +564,95 @@ channel and insert gain/pan/width.
 | **Plan** | [phase_5.md](phase_5.md) |
 | **Entry** | Phase 4 Tranche A complete ([phase_4.md](phase_4.md) §3) |
 | **Done when** | [phase_5.md](phase_5.md) §6 — **including the frame-rate acceptance step** |
-| **Status** | Not started |
+| **Status** | Implemented 2026-10-06. Every §6 box observed locally, the frame-rate acceptance step included; CI not yet seen (P5-0) |
 | **Completed** | — |
 
 > Where FINAL_PLAN §2.2's bet is proven or disproven. If the three rules do not
 > hold on the piano roll, that is a FINAL_PLAN-level finding, not an open issue
 > — escalate rather than proceeding to Phase 6.
 
+**The bet held.** Panning and zooming a 10,000-note pattern (with 1,000 ghosts) on
+real hardware (Direct3D 11): frame time p99 **0.22 ms** against a 16.6 ms budget, and
+the display vsync-locked at **60.0 fps** - one frame in 1,189 missed its vsync. A pan
+inside the built range is 0 engine calls; a UI frame (playhead, transport, every meter)
+is exactly 1. The three rules are mechanical: `tools/lint.py rules` is a CI step and
+was seen to fire on one planted violation of each. No escalation.
+
+What exists: a dockable shell (browser, piano roll, waveform, meters; layout persisted,
+resettable; dark and light themes defined once in `tokens.py`) with a transport bar; the
+piano roll as a C++ scene-graph item over `engine/geometry/` - culled, level-of-detail,
+allocation-free rebuilds, selection and theme recoloured in place, the playhead its own
+node; nine editing tools plus chords, every gesture one command (`EditNotes`, new) and
+undoable byte for byte; six lanes and a lyric lane with the alias each note will sing;
+quantize, seeded humanize, scale snapping, arpeggiate, seeded riffs; the waveform view
+over the ported `ClipPeakCache` (worker thread, never blocks). The C++ items build
+against a Qt SDK matching PySide6 that `tools/fetch_qt.py` provides - PySide6 ships
+no headers, which the plan had not known. Twenty corrections to the plan:
+[phase_5.md](phase_5.md) §10.
+
+Observed locally (2026-10-06): C++ - 311 cases on each of Debug, RelWithDebInfo and
+Release; perf-gate budgets on Release: full 10k build 0.136 ms (2.0), one bar
+0.0038 ms (0.10), `hitTestRect` 0.0082 ms (0.20). Python - 97 tests (96 without the GPU
+test), including the FFI round trip at 0.022 ms (0.50). clang-tidy clean over all 214 files on all three compile databases (after fixing 34
+findings in the new code).
+clang-format, ruff, ruff format, mypy `--strict`, headers, format-safety, positions,
+dsp-math and the new `rules` gate clean. Phase completion, locally in Debug:
+`ADX_FULL_EVIDENCE=1 ctest --preset windows-x64-debug -L slow` passed in 914.52 s. The app on the real audio device: `suffocation.adx` plays, the playhead
+and every meter move, worst callback 0.89 ms.
+
+Inherited issues: **P4-1** fixed (`Engine.frame()` fills a caller-owned array);
+**P3-5** decided and covered (a seek does not flush effect tails;
+`seek_keeps_effect_tails`). The rest re-carried below with reasons.
+
 **Open issues for Phase 6:**
 
-- _to be filled in by the agent that completes this phase_
+- **P5-0** · `BLOCKER` for marking this phase done · CI has not run on the Phase 5
+  commit: per-push CI (which now fetches the Qt SDK, builds the plugin and runs the
+  rules gate) and the full check on the `phase-5` tag. Fixed when: both are seen green
+  and recorded here.
+- **P5-1** · No note audition. Drawing a note, clicking a key or dragging a pitch is
+  silent: the engine has no preview-voice message from the main thread to the audio
+  thread. Phase 6's channel rack and browser want the same thing. Fixed when: a drawn
+  note sounds once, through the channel's instrument, without a snapshot rebuild.
+- **P5-2** · Slides and pitch curves are drawn as straight segments; a curved slide
+  (Exponential, Logarithmic, Smooth) sounds curved but looks straight. Fixed when: the
+  `curves` layer subdivides curved segments with `core::Curve`.
+- **P5-3** · The metronome button is disabled: no phase has built a click source in the
+  engine. Fixed when: the transport bar's toggle sounds a click on the beat in realtime
+  and never in an offline render.
+- **P5-4** · The waveform panel shows files opened from the browser only. Audio clips
+  in the playlist are Phase 6's, and the cache key's pitch, stretch, reversed and gain
+  fields mean nothing until Phase 8 processes clips. Fixed when: a playlist clip draws
+  through `WaveformView` and a changed key field redraws it.
+- **P5-5** · The roll edits one channel in one pattern. Ghosts show the others, but
+  there is no "edit all channels" mode, and selecting a ghost does nothing. Fixed when:
+  Phase 6 decides whether the roll needs it (FL has it; it is not in §5.1's list).
+- **P5-6** · The 60 fps measurement is one machine (this development box, Direct3D 11,
+  vsync 60 Hz). Fixed when: someone runs `pytest -m gpu` on a second machine, ideally a
+  laptop GPU, and records the numbers here.
+- **P4-10** · `CARRIED` · `suffocation.adx` is the wrong recreation. Another agent is
+  reconstructing the stem now (2026-10-06); nothing in Phase 5 depends on the file's
+  content. Fixed when: as stated under Phase 4.
+- **P4-2** · `CARRIED` · Presets carry no samples on their own. The browser here lists
+  projects and audio; presets are Phase 6's browser content. Fixed when: as stated
+  under Phase 4.
+- **P4-3** · `CARRIED` · Project `TUNING` does not reach instruments. Engine work no
+  Phase 5 surface needed. Fixed when: as stated under Phase 4.
+- **P4-4** · `CARRIED` · v1 master gain order. Unchanged; nobody has heard it matter.
+- **P4-5** · `CARRIED` · SubBass +1.7 dB at 99 Hz, unexplained. Unchanged.
+- **P4-6** · `CARRIED` · Voice preroll latency in realtime. Phase 11's decision.
+- **P4-7** · `CARRIED` · WORLD analyses cached in memory only. Unchanged.
+- **P4-8** · `CARRIED` · Baked Voice parameters not automated per WORLD frame.
+- **P4-9** · `CARRIED` · PitchShifter is the phase vocoder only. Phase 8.
+- **P3-3** · `CARRIED` · A send level is applied per block. DSP; Phase 5 built no
+  send UI to expose it. Fixed when: as stated under Phase 4.
+- **P1-1** · `CARRIED` · `_CrtSetAllocHook` is not installed. Phase 5 put nothing on
+  the callback path. Fixed when: as stated under Phase 1.
+- **P2-2** · `CARRIED` · Invariant diagnostics have no position. Phase 7's.
+- **P2-5** · `CARRIED` · Mini-notation is stored, not compiled. Phase 7's.
+
+Fixed in Phase 5, for the record: **P4-1** (`Engine.frame()`, a persistent buffer, and
+the meter frame counted at exactly one call) and **P3-5** (decided: no flush; tested).
 
 ---
 

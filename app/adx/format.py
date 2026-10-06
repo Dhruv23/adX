@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-import adx_engine
+from adx import engine_bridge
 
 __all__ = [
     "Change",
@@ -82,7 +82,7 @@ def _diagnostics(raw: Iterable[Mapping[str, str | int]]) -> list[Diagnostic]:
 
 def format_text(text: str) -> tuple[str, list[Diagnostic], int]:
     """Return ``(canonical text, diagnostics, source version)``."""
-    formatted, raw, version = adx_engine.format_text(text)
+    formatted, raw, version = engine_bridge.format_text(text)
     return str(formatted), _diagnostics(raw), int(version)
 
 
@@ -90,17 +90,17 @@ def validate_text(
     text: str, base_dir: str = "", check_sample_files: bool = False
 ) -> list[Diagnostic]:
     """Parse and validate, returning every diagnostic."""
-    return _diagnostics(adx_engine.validate_text(text, base_dir, check_sample_files))
+    return _diagnostics(engine_bridge.validate_text(text, base_dir, check_sample_files))
 
 
 def diff_text(before: str, after: str) -> list[Change]:
     """Semantic differences between two files' contents."""
     return [
         Change(kind=str(k), subject=str(s), detail=str(d))
-        for k, s, d in adx_engine.diff_text(before, after)
+        for k, s, d in engine_bridge.diff_text(before, after)
     ]
 
 
 def diagnostic_codes() -> list[tuple[str, str, str]]:
     """Every code this build can emit, as ``(code, severity, summary)``."""
-    return [(str(c), str(s), str(m)) for c, s, m in adx_engine.diagnostic_codes()]
+    return [(str(c), str(s), str(m)) for c, s, m in engine_bridge.diagnostic_codes()]

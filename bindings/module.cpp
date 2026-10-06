@@ -21,11 +21,14 @@ PYBIND11_MODULE(adx_engine, m) {
     registerFormatBindings(m);
     registerTransportBindings(m);
     registerRenderBindings(m);
+    registerGeometryBindings(m);
 
+    // GIL: trivial - a string constant
     m.def(
         "version", []() { return std::string(adx::version()); },
         R"(Engine version as "MAJOR.MINOR.PATCH".)");
 
+    // GIL: trivial - a string constant
     m.def(
         "git_sha", []() { return std::string(adx::gitSha()); },
         R"(Commit this extension was configured from, or "unknown".)");

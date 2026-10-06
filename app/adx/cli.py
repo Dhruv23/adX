@@ -8,6 +8,8 @@ One binary, over the bindings (phase_2.md 4.13):
     adx diff A B                  semantic diff: entities added, removed, changed
     adx info FILE                 counts, duration, tempo range
     adx render ...                Phase 8; declared now so it is not absent
+    adx gui [FILE]                the application (also: no command at all)
+    adx version                   the app and engine versions
 
 A v1 file is never rewritten in place. ``--upgrade`` with an explicit ``-o`` is the
 only path from v1 text to v2 text on disk (docs/adx-format-v2.md 12).
@@ -129,9 +131,9 @@ def _cmd_diff(args: argparse.Namespace) -> int:
 
 
 def _cmd_info(args: argparse.Namespace) -> int:
-    import adx_engine
+    from adx.engine_bridge import Project
 
-    project, diagnostics = adx_engine.Project.load(str(args.file))
+    project, diagnostics = Project.load(str(args.file))
     info = project.info()
     for item in diagnostics:
         if str(item["severity"]) == "error":
@@ -151,12 +153,12 @@ def _cmd_info(args: argparse.Namespace) -> int:
     print(f"tempo:           {tempo} bpm")
     for key in ("channels", "patterns", "notes", "playlist_tracks", "inserts", "markers"):
         print(f"{key + ':':<17}{int(info[key])}")
-    channels = [str(name) for name in project.channels]
+    channels = project.channels()
     if channels:
         print("channel list:    " + ", ".join(channels))
         width = max(len(name) for name in channels)
         print("instruments:")
-        for name, (kind, known) in zip(channels, project.instruments, strict=True):
+        for name, (kind, known) in zip(channels, project.instruments(), strict=True):
             note = "" if known else "  (unknown type: plays silence)"
             print(f"  {name:<{width}}  {kind}{note}")
     return _OK
@@ -165,6 +167,18 @@ def _cmd_info(args: argparse.Namespace) -> int:
 def _cmd_render(_args: argparse.Namespace) -> int:
     print("adx render is not available until Phase 8 (plans/phase_8.md).", file=sys.stderr)
     return _UNAVAILABLE
+
+
+def _cmd_gui(args: argparse.Namespace) -> int:
+    from adx.application import run
+
+    return run(project=args.file, null_audio=bool(args.null_audio))
+
+
+def _cmd_version(_args: argparse.Namespace) -> int:
+    print(f"adx {__version__}")
+    print(f"engine {engine_version()} ({git_sha()})")
+    return _OK
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -210,6 +224,16 @@ def build_parser() -> argparse.ArgumentParser:
     info.add_argument("file", metavar="FILE")
     info.set_defaults(handler=_cmd_info)
 
+    gui = sub.add_parser("gui", help="open the application (the default with no command)")
+    gui.add_argument("file", nargs="?", metavar="FILE", help="a project to open")
+    gui.add_argument(
+        "--null-audio", action="store_true", help="render on a timer instead of an audio device"
+    )
+    gui.set_defaults(handler=_cmd_gui)
+
+    version = sub.add_parser("version", help="print the app and engine versions")
+    version.set_defaults(handler=_cmd_version)
+
     render = sub.add_parser("render", help="offline render (Phase 8)")
     render.add_argument("args", nargs=argparse.REMAINDER)
     render.set_defaults(handler=_cmd_render)
@@ -224,8 +248,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     handler = getattr(args, "handler", None)
     if handler is None:
-        print(f"adx {__version__}")
-        print(f"engine {engine_version()} ({git_sha()})")
-        return _OK
+        # No command: the application itself (phase_5.md 2, __main__.py).
+        args.file = None
+        args.null_audio = False
+        handler = _cmd_gui
     result: int = handler(args)
     return result

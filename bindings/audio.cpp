@@ -160,6 +160,7 @@ void registerAudioBindings(py::module_& m) {
         },
         "Stop and release the audio stream. Safe to call when nothing is open.");
 
+    // GIL: trivial - reads a few fields of the open stream
     m.def(
         "stream_info",
         []() {
@@ -171,15 +172,18 @@ void registerAudioBindings(py::module_& m) {
         },
         "Sample rate, block size, latency readout and xrun count for the open stream.");
 
+    // GIL: trivial - reads an atomic counter
     m.def(
         "rt_violation_count", []() { return adx::rt::ViolationLog::instance().count(); },
         "Realtime violations recorded since the last reset. Zero, or something is "
         "wrong on the audio thread.");
 
+    // GIL: trivial - resets atomic counters
     m.def(
         "reset_rt_violations", []() { adx::rt::ViolationLog::instance().reset(); },
         "Clear the realtime violation log. Main thread, between runs.");
 
+    // GIL: trivial - a compile-time constant
     m.def(
         "rt_guard_enabled", []() { return adx::rt::allocGuardCompiledIn(); },
         "Whether the allocator hook is compiled into this build. False in Release, "

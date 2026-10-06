@@ -1035,6 +1035,10 @@ void V2Parser::parseNotesBlock(core::PatternId pattern, const BlockNode& node) {
                 extra.lyric = token.value;
                 continue;
             }
+            if (token.text == "mute") {
+                (void)parseBool(token.value, token.valueSpan, m_diag, note.muted);
+                continue;
+            }
             double value = 0.0;
             if (!parseDouble(token.value, token.valueSpan, m_diag, value)) {
                 continue;

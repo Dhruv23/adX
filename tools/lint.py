@@ -9,6 +9,7 @@ whatever LLVM happens to be on PATH.
     python tools/lint.py headers
     python tools/lint.py format-safety
     python tools/lint.py positions
+    python tools/lint.py rules
 
 `ruff` and `mypy` need no driver and are run directly.
 """
@@ -634,7 +635,24 @@ def cmd_dsp_math(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_rules(_args: argparse.Namespace) -> int:
+    """FINAL_PLAN 2.2's three rules, mechanically (tools/lint_rules.py, phase_5.md 3)."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import lint_rules
+
+    failed = 0
+    for name, findings in lint_rules.run_all(REPO_ROOT).items():
+        for finding in findings:
+            print(f"{name}: {finding}", file=sys.stderr)
+        failed += len(findings)
+    if failed:
+        return _fail(f"{failed} rule finding(s) (FINAL_PLAN 2.2; phase_5.md 3).")
+    print(f"rules: {len(lint_rules.CHECKS)} checks clean")
+    return 0
+
+
 _GATES = {
+    "rules": cmd_rules,
     "format": cmd_format,
     "tidy": cmd_tidy,
     "headers": cmd_headers,
@@ -671,6 +689,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "positions", help="no engine-global playback position outside engine/transport"
     )
     subparsers.add_parser("dsp-math", help="no library transcendentals in DSP code")
+    subparsers.add_parser("rules", help="FINAL_PLAN 2.2's three rules (phase_5.md 3)")
 
     args = parser.parse_args(argv)
     return _GATES[str(args.gate)](args)

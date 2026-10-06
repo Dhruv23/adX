@@ -352,7 +352,8 @@ SnapshotBuilder::flatten(const std::vector<Placement>& placements, const Channel
         for (const Note& note : placement.clip->notes) {
             // A placement plays the notes that *start* inside its window, and cuts any
             // that run past its end - trimming a placement shortens its notes.
-            if (note.start.value < window.localStart || note.start.value >= window.localEnd) {
+            if (note.muted || note.start.value < window.localStart ||
+                note.start.value >= window.localEnd) {
                 continue;
             }
             const std::int64_t localEnd = std::min(note.end().value, window.localEnd);

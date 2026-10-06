@@ -26,6 +26,7 @@
 namespace adx::project {
 class Project;
 struct Channel;
+struct NoteClip;
 struct Resources;
 } // namespace adx::project
 
@@ -39,6 +40,15 @@ loadVoicebank(const std::filesystem::path& path, std::vector<std::string>* warni
 /// `project` to `node`. Without a project or a bank the node plays nothing.
 void configureVoice(VoiceInstrument& node, const project::Channel& channel,
                     const project::Project* project, const project::Resources* resources);
+
+/// The alias each note of `clip` will sing, in the clip's note order: what the piano
+/// roll's lyric lane shows dimmed under each lyric, so a wrong join is visible before
+/// rendering (phase_5.md §4.7). Resolved exactly as configureVoice resolves it - against
+/// the previous note in the pattern when it joins without a rest. Empty for a note the
+/// bank cannot sing, and every entry empty when the channel has no bank.
+[[nodiscard]] std::vector<std::string> resolvedAliases(const project::Project& project,
+                                                       const project::Channel& channel,
+                                                       const project::NoteClip& clip);
 
 /// True when `node` was built from exactly what configureVoice would build now.
 [[nodiscard]] bool voiceMatches(const VoiceInstrument& node, const project::Channel& channel,

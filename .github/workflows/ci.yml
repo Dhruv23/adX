@@ -94,6 +94,18 @@ jobs:
           restore-keys: |
             deps-${{ runner.os }}-
 
+      # The Qt C++ SDK the scene-graph plugin (bindings/qml) builds against: PySide6
+      # ships Qt's DLLs but not its headers or import libraries (phase_5.md 4.3). Only
+      # the downloaded archives are cached (~200 MB, not the extracted 2 GB).
+      - name: Cache the Qt SDK archives
+        uses: actions/cache@v4
+        with:
+          path: .qt/dl
+          key: qt-${{ runner.os }}-${{ hashFiles('tools/fetch_qt.py') }}
+
+      - name: Fetch the Qt SDK
+        run: python tools/fetch_qt.py
+
       # 3. Configure and build.
       - name: Configure
         run: cmake --preset ${{ matrix.preset }}
@@ -129,9 +141,12 @@ jobs:
           grep -n -E 'Failed|Timeout|FAILED|REQUIRE|with expansion|worst|xrun' ctest.log | head -40 | while IFS= read -r l; do echo "::error title=ctest::${l:0:400}"; done
 
       # 6. Python tests. Independent of ctest, so a C++ failure does not hide them.
+      # The GPU frame-rate test cannot run here - no usable GPU on the runners - and is
+      # run locally at phase completion (phase_5.md 4.9). Everything else Qt runs on the
+      # offscreen platform (tests/python/conftest.py).
       - name: pytest
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: pytest
+        run: pytest -m "not gpu"
 
       # Steps 7-14 are the lint gates, and they all carry `if: !cancelled()`.
       #
@@ -192,6 +207,13 @@ jobs:
       - name: No global position
         if: ${{ !cancelled() }}
         run: python tools/lint.py positions
+
+      # 15. Phase 5: FINAL_PLAN 2.2's three rules, mechanically - only engine_bridge.py
+      # imports the engine, no binding returns per-note objects, every binding releases
+      # the GIL or says why not, no pybind11 in engine/ - and the 150-line limit in app/.
+      - name: Three rules
+        if: ${{ !cancelled() }}
+        run: python tools/lint.py rules
 
       # 14. Phase 4: DSP code calls engine/dsp/Math.h, never a library transcendental,
       # so golden hashes agree across Debug, RelWithDebInfo and Release.

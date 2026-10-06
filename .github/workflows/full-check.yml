@@ -51,6 +51,13 @@ jobs:
           key: deps-${{ runner.os }}-${{ hashFiles('cmake/AdxDependencies.cmake') }}
           restore-keys: |
             deps-${{ runner.os }}-
+      # clang-tidy reads bindings/qml too, which needs Qt's headers (phase_5.md 4.3).
+      - uses: actions/cache@v4
+        with:
+          path: .qt/dl
+          key: qt-${{ runner.os }}-${{ hashFiles('tools/fetch_qt.py') }}
+      - name: Fetch the Qt SDK
+        run: python tools/fetch_qt.py
       - name: Configure
         run: cmake --preset ${{ matrix.preset }}
       - name: Build

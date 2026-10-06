@@ -53,3 +53,6 @@ tools/ab/*.exe
 tools/ab/*.obj
 tools/ab/*.wav
 tools/ab/fixed/
+
+# --- Qt C++ SDK for the scene-graph plugin (tools/fetch_qt.py) ---
+.qt/

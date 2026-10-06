@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Not started |
+| **Status** | Implemented 2026-10-06; every §6 box observed locally; CI pending (P5-0, plans/STATE.md) |
 | **Governs** | `app/adx/` shell, `engine/geometry/`, the pybind11 zero-copy surface, the QML scene-graph pipeline |
 | **FINAL_PLAN refs** | §2.2 in full (all three rules), §3.1 (ClipPeakCache), §3.3.10, §5.1 piano roll, §7 Phase 5 |
 | **Entry criteria** | [phase_4.md](phase_4.md) Tranche A complete (§3 of that file). Tranches B and C may run in parallel with this phase. |
@@ -461,20 +461,58 @@ saved layout that cannot be reset is a bug report per week.
 
 ## 6. Definition of done
 
-- [ ] The app launches, shows a dockable shell with a transport bar, opens
+Evidence recorded 2026-10-06 on the development machine (Windows 11, MSVC 18, Qt and
+PySide6 6.11.2, Direct3D 11). "Locally" is a different claim from "green in CI"; the CI
+half is P5-0 in plans/STATE.md.
+
+- [x] The app launches, shows a dockable shell with a transport bar, opens
       `suffocation.adx`, plays it, and shows a moving playhead.
-- [ ] The piano roll renders a real pattern with grid, ghost notes, one lane and
-      scale highlighting.
-- [ ] All seven editing tools work and each is one undoable command.
-- [ ] Every `perf_geometry_budgets` budget met in CI, on Release.
-- [ ] **The 60 fps claim verified on real hardware**, over a 10,000-note pattern,
-      panning and zooming, with the p99 frame time recorded in the phase log and
-      in FINAL_PLAN §10's notes column. This is a human-run acceptance step, and
-      it is the one that decides whether the §2.2 bet paid off.
-- [ ] Waveform view renders a 10-minute file at every zoom without stutter and
-      without blocking on peak computation.
-- [ ] All four Rule-1/2/3 CI checks wired and observed to fire.
-- [ ] FINAL_PLAN.md §10 Phase 5 row updated.
+      *Locally, on the real audio device:* `adx gui docs/examples/suffocation.adx`
+      reported "audio device open"; sampled every 500 ms the transport read 3850,
+      7660, 11510 ... 26870 ticks and the roll's `playheadBeats` 1.0, 1.99, 3.0 ... 7.0;
+      every meter strip moved; worst audio callback 0.89 ms. Offscreen on the null
+      backend, `test_app.py` asserts the same (position advancing, meters read) on
+      every run.
+- [x] The piano roll renders a real pattern with grid, ghost notes, one lane and
+      scale highlighting. Screenshot of `suffocation.adx` checked by eye;
+      `geometry_scale_highlight_rows`, `geometry_culling_correct` and
+      `test_lane_mapping_matches_the_engine` pin each layer's content.
+- [x] All seven editing tools work and each is one undoable command. All nine of
+      §4.7's tools (the seven, plus Slide and Pitch curve), the Chord tool and the lane
+      editor: `test_piano_roll_tools_emit_one_command` and
+      `test_piano_roll_undo_restores` (11 gestures each; undo restores the text byte for
+      byte).
+- [x] Every `perf_geometry_budgets` budget met - locally on Release (CI: P5-0):
+
+      | Measurement | Budget | Measured (Release) |
+      |---|---|---|
+      | `build`, 10k notes, full view | < 2.0 ms | 0.136 ms (0.144 ms through the bridge) |
+      | `build`, one bar | < 0.10 ms | 0.0038 ms |
+      | `build` steady-state allocations | 0 | 0 (`geometry_no_alloc_steady_state` under the hook in Debug and RelWithDebInfo; storage never moves in Release) |
+      | `hitTestRect`, 10k notes | < 0.20 ms | 0.0082 ms |
+      | Python→C++→numpy, 10k notes | < 0.50 ms | 0.022 ms |
+      | FFI calls per pan frame | exactly 0 | 0 (`test_pan_frame_is_zero_calls`) |
+      | FFI calls per meter frame | exactly 1 | 1 (`test_meter_frame_is_one_call`) |
+
+- [x] **The 60 fps claim verified on real hardware**, panning and zooming 10,000
+      notes (plus 1,000 ghosts), 1,189 frames, Direct3D 11: frame time (the Python step
+      plus the scene graph's sync and render) p50 0.094 ms, p99 **0.22 ms**, max 2.0 ms
+      (the four rebuild frames); displayed frames vsync-locked at **60.0 fps**, interval
+      p99 17.2 ms, one frame in 1,189 missed its vsync. 32 engine calls in all, every one
+      a rebuild crossing. `pytest -m gpu` (`test_perf_frames_gpu`). Why the gate is the
+      frame time rather than the interval: §10, item 13.
+- [x] Waveform view renders a 10-minute file at every zoom without stutter and
+      without blocking on peak computation. `test_waveform.py`: `open()` of a 10-minute
+      WAV returns in under 50 ms with analysis running on the worker; once complete,
+      the worst rebuild across every zoom from the whole file to 10 ms on screen is
+      0.053 ms (tiers 0-7); pan and zoom inside the built range make no engine call.
+- [x] All four Rule-1/2/3 CI checks wired and observed to fire. `tools/lint.py rules`
+      (a CI step). Fired on the real tree with one planted violation of each - an
+      `import adx_engine` in a panel, a binding returning `std::vector<Note>`, a `def`
+      with no GIL release or exemption, a pybind11 include in `engine/geometry/` - five
+      findings, exit 1; clean again after reverting. `test_bridge_contract.py` plants
+      each in a temporary tree on every run.
+- [x] FINAL_PLAN.md §10 Phase 5 row updated.
 
 **If the frame-rate acceptance fails**, that is a finding, not a failure to hide.
 Record the measured number, identify which of the three rules is being violated
@@ -528,3 +566,103 @@ profiling later.
 | The GPU frame gate cannot run in CI, so performance rots between releases | The deterministic budgets (§4.9) *do* run every PR and catch the causes (geometry build cost, FFI call counts) rather than only the symptom |
 | Building a C++ QQuickItem plugin alongside pybind11 complicates the build | Both are CMake targets against the same Qt found by PySide6's own Qt; the spike in week one proves the toolchain before any UI is written |
 | The piano roll grows into a 1,200-line file, repeating §3.3.10 | Tools are separate modules with a shared state-machine base; the 150-line function limit from Phase 0 §4.5 applies to Python via a ruff rule |
+
+---
+
+## 10. Corrections made while executing this plan
+
+Places the plan was wrong or silent, what was done instead, and why.
+
+1. **There is no Qt SDK in a PySide6 install.** §9's mitigation - "both are CMake
+   targets against the same Qt found by PySide6's own Qt" - cannot work: the PySide6
+   wheels ship Qt's DLLs, not its headers or import libraries. The plugin builds against
+   a Qt C++ SDK of *exactly* PySide6's version (6.11.2), which `tools/fetch_qt.py`
+   downloads from download.qt.io into `.qt/` (gitignored); `bindings/qml/CMakeLists.txt`
+   looks there first and skips the plugin with a warning when it is absent, so the
+   engine, bindings and CLI never need it. aqtinstall, the usual tool, cannot read the
+   repository layout Qt adopted in 6.11. CI caches the 200 MB of archives, not the 2 GB
+   tree. The week-one spike of §9 was done first and passed: a `QSGGeometryNode` item
+   built against the SDK, in a Debug CMake configuration, rendered through Direct3D 11
+   inside a `QQuickWidget` inside a `QDockWidget`.
+2. **The plugin is a plain DLL, not a qmldir plugin.** Python loads `adx_quick.dll`
+   with ctypes once PySide6 has loaded Qt and calls `adx_quick_register()`
+   (`qmlRegisterType`). Qt's plugin loader refuses a debug-flagged plugin in a release
+   Qt, and PySide6 ships release Qt only; so the plugin links release Qt and the
+   release CRT in *every* configuration, and shares no C++ objects with the engine
+   (vertices cross as raw floats), which makes that safe. A Qt version mismatch is
+   reported by name rather than as an unresolved import.
+3. **Where the C++ items live.** §2 lists `PianoRollItem.h/.cpp` under
+   `app/adx/panels/piano_roll/` and also says `bindings/qml/` holds "the C++ QQuickItem
+   subclasses". They are in `bindings/qml/` - the C++ roots clang-format and clang-tidy
+   cover - with `SceneLayers.h/.cpp`, the staging and palette code both items share.
+4. **`upload(const GeometryBuffer&)` cannot be called from Python.** A pybind11 object
+   cannot cross into a PySide6 call as a C++ reference. The item takes the leased
+   buffer's address, vertex count and revision instead, and copies inside the lease's
+   `with` block: one memcpy, as §4.3 intended. Invokables are reached through
+   `QMetaObject.invokeMethod` (`app/adx/quick.py`); the items' input signals reach
+   Python through QML `Connections` into a slot object, because PySide6 has no wrapper
+   for these C++ types.
+5. **The vertex format** is three floats - x, y, colour role - not `ColoredPoint2D`.
+   The role resolves to RGBA when the item fills its node, which is what lets a theme
+   switch or a selection recolour without new geometry (§4.10). World space is beats on
+   x and `128 - pitch` on y, so a pan or zoom is exactly a matrix.
+6. **Notes had no mute.** §4.7's Mute tool "toggles note mute without deleting", and
+   `Note` had no such field (§4.7's "the `Note` fields Phase 2 §4.6 already defined"
+   was true of slide, pitch curve and lyric, which Phase 4 made `NoteExtras`, but not of
+   mute). Added `Note::muted`, `mute=yes` in the format (docs/adx-format-v2.md §7.3), the
+   snapshot skipping muted notes (`muted_note_is_silent`) and the diff seeing it.
+7. **`EditNotes`, a command that did not exist.** "Every one of these ends in exactly
+   one command" is not true of Phase 2's single-purpose note commands: a slice is a
+   shortened note and a new one, a glue lengthens one and deletes the rest, a quantize
+   moves each note by a different amount. `EditNotes` (removals, replacements by id,
+   additions; one undo step; removes a clip it empties) is what the tools end in.
+8. **Nine tools, not seven.** §5 and §6 say seven; §4.7's table lists nine. All nine
+   are built, plus the Chord tool and the lane editor, and the one-command and undo
+   tests cover all eleven gestures.
+9. **Lanes.** Release velocity is a lane too. The pitch curve is drawn and edited on the
+   roll itself (the `curves` layer and the Pitch curve tool), not in the lane strip. The
+   lyric lane is QML text cells under the roll with the resolved alias dimmed beneath;
+   resolving it needed a new engine function, `instruments::resolvedAliases`, which
+   resolves exactly as the Voice renderer does.
+10. **Lanes in the density level of detail** (silent in §4.4): one bar per density
+    bucket at its largest value, so a zoomed-out lane still shows the shape.
+11. **No `dark.qml` / `light.qml`.** §4.10 wants a colour defined once. Two QML palette
+    files would define each a second time; `tokens.py` is injected into QML as the
+    `adxTheme` context property instead, and gives the items their role colours.
+12. **Overlays.** The selection rectangle and the playhead are scene-graph nodes. The
+    drag preview (bounded: the first 256 dragged notes) and the lyric cells are QML
+    items. Snap guides are not drawn separately: the grid is the guide.
+13. **The frame-rate gate, measured honestly.** "p99 frame time < 16.6 ms", read as the
+    interval between displayed frames, can never pass on a vsync-locked display: the
+    interval cannot go below the 16.67 ms refresh period. Measured both. The gate is the
+    *frame time* - the Python step plus the scene graph's sync and render, everything
+    but the wait for vsync - at p99 < 16.6 ms; the interval is gated at p99 < 1.5x the
+    budget, which fails if more than 1% of frames miss their vsync.
+14. **`Engine.frame()`.** One call per UI frame now also pumps the engine and returns the
+    sample position, so the transport's time display needs no second call. It fills a
+    caller-owned array, closing P4-1.
+15. **The rules gate is `tools/lint.py rules`**, five checks in `tools/lint_rules.py`.
+    The fifth is §9's 150-line limit for Python: ruff has no function-length rule, so
+    it is an AST check. The GIL check accepts a third form the plan did not list, the
+    `gil_scoped_release` inside a binding's body that every Phase 1-4 binding already
+    used; 49 cheap bindings now say why they need no release, and `info()` and
+    `validate()`, which walk the whole project, release.
+16. **Phase 2's Rule 2 test asserted `Project` has no `notes` at all.** Phase 5 adds
+    `notes()`, returning one structured numpy array for a whole clip - the shape Rule 2
+    allows. The test now asserts that shape. The array is a copy: an edit reallocates
+    the clip's vector, so a long-lived zero-copy view of notes would dangle. Zero copy is
+    for geometry, under a lease.
+17. **A crash at every process exit, found by the app tests.** `NOTE_DTYPE` was a
+    function-local `static py::dtype`, destroyed at DLL unload - after the interpreter
+    had finalised - so its decref touched freed memory. It only showed once PySide6 was
+    loaded too. It is now created once and never destroyed, as pybind11 recommends.
+18. **`python -m adx` opens the application** (§2's `__main__.py`). Phase 0's version
+    print moved to `adx version`; `adx gui [FILE] [--null-audio]` is the explicit form.
+19. **Additions to the manifest:** `app/adx/quick.py`, `panels/piano_roll/model.py`
+    (the Qt-free tool state), `view_state.py`, `chords.py` (chord tool, arpeggiate, riff
+    generator), `panels/waveform/view.qml`; `tests/python/test_app.py`,
+    `test_waveform.py`, `perf_frames_driver.py`; `tools/fetch_qt.py`,
+    `tools/lint_rules.py`. `.git/info/exclude` on the development machine ignores
+    `tools/`, so the two new tools files have to be added with `git add -f`.
+20. **P3-5, decided:** a seek does not flush effect tails - what Seek.h's policy has
+    said since Phase 3. `seek_keeps_effect_tails` covers it.

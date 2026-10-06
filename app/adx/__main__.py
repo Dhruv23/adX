@@ -1,4 +1,4 @@
-"""``python -m adx`` - prints the app and engine versions and exits 0."""
+"""``python -m adx`` - the application; ``python -m adx <command>`` - the CLI (cli.py)."""
 
 from __future__ import annotations
 

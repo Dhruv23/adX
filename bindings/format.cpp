@@ -36,6 +36,7 @@ py::list toPython(const adx::format::DiagnosticList& diagnostics) {
 }
 
 void registerFormatBindings(py::module_& m) {
+    // GIL: trivial - a fixed table of a few dozen rows
     m.def(
         "diagnostic_codes",
         []() {

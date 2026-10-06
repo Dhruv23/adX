@@ -19,12 +19,12 @@ namespace {
 /// assign the same ids, but a file edited by hand and reloaded need not, and "you
 /// changed nothing" must not be reported as "you deleted every note and added them
 /// back".
-using NoteKey = std::tuple<std::int64_t, std::uint8_t, std::int64_t, std::uint8_t>;
+using NoteKey = std::tuple<std::int64_t, std::uint8_t, std::int64_t, std::uint8_t, bool>;
 
 [[nodiscard]] std::multiset<NoteKey> noteKeys(const NoteClip& clip) {
     std::multiset<NoteKey> keys;
     for (const Note& note : clip.notes) {
-        keys.emplace(note.start.value, note.pitch, note.length.value, note.velocity);
+        keys.emplace(note.start.value, note.pitch, note.length.value, note.velocity, note.muted);
     }
     return keys;
 }
@@ -42,9 +42,9 @@ using ExtrasKey =
         if (note == clip.notes.end()) {
             continue;
         }
-        keys.emplace_back(
-            NoteKey{note->start.value, note->pitch, note->length.value, note->velocity},
-            extras.slide, extras.pitchCurve, extras.lyric);
+        keys.emplace_back(NoteKey{note->start.value, note->pitch, note->length.value,
+                                  note->velocity, note->muted},
+                          extras.slide, extras.pitchCurve, extras.lyric);
     }
     std::ranges::sort(keys, [](const ExtrasKey& a, const ExtrasKey& b) {
         return std::get<0>(a) < std::get<0>(b) ||

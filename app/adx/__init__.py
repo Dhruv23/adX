@@ -29,9 +29,9 @@ def _resolve_version() -> str:
     try:
         return _distribution_version("adx")
     except PackageNotFoundError:
-        import adx_engine
+        from adx import engine_bridge
 
-        return str(adx_engine.version())
+        return engine_bridge.engine_version()
 
 
 __version__: str = _resolve_version()
@@ -39,13 +39,13 @@ __version__: str = _resolve_version()
 
 def engine_version() -> str:
     """Return the version string reported by the native engine."""
-    import adx_engine
+    from adx import engine_bridge
 
-    return str(adx_engine.version())
+    return engine_bridge.engine_version()
 
 
 def git_sha() -> str:
     """Return the commit the native engine was configured from, or ``"unknown"``."""
-    import adx_engine
+    from adx import engine_bridge
 
-    return str(adx_engine.git_sha())
+    return engine_bridge.git_sha()

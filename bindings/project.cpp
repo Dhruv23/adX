@@ -22,6 +22,8 @@
 #include <pybind11/stl.h>
 
 #include "bindings/Bindings.h"
+#include "bindings/Notes.h"
+#include "bindings/PendingCommand.h"
 #include "bindings/ProjectHandle.h"
 #include "engine/format/adx/Document.h"
 #include "engine/format/adx/Parser.h"
@@ -59,16 +61,7 @@ namespace {
 
 using adx::bindings::ProjectHandle;
 
-/// A command that has been described in Python but not yet built.
-///
-/// Built at execute() time rather than at construction, because building one needs
-/// the project - `MoveNotes("Verse", "Lead", 120)` has to turn two names into two
-/// ids, and only the handle it is executed against can do that.
-struct PendingCommand {
-    std::function<std::unique_ptr<adx::project::Command>(const adx::project::Project&)> build;
-    std::string description;
-    bool used{false};
-};
+using adx::bindings::PendingCommand;
 
 [[nodiscard]] std::string readFile(const std::string& path) {
     const std::ifstream stream(path, std::ios::binary);
@@ -95,23 +88,8 @@ void writeFile(const std::string& path, const std::string& text) {
     return adx::format::write(handle.project, options);
 }
 
-[[nodiscard]] const adx::project::Channel& channelNamed(const adx::project::Project& project,
-                                                        const std::string& name) {
-    const adx::project::Channel* channel = project.findChannelByName(name);
-    if (channel == nullptr) {
-        throw std::invalid_argument("no channel named '" + name + "'");
-    }
-    return *channel;
-}
-
-[[nodiscard]] const adx::project::Pattern& patternNamed(const adx::project::Project& project,
-                                                        const std::string& name) {
-    const adx::project::Pattern* pattern = project.findPatternByName(name);
-    if (pattern == nullptr) {
-        throw std::invalid_argument("no pattern named '" + name + "'");
-    }
-    return *pattern;
-}
+using adx::bindings::channelNamed;
+using adx::bindings::patternNamed;
 
 [[nodiscard]] py::tuple loadResult(std::unique_ptr<ProjectHandle> handle,
                                    const adx::format::DiagnosticList& diagnostics) {
@@ -126,10 +104,12 @@ void registerCommands(py::module_& m) {
         "commands", "Command constructors. Build one, then pass it to Project.execute().");
 
     py::class_<PendingCommand>(commands, "Command")
+        // GIL: trivial - formats a short string
         .def("__repr__", [](const PendingCommand& command) {
             return "<adx_engine.commands.Command " + command.description + ">";
         });
 
+    // GIL: trivial - builds a closure; the ids are gathered at execute(), GIL released
     commands.def(
         "MoveNotes",
         [](const std::string& pattern, const std::string& channel, std::int64_t deltaTicks,
@@ -156,6 +136,7 @@ void registerCommands(py::module_& m) {
         py::arg("pattern"), py::arg("channel"), py::arg("delta_ticks"), py::arg("delta_pitch") = 0,
         "Move every note one channel plays in one pattern.");
 
+    // GIL: trivial - builds a closure over two values
     commands.def(
         "SetChannelVolume",
         [](const std::string& channel, double volume) {
@@ -172,6 +153,7 @@ void registerCommands(py::module_& m) {
         },
         py::arg("channel"), py::arg("volume"));
 
+    // GIL: trivial - builds a closure over two strings
     commands.def(
         "RenameChannel",
         [](const std::string& channel, const std::string& name) {
@@ -187,6 +169,7 @@ void registerCommands(py::module_& m) {
         },
         py::arg("channel"), py::arg("name"));
 
+    // GIL: trivial - builds a closure over three values
     commands.def(
         "SetTempo",
         [](double bpm, std::int64_t atTicks, bool ramp) {
@@ -202,6 +185,7 @@ void registerCommands(py::module_& m) {
         },
         py::arg("bpm"), py::arg("at_ticks") = 0, py::arg("ramp") = false);
 
+    // GIL: trivial - builds a closure over two values
     commands.def(
         "AddMarker",
         [](std::int64_t atTicks, const std::string& name) {
@@ -216,6 +200,8 @@ void registerCommands(py::module_& m) {
             };
         },
         py::arg("at_ticks"), py::arg("name"));
+
+    adx::bindings::registerNoteCommands(commands);
 }
 // NOLINTEND(bugprone-exception-escape)
 
@@ -228,6 +214,7 @@ void defineProjectEditing(py::class_<ProjectHandle>& project);
 
 void registerProjectBindings(py::module_& m) {
     m.attr("PPQ") = adx::core::kPpq;
+    m.attr("NOTE_DTYPE") = adx::bindings::noteDtypeObject();
 
     registerCommands(m);
 
@@ -235,6 +222,7 @@ void registerProjectBindings(py::module_& m) {
                                       "One project and the undo history that edits it.");
     defineProjectIo(project);
     defineProjectEditing(project);
+    adx::bindings::defineNoteAccess(project);
 }
 
 namespace {
@@ -322,6 +310,7 @@ void defineProjectIo(py::class_<ProjectHandle>& project) {
                 return names;
             },
             "Pattern names, in id order.")
+        // GIL: trivial - sums one size per clip
         .def(
             "note_count",
             [](const ProjectHandle& handle, const std::string& pattern) {
@@ -337,18 +326,23 @@ void defineProjectIo(py::class_<ProjectHandle>& project) {
             [](const ProjectHandle& handle) {
                 const adx::project::Project& project = handle.project;
                 std::size_t notes = 0;
-                for (const auto& pattern : project.patterns) {
-                    for (const auto& clip : pattern.noteClips) {
-                        notes += clip.notes.size();
-                    }
-                }
                 double minBpm = adx::core::kMaxBpm;
                 double maxBpm = adx::core::kMinBpm;
-                for (const auto& event : project.tempo.tempoEvents()) {
-                    minBpm = std::min(minBpm, event.bpm);
-                    maxBpm = std::max(maxBpm, event.bpm);
+                adx::core::Ticks length;
+                {
+                    // contentLength() walks the playlist; the note count walks every clip.
+                    const py::gil_scoped_release released;
+                    for (const auto& pattern : project.patterns) {
+                        for (const auto& clip : pattern.noteClips) {
+                            notes += clip.notes.size();
+                        }
+                    }
+                    for (const auto& event : project.tempo.tempoEvents()) {
+                        minBpm = std::min(minBpm, event.bpm);
+                        maxBpm = std::max(maxBpm, event.bpm);
+                    }
+                    length = project.contentLength();
                 }
-                const adx::core::Ticks length = project.contentLength();
                 py::dict out;
                 out["title"] = project.meta.title;
                 out["source_version"] = handle.sourceVersion;
@@ -398,6 +392,7 @@ void defineProjectEditing(py::class_<ProjectHandle>& project) {
         .def_property_readonly(
             "revision", [](const ProjectHandle& handle) { return handle.stack.revision(); },
             "Bumped on every mutation. The change token a UI polls.")
+        // GIL: trivial - copies one label per undo step
         .def(
             "history",
             [](const ProjectHandle& handle) {
@@ -415,7 +410,10 @@ void defineProjectEditing(py::class_<ProjectHandle>& project) {
                 adx::format::DiagnosticList diagnostics;
                 adx::project::ValidationOptions options;
                 options.checkSampleFiles = checkSampleFiles;
-                (void)adx::project::validate(handle.project, diagnostics, options);
+                {
+                    const py::gil_scoped_release released;
+                    (void)adx::project::validate(handle.project, diagnostics, options);
+                }
                 return toPython(diagnostics);
             },
             py::arg("check_sample_files") = false, "Every broken invariant, as diagnostics.")

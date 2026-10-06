@@ -37,7 +37,12 @@ adx_add_cpp_test(adx_tests
         project/test_curve.cpp
         project/test_commands.cpp
         project/test_undo_random.cpp
+        project/test_edit_notes.cpp
         project/test_validate.cpp
+        geometry/test_geometry_buffer.cpp
+        geometry/test_hittest.cpp
+        geometry/test_peak_cache.cpp
+        geometry/bench_piano_roll.cpp
         format/test_lexer.cpp
         format/test_diagnostics.cpp
         format/test_roundtrip.cpp

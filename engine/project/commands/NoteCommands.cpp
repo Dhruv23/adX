@@ -33,6 +33,8 @@ namespace {
         return note.cutoff;
     case NoteField::Resonance:
         return note.resonance;
+    case NoteField::Muted:
+        return note.muted ? 1.0 : 0.0;
     }
     return 0.0;
 }
@@ -65,6 +67,9 @@ void writeField(Note& note, NoteField field, double value) noexcept {
         break;
     case NoteField::Resonance:
         note.resonance = static_cast<float>(value);
+        break;
+    case NoteField::Muted:
+        note.muted = value != 0.0;
         break;
     }
 }

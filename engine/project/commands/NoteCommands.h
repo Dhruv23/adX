@@ -120,6 +120,8 @@ enum class NoteField : std::uint8_t {
     Pan,
     Cutoff,
     Resonance,
+    /// 0 or 1.
+    Muted,
 };
 
 class SetNoteValue final : public Command {

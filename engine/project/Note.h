@@ -36,6 +36,9 @@ struct Note {
     /// Detune, in cents, relative to the note's equal-tempered pitch.
     std::int16_t fineTuneCents{0};
     std::uint16_t releaseVelocity{kDefaultReleaseVelocity};
+    /// A muted note stays in the clip and in the file but does not sound - the
+    /// piano roll's Mute tool (phase_5.md §4.7), which silences without deleting.
+    bool muted{false};
 
     /// The per-note lanes FINAL_PLAN §5.1 asks for, each an offset from the
     /// channel's value: pan in -1..1, cutoff in octaves, resonance in 0..1.

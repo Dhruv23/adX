@@ -56,14 +56,18 @@ adx::render::RenderEngine& engineOf(TransportHandle& transport) {
 
 void defineTransport(py::module_& m) {
     py::class_<TransportHandle>(m, "Transport", "The arrangement's playback position.")
+        // GIL: trivial - posts one message to the audio thread
         .def("play", [](TransportHandle& t) { engineOf(t).play(); })
+        // GIL: trivial - posts one message to the audio thread
         .def("stop", [](TransportHandle& t) { engineOf(t).stopPlayback(); })
+        // GIL: trivial - posts one message to the audio thread
         .def(
             "seek_ticks",
             [](TransportHandle& t, std::int64_t ticks) {
                 engineOf(t).seek(adx::core::Ticks{ticks});
             },
             py::arg("ticks"))
+        // GIL: trivial - posts one message to the audio thread
         .def(
             "set_loop",
             [](TransportHandle& t, std::int64_t start, std::int64_t end, bool enabled) {
@@ -72,18 +76,23 @@ void defineTransport(py::module_& m) {
                                                                .enabled = enabled});
             },
             py::arg("start"), py::arg("end"), py::arg("enabled") = true)
+        // GIL: trivial - reads an atomic
         .def(
             "position_ticks", [](TransportHandle& t) { return engineOf(t).positionTicks().value; },
             "Where the arrangement is, as of the audio thread's last block. O(1); poll it.")
+        // GIL: trivial - reads an atomic
         .def("position_samples", [](TransportHandle& t) { return engineOf(t).positionSamples(); })
+        // GIL: trivial - reads an atomic
         .def("state", [](TransportHandle& t) {
             return std::string(adx::transport::toString(engineOf(t).state()));
         });
 }
 
 void defineEngine(py::module_& m) {
-    py::class_<EngineHandle>(m, "Engine",
-                             "The render engine: a stream, a transport, and the project it plays.")
+    py::class_<EngineHandle> engine(
+        m, "Engine", "The render engine: a stream, a transport, and the project it plays.");
+    engine
+        // GIL: trivial - allocates the engine; nothing is opened until start(), which releases
         .def(py::init([](std::uint32_t sampleRate, std::uint32_t blockFrames,
                          std::uint32_t outputChannels, bool nullBackend) {
                  auto handle = std::make_unique<EngineHandle>();
@@ -123,6 +132,7 @@ void defineEngine(py::module_& m) {
                 self.running = true;
             },
             "Open and start the stream. Messages sent before this apply on the first block.")
+        // GIL: trivial - posts one message to the audio thread
         .def(
             "stop",
             [](EngineHandle& self) {
@@ -156,6 +166,7 @@ void defineEngine(py::module_& m) {
             py::arg("project"),
             "Bring the audio thread up to the project's latest edit, rebuilding only what "
             "changed. Returns whether a snapshot was built.")
+        // GIL: trivial - one value onto the queue and one command, no rebuild
         .def(
             "set_param",
             [](EngineHandle& self, ProjectHandle& project, const std::string& path, float value) {
@@ -169,6 +180,7 @@ void defineEngine(py::module_& m) {
             py::arg("project"), py::arg("path"), py::arg("value"),
             "A knob turn: the edit goes into the project and its undo history, and the value "
             "straight to the audio thread, with no rebuild.")
+        // GIL: trivial - a copy of a few dozen floats per strip
         .def(
             "levels",
             [](EngineHandle& self) {
@@ -198,6 +210,7 @@ void defineEngine(py::module_& m) {
             },
             "Every strip's latest meter reading, in one call: an N x 9 array of insert id, "
             "peak L/R, RMS L/R, momentary/short-term/integrated LUFS, and true peak.")
+        // GIL: trivial - reclaims retired snapshots; bounded and short
         .def(
             "pump", [](EngineHandle& self) { self.engine->pump(); },
             "Housekeeping for a UI timer: reclaim retired snapshots, resend anything the queue "
@@ -218,6 +231,7 @@ void defineEngine(py::module_& m) {
                        1e6;
             },
             "The slowest audio callback since the stream started, in milliseconds.");
+    defineEngineFrame(engine);
 }
 
 } // namespace

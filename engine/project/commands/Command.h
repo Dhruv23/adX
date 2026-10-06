@@ -76,6 +76,7 @@ enum class CommandId : std::uint16_t {
     kSetNoteSlide,
     kSetPitchCurve,
     kSetLyric,
+    kEditNotes,
 
     kAddPlaylistTrack,
     kRemovePlaylistTrack,

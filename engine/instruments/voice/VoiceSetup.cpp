@@ -227,6 +227,49 @@ void configureVoice(VoiceInstrument& node, const project::Channel& channel,
     node.setNotes(std::move(table), pins.release());
 }
 
+std::vector<std::string> resolvedAliases(const project::Project& project,
+                                         const project::Channel& channel,
+                                         const project::NoteClip& clip) {
+    std::vector<std::string> out(clip.notes.size());
+    const std::filesystem::path path = bankPath(channel, &project.resources);
+    const std::shared_ptr<const Voicebank> bank = path.empty() ? nullptr : loadVoicebank(path);
+    if (bank == nullptr) {
+        return out;
+    }
+    const project::Pattern* owner = nullptr;
+    for (const project::Pattern& pattern : project.patterns) {
+        if (pattern.clipFor(channel.id) == &clip) {
+            owner = &pattern;
+        }
+    }
+    const core::Ticks at = owner == nullptr ? core::Ticks{0} : placementOf(project, owner->id);
+    const auto msAt = [&](core::Ticks tick) { return 1000.0 * project.tempo.secondsAt(at + tick); };
+    const auto lyricOf = [&clip](const project::Note& note) {
+        const project::NoteExtras* extras = clip.extrasFor(note.id);
+        return extras != nullptr && !extras->lyric.empty() ? extras->lyric
+                                                           : std::string(kDefaultLyric);
+    };
+    std::vector<std::size_t> order(clip.notes.size());
+    for (std::size_t i = 0; i < order.size(); ++i) {
+        order[i] = i;
+    }
+    std::ranges::sort(order, [&clip](std::size_t a, std::size_t b) {
+        return project::noteOrderBefore(clip.notes[a], clip.notes[b]);
+    });
+    for (std::size_t n = 0; n < order.size(); ++n) {
+        const project::Note& note = clip.notes[order[n]];
+        const project::Note* previous = n > 0 ? &clip.notes[order[n - 1]] : nullptr;
+        const bool joined =
+            previous != nullptr && msAt(note.start) - msAt(previous->end()) < kLegatoMs;
+        const OtoEntry* entry =
+            resolveAlias(*bank, lyricOf(note), joined ? lyricOf(*previous) : std::string{});
+        if (entry != nullptr) {
+            out[order[n]] = entry->alias;
+        }
+    }
+    return out;
+}
+
 bool voiceMatches(const VoiceInstrument& node, const project::Channel& channel,
                   const project::Project* project, const project::Resources* resources) {
     const VoicePins* pins = node.pins();

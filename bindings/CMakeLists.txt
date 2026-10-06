@@ -2,6 +2,9 @@ pybind11_add_module(adx_engine MODULE
     module.cpp
     audio.cpp
     format.cpp
+    geometry.cpp
+    meters.cpp
+    notes.cpp
     project.cpp
     render.cpp
     transport.cpp
@@ -13,3 +16,6 @@ adx_set_warnings(adx_engine)
 # module lands beside the adx/ package and imports as a top-level `adx_engine`
 # (phase_0.md §3.6).
 install(TARGETS adx_engine DESTINATION .)
+
+# The scene-graph plugin. Optional: it needs a Qt C++ SDK (bindings/qml/CMakeLists.txt).
+add_subdirectory(qml)
