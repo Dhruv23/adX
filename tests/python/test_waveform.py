@@ -25,7 +25,9 @@ def ten_minutes(tmp_path_factory: pytest.TempPathFactory) -> pathlib.Path:
     path = tmp_path_factory.mktemp("audio") / "ten_minutes.wav"
     frames = RATE * 60 * MINUTES
     t = np.arange(frames, dtype=np.float64) / RATE
-    signal = 0.8 * np.sin(2 * np.pi * (110.0 + t * 0.5) * t) * (0.5 + 0.5 * np.sin(2 * np.pi * 0.2 * t))
+    signal = (
+        0.8 * np.sin(2 * np.pi * (110.0 + t * 0.5) * t) * (0.5 + 0.5 * np.sin(2 * np.pi * 0.2 * t))
+    )
     with wave.open(str(path), "wb") as out:
         out.setnchannels(1)
         out.setsampwidth(2)
@@ -63,7 +65,7 @@ def test_ten_minute_file_every_zoom(ten_minutes: pathlib.Path) -> None:
     assert not failed
     assert frames == RATE * 60 * MINUTES
     assert rate == RATE
-    view._poll_peaks()  # noqa: SLF001 - the view's own poll, made once more after completion
+    view._poll_peaks()
 
     # Every zoom from the whole file down to a few hundred samples on screen.
     worst_ms = 0.0

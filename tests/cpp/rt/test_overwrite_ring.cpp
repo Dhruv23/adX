@@ -2,6 +2,7 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <thread>
@@ -78,30 +79,55 @@ TEST_CASE("overwrite_ring_readLatest_caps_at_capacity", "[rt]") {
 }
 
 TEST_CASE("overwrite_ring_concurrent", "[rt][.slow]") {
-    // A writer at audio rate and a reader at UI rate, for a few seconds. The
-    // assertion is not "the reader saw everything" - it is allowed to miss data - but
-    // that everything it did see was a contiguous, non-decreasing run of the ramp.
-    // A torn frame or a mis-ordered window would break that.
+    // A writer at audio rate and a reader at UI rate, for a few seconds (phase_1.md:
+    // "1 writer at 48 kHz + 1 reader at 60 Hz"). The assertion is not "the reader saw
+    // everything" - it is allowed to miss data - but that everything it did see was a
+    // contiguous, non-decreasing run of the ramp. A torn frame or a mis-ordered window
+    // would break that.
+    //
+    // The ring's contract allows one exception: a reader overtaken mid-copy may see a
+    // seam. A read is counted as overtaken when the writer advanced by more than the
+    // ring's spare capacity while it copied; those reads are excluded from the
+    // contiguity check, and must be rare. The writer used to spin unthrottled - millions
+    // of frames a second, not 48 kHz - which made overtakes routine on a loaded CI
+    // runner and failed this test there (CI run 37502991839, Release).
     auto ring = std::make_unique<OverwriteRing<RampFrame, 8192>>();
     std::atomic<bool> running{true};
 
     std::thread writer([&] {
+        using Clock = std::chrono::steady_clock;
+        constexpr std::uint64_t kBlock = 256; // 5.33 ms at 48 kHz
+        const auto period = std::chrono::nanoseconds(kBlock * 1'000'000'000ULL / 48'000ULL);
+        auto next = Clock::now();
         std::uint64_t i = 0;
         while (running.load(std::memory_order_acquire)) {
-            ring->write(RampFrame{.index = i});
-            ++i;
+            for (std::uint64_t k = 0; k < kBlock; ++k) {
+                ring->write(RampFrame{.index = i});
+                ++i;
+            }
+            next += period;
+            std::this_thread::sleep_until(next);
         }
     });
 
     bool contiguous = true;
+    int overtaken = 0;
+    int reads = 0;
     std::uint64_t lastSeen = 0;
     std::array<RampFrame, 512> window{};
     for (int read = 0; read < 180 && contiguous; ++read) { // ~3 s at 60 Hz
+        const std::uint64_t before = ring->framesWritten();
         const std::size_t got = ring->readLatest(window.data(), window.size());
-        for (std::size_t i = 1; i < got; ++i) {
-            if (window[i].index != window[i - 1].index + 1) {
-                contiguous = false;
-                break;
+        const std::uint64_t after = ring->framesWritten();
+        ++reads;
+        if (after - before > OverwriteRing<RampFrame, 8192>::capacity() - got) {
+            ++overtaken; // the documented seam case: nothing to check in this window
+        } else {
+            for (std::size_t i = 1; i < got; ++i) {
+                if (window[i].index != window[i - 1].index + 1) {
+                    contiguous = false;
+                    break;
+                }
             }
         }
         if (got > 0) {
@@ -114,6 +140,8 @@ TEST_CASE("overwrite_ring_concurrent", "[rt][.slow]") {
     running.store(false, std::memory_order_release);
     writer.join();
 
+    INFO(overtaken << " of " << reads << " reads were overtaken by the writer");
     CHECK(contiguous);
+    CHECK(overtaken * 10 <= reads);
     CHECK(lastSeen > 0);
 }
