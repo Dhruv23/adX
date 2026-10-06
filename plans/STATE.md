@@ -87,7 +87,7 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 2 — Project model, commands, `.adx` v2 | L | **Done** 2026-09-25 (CI found one clang-tidy finding; fixed in Phase 3) |
 | 3 — Audio graph & scheduling | L | **Done** 2026-10-01 (CI green, run 36835905774) |
 | 4 — Instruments & effects | XL | **Done** 2026-10-04 (CI green, run 37269752424; full check run 37273504347) |
-| 5 — Frontend foundation | L | Implemented 2026-10-06; every §6 box observed locally; CI pending (P5-0) |
+| 5 — Frontend foundation | L | **Done** 2026-10-06 (CI green, run 37509766570; full check pending, P5-0) |
 | 6 — The DAW proper | XL | Not started |
 | 7 — Text-first layer | M | Not started |
 | 8 — Audio & export | M | Not started |
@@ -557,15 +557,15 @@ channel and insert gain/pan/width.
 
 ---
 
-## [ ] Phase 5 — Frontend foundation · L
+## [x] Phase 5 — Frontend foundation · L
 
 | | |
 |---|---|
 | **Plan** | [phase_5.md](phase_5.md) |
 | **Entry** | Phase 4 Tranche A complete ([phase_4.md](phase_4.md) §3) |
 | **Done when** | [phase_5.md](phase_5.md) §6 — **including the frame-rate acceptance step** |
-| **Status** | Implemented 2026-10-06. Every §6 box observed locally, the frame-rate acceptance step included; CI not yet seen (P5-0) |
-| **Completed** | — |
+| **Status** | Done (2026-10-06). Every §6 box observed locally, the frame-rate acceptance step included; CI green on all three jobs: run 37509766570 at `6338bda`. Full check: on the `phase-5` tag (P5-0) |
+| **Completed** | 2026-10-06 |
 
 > Where FINAL_PLAN §2.2's bet is proven or disproven. If the three rules do not
 > hold on the piano roll, that is a FINAL_PLAN-level finding, not an open issue
@@ -606,9 +606,9 @@ Inherited issues: **P4-1** fixed (`Engine.frame()` fills a caller-owned array);
 
 **Open issues for Phase 6:**
 
-- **P5-0** · `BLOCKER` for marking this phase done · CI has not run on the Phase 5
-  commit: per-push CI (which now fetches the Qt SDK, builds the plugin and runs the
-  rules gate) and the full check on the `phase-5` tag. Fixed when: both are seen green
+- **P5-0** · Per-push CI is **green**: run 37509766570 at `6338bda`, all three jobs
+  (it fetches the Qt SDK, builds the plugin and runs the rules gate). Still open: the
+  full check on the `phase-5` tag. Fixed when: both are seen green
   and recorded here. First push (`406f1e9`, run 37502991839): red on all three jobs -
   `ruff` on `test_waveform.py` (written after the local format pass; the local run
   excluded nothing CI checks, but was run before that file existed), and on Release the

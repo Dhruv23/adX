@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Implemented 2026-10-06; every §6 box observed locally; CI pending (P5-0, plans/STATE.md) |
+| **Status** | Done 2026-10-06; every §6 box observed locally; CI green (run 37509766570) |
 | **Governs** | `app/adx/` shell, `engine/geometry/`, the pybind11 zero-copy surface, the QML scene-graph pipeline |
 | **FINAL_PLAN refs** | §2.2 in full (all three rules), §3.1 (ClipPeakCache), §3.3.10, §5.1 piano roll, §7 Phase 5 |
 | **Entry criteria** | [phase_4.md](phase_4.md) Tranche A complete (§3 of that file). Tranches B and C may run in parallel with this phase. |
@@ -482,7 +482,8 @@ half is P5-0 in plans/STATE.md.
       editor: `test_piano_roll_tools_emit_one_command` and
       `test_piano_roll_undo_restores` (11 gestures each; undo restores the text byte for
       byte).
-- [x] Every `perf_geometry_budgets` budget met - locally on Release (CI: P5-0):
+- [x] Every `perf_geometry_budgets` budget met - on Release, locally and in CI (run
+      37509766570, which runs the C++ budgets and `test_perf_geometry.py` in every job):
 
       | Measurement | Budget | Measured (Release) |
       |---|---|---|
