@@ -143,3 +143,19 @@ def studio(quick: None, tmp_path: pathlib.Path) -> Iterator[object]:
     main.saved_revision = main.project.revision() if main.project else 0
     main.close()
     dispose(main)
+
+
+def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    """On GitHub Actions, each failure is also an ``::error`` annotation: it shows on the
+    run's summary page, and the public API returns it, so a failure can be read without
+    downloading the (authenticated) job log."""
+    if not os.environ.get("GITHUB_ACTIONS") or not report.failed:
+        return
+    path, line, _name = report.location
+    text = str(report.longrepr) if report.longrepr is not None else "failed"
+    lines = [ln for ln in text.splitlines() if ln.startswith("E ")] or text.splitlines()[-3:]
+    message = " | ".join(ln.strip() for ln in lines[:6])[:900]
+    # Workflow commands escape %, CR and LF in the message.
+    message = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    where = f"file={path.replace(chr(92), '/')},line={(line or 0) + 1}"
+    print(f"\n::error {where}::{report.nodeid} [{report.when}]: {message}")
