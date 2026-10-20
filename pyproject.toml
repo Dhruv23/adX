@@ -13,7 +13,10 @@ readme = "README.md"
 requires-python = ">=3.12"
 dynamic = ["version"]
 dependencies = [
-    "PySide6>=6.7",
+    # Exactly the Qt that tools/fetch_qt.py's SDK builds the adx_quick plugin against:
+    # the plugin's ABI is Qt's, so a newer PySide6 cannot load it (test_bridge_contract).
+    # Bump both together. A floating ">=" broke CI the day 6.12.0 shipped.
+    "PySide6==6.11.2",
     "numpy>=1.26",
 ]
 
