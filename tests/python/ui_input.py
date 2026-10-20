@@ -98,5 +98,18 @@ __all__ = [
     "ready",
     "release",
     "render",
+    "user_press",
     "write_wav",
 ]
+
+
+def user_press(window: MainWindow) -> None:
+    """A real mouse press and release somewhere inert in the window (its status bar):
+    what the window's event filter sees before any knob drag or click, which starts a
+    new gesture - a new history entry - however slowly the gesture then runs."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    target = window.statusBar()
+    QTest.mousePress(target, Qt.MouseButton.LeftButton)
+    QTest.mouseRelease(target, Qt.MouseButton.LeftButton)

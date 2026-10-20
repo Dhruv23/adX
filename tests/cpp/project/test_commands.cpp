@@ -130,6 +130,14 @@ TEST_CASE("a sealed gesture does not coalesce into the last", "[commands]") {
     move(40);
     move(60);
     CHECK(scene.stack.undoDepth() == before + 2);
+    // Once sealed, a gesture is its own window: a slow drag (frames 2 s apart) is still
+    // one step, and only the next press splits it.
+    move(2060);
+    move(4060);
+    CHECK(scene.stack.undoDepth() == before + 2);
+    scene.stack.sealCoalescing();
+    move(4070);
+    CHECK(scene.stack.undoDepth() == before + 3);
 }
 
 TEST_CASE("a group is one undo step and reverts in reverse order", "[commands]") {

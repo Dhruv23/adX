@@ -460,13 +460,19 @@ fixed what those found. What changed against the plan:
    `Engine.frame_with_meters` reads every level *and* builds all strips' vertices in
    the one engine call the frame clock makes; the mixer uploads the result. Phase 5's
    "meters" panel is folded into the mixer.
-3. **A press seals coalescing.** Phase 2's coalescing is a 500 ms window, so two quick
-   gestures (three quick clicks in a lane; a drag straight after another) merged into
-   one undo step. `CommandStack::sealCoalescing()` (tested: `a sealed gesture does not
-   coalesce into the last`) is called on every press: `GeometryView.gesture_started`
-   and the piano roll's for the hot surfaces, an application event filter for every
-   other widget, and before discrete toolbar operations. Within a gesture, commands
-   still merge.
+3. **Gestures, not the clock, bound undo coalescing.** Phase 2's coalescing is a 500 ms
+   window, which is wrong both ways: two quick gestures (three quick clicks in a lane; a
+   drag straight after another) merged into one undo step, and on a slow machine one
+   drag split into many - which is how the first Phase 6 CI run (39403570590) failed
+   pytest on all three jobs while passing locally (reproduced by slowing every change to
+   0.6 s). `CommandStack::sealCoalescing()` marks a gesture's start: every mouse press,
+   and every key press that is not auto-repeat - `GeometryView.gesture_started` and the
+   piano roll's for the hot surfaces, an application event filter for every other
+   widget, and before discrete toolbar operations. From the first seal on, commands
+   within a gesture coalesce however long apart, and the next press always starts a new
+   entry; callers that never seal (the parser, scripts) keep the window. Tested:
+   `a sealed gesture does not coalesce into the last`, and the panel tests under a
+   0.6 s-per-change slowdown.
 4. **An automation drag lost its selection at the first write.** The panel rebuilds its
    lane sources after every change and the editor compared them by identity, so a
    multi-point drag moved its points for one frame and then wrote the originals back.

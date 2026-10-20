@@ -7,10 +7,14 @@
 //   - same CommandId,
 //   - same targetKey(),
 //   - no beginGroup boundary between them,
-//   - less than kCoalesceWindow since the previous execute.
+//   - less than kCoalesceWindow since the previous execute - unless gestures are
+//     sealed (below), in which case the gesture, not the clock, is the boundary.
 //
 // A note drag becomes one history entry. A drag, a pause, and another drag become
-// two (phase_2.md §4.9).
+// two (phase_2.md §4.9). A UI that knows where gestures begin says so with
+// sealCoalescing() on every press (phase_6.md §10): from the first seal on, a gesture
+// coalesces however slowly its frames arrive, and the next press always starts a new
+// entry. Callers that never seal - the parser, scripts, tests - keep the time window.
 #pragma once
 
 #include <chrono>
@@ -72,12 +76,13 @@ public:
         return m_groupDepth > 0;
     }
 
-    /// The next command starts a fresh history entry, however soon it comes. A UI calls
-    /// this when a new gesture begins (a press), so two quick drags are two undo steps
-    /// rather than one: the time window alone cannot tell a drag from two drags made
-    /// within kCoalesceWindow of each other.
+    /// A new gesture begins (a press): the next command starts a fresh history entry,
+    /// however soon it comes, and - from the first call on - commands within a gesture
+    /// coalesce however long apart they are. The time window alone cannot tell a drag
+    /// from two quick drags, nor a slow machine's drag from two drags.
     void sealCoalescing() noexcept {
         m_coalesceBarrier = true;
+        m_gestureSealed = true;
     }
 
     [[nodiscard]] std::span<const HistoryEntry> history() const noexcept {
@@ -137,6 +142,8 @@ private:
     /// Set by beginGroup/endGroup so a command executed just after a transaction
     /// cannot merge into the one just before it.
     bool m_coalesceBarrier{true};
+    /// A UI has sealed a gesture at least once: gestures, not the clock, bound coalescing.
+    bool m_gestureSealed{false};
 
     std::uint64_t m_revision{0};
     /// dirty mask per revision, oldest first, paired with the revision it produced.

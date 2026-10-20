@@ -7,6 +7,7 @@ from PySide6.QtTest import QTest
 
 from adx.mainwindow import MainWindow
 from adx.panels.history.panel import HistoryPanel
+from ui_input import user_press
 
 
 def click_row(history: HistoryPanel, row: int) -> None:
@@ -41,7 +42,8 @@ def test_history_jump(studio: MainWindow) -> None:
 
 
 def test_history_coalesces_a_drag(studio: MainWindow) -> None:
-    # A knob drag is many set_param calls and one history row.
+    # A knob drag is a press, then many set_param calls: one history row.
+    user_press(studio)
     for value in (0.1, 0.2, 0.3, 0.4, 0.5):
         studio.session.set_param("channel.Lead.volume", value)
     done, _undone = studio.project.history_info()

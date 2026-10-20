@@ -16,6 +16,7 @@ from adx.widgets.combo import ParamCombo
 from adx.widgets.fader import ValueFader
 from adx.widgets.knob import Knob
 from adx.widgets.numeric_drag import NumericDrag
+from ui_input import user_press
 
 
 def catalog(kind: str) -> list[dict[str, Any]]:
@@ -72,6 +73,7 @@ def test_a_control_turns_its_parameter(studio: MainWindow) -> None:
     path = str(feedback.property("paramPath"))
     assert path == f"insert.{master}.slot.{slot}.feedback"
     depth = studio.project.undo_depth()
+    user_press(studio)  # the press on the control
     for value in (0.2, 0.3, 0.4):
         feedback.value_changed.emit(value)
     assert abs(studio.project.param_value(path) - 0.4) < 1e-6

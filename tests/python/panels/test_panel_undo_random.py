@@ -19,7 +19,7 @@ from adx.panels.channel_rack.channel_row import ROW_HEIGHT
 from adx.panels.geometry_view import Pointer
 from adx.panels.params import GenericEditor
 from adx.selection import Context, Kind
-from ui_input import point, ready
+from ui_input import point, ready, user_press
 
 STEPS = 80
 
@@ -80,7 +80,7 @@ def operations(studio: MainWindow, rng: random.Random) -> list[Callable[[], None
         value = low + (high - low) * rng.random()
         if str(descriptor["scale"]) == "stepped" or str(descriptor["unit"]) in ("count", "bool"):
             value = float(round(value))
-        session.seal()  # a press on the knob
+        user_press(studio)  # the press on the knob
         editor.target.turn(name, value)
 
     def automate() -> None:
@@ -105,7 +105,7 @@ def operations(studio: MainWindow, rng: random.Random) -> list[Callable[[], None
 
     def channel_volume() -> None:
         rows = studio.channel_rack.rows
-        session.seal()
+        user_press(studio)  # the press on the knob
         studio.channel_rack._field_changed(rows[-1].channel, "volume", rng.random())
 
     return [

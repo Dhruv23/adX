@@ -14,7 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QEvent, QObject, QSettings, Qt, QTimer
-from PySide6.QtGui import QCloseEvent, QShowEvent
+from PySide6.QtGui import QCloseEvent, QKeyEvent, QShowEvent
 from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow, QMessageBox
 
 from adx import __version__, engine_bridge
@@ -168,8 +168,15 @@ class MainWindow(QMainWindow):
             app.installEventFilter(self)
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt's name
-        """Seal coalescing on every mouse press anywhere in the window."""
-        if event.type() == QEvent.Type.MouseButtonPress:
+        """Every press in the window starts a gesture, so a new history entry: a mouse
+        press, or a key press that is not auto-repeat (holding a nudge key is one step).
+        Within a gesture, edits coalesce however slowly the frames come."""
+        kind = event.type()
+        if kind == QEvent.Type.MouseButtonPress or (
+            kind == QEvent.Type.KeyPress
+            and isinstance(event, QKeyEvent)
+            and not event.isAutoRepeat()
+        ):
             self.session.seal()
         return super().eventFilter(watched, event)
 

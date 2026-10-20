@@ -88,8 +88,8 @@ void CommandStack::push(std::unique_ptr<Command> command, Clock::time_point now)
     // exists.
     m_undone.clear();
 
-    const bool withinWindow =
-        m_hasLastExecute && (now - m_lastExecute) < kCoalesceWindow && !m_coalesceBarrier;
+    const bool withinWindow = m_hasLastExecute && !m_coalesceBarrier &&
+                              (m_gestureSealed || (now - m_lastExecute) < kCoalesceWindow);
     if (withinWindow && !m_done.empty()) {
         Command& top = *m_done.back();
         if (top.kind() == command->kind() && top.targetKey() == command->targetKey() &&
