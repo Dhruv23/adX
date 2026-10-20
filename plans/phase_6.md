@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Built 2026-10-20; every automated §6 box observed locally; **the human gate (§6 box 2) is open** and CI is pending - see plans/STATE.md (P6-0, P6-1) |
+| **Status** | Built 2026-10-20; every automated §6 box observed locally; per-push CI green (run 39422153732); **the human gate (§6 box 2) is open** - see plans/STATE.md (P6-0, P6-1) |
 | **Governs** | every remaining panel in `app/adx/panels/`, their geometry builders, the generic parameter-editor system |
 | **FINAL_PLAN refs** | §3.3.10, §5.1 (playlist, automation, history), §5.2 mixer UI, §5.10 meters, §7 Phase 6 |
 | **Entry criteria** | [phase_5.md](phase_5.md) §6 complete, **including the frame-rate acceptance step** |
@@ -369,13 +369,15 @@ half is P6-0 in plans/STATE.md.
 - [x] Layout persists and resets: `test_layout_persists_and_resets` (a floated mixer,
       a hidden panel and a moved browser come back in a second window over the same
       settings; reset docks every panel in its default area).
-- [ ] All Phase 5 CI checks still pass with ~20 more panels in the tree. *Locally:*
+- [x] All Phase 5 CI checks still pass with ~20 more panels in the tree. *In CI:* run
+      39422153732 at `094bc87`, all three jobs green (after correction 15). *Locally:*
       every one does - 337 C++ cases on each of Debug, RelWithDebInfo and Release;
       clang-tidy clean over all 232 files on all three compile databases; clang-format,
       ruff, ruff format, mypy `--strict` (108 files), headers, format-safety, positions,
       dsp-math and `rules` (now 6 checks, `no_panel_caches_project_state` among them);
-      pytest 156 tests green, both GPU tests included (154 without them, as CI runs). The slow suite in Debug with full evidence: passed in 944.11 s. *In
-      CI:* P6-0.
+      pytest 156 tests green, both GPU tests included (154 without them, as CI runs).
+      The slow suite in Debug with full evidence: passed in 944.11 s. The full check
+      (clang-tidy over every file in Debug and Release, the 10-minute fuzz): P6-0.
 - [x] FINAL_PLAN.md §10 Phase 6 row updated.
 
 ### The §5 tests, where they live
@@ -463,9 +465,10 @@ fixed what those found. What changed against the plan:
 3. **Gestures, not the clock, bound undo coalescing.** Phase 2's coalescing is a 500 ms
    window, which is wrong both ways: two quick gestures (three quick clicks in a lane; a
    drag straight after another) merged into one undo step, and on a slow machine one
-   drag split into many - which is how the first Phase 6 CI run (39403570590) failed
-   pytest on all three jobs while passing locally (reproduced by slowing every change to
-   0.6 s). `CommandStack::sealCoalescing()` marks a gesture's start: every mouse press,
+   drag split into many (reproduced by slowing every change to 0.6 s: four panel tests
+   failed). This was the first suspect when CI's pytest failed while passing locally;
+   it was real, but CI's failures turned out to be correction 15's.
+   `CommandStack::sealCoalescing()` marks a gesture's start: every mouse press,
    and every key press that is not auto-repeat - `GeometryView.gesture_started` and the
    piano roll's for the hot surfaces, an application event filter for every other
    widget, and before discrete toolbar operations. From the first seal on, commands
@@ -523,3 +526,10 @@ fixed what those found. What changed against the plan:
     (`test_the_window_does_not_start_in_a_text_field`). Phase 5's measurement could not
     see this: it drove the roll in a bare window, not the application. The mixer driver
     drives the whole application.
+15. **PySide6 drifted under the build.** `PySide6>=6.7` let CI install 6.12.0, released
+    after Phase 5, while `tools/fetch_qt.py` builds the plugin against 6.11.2: the two
+    contract tests that guard this failed on every job (runs 39403570590, 39413413543 and
+    39418375742). The job logs need a token, so the cause was invisible until
+    `tests/python/conftest.py` learned to report each failure as a workflow annotation,
+    which the public API returns. PySide6 is now pinned exactly; bump it with
+    `fetch_qt.DEFAULT_VERSION`.

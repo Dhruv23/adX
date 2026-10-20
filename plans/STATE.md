@@ -88,7 +88,7 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 3 — Audio graph & scheduling | L | **Done** 2026-10-01 (CI green, run 36835905774) |
 | 4 — Instruments & effects | XL | **Done** 2026-10-04 (CI green, run 37269752424; full check run 37273504347) |
 | 5 — Frontend foundation | L | **Done** 2026-10-06 (CI green, run 37509766570; full check run 37512932612) |
-| 6 — The DAW proper | XL | **Built** 2026-10-20; human gate (P6-1) and CI (P6-0) open |
+| 6 — The DAW proper | XL | **Built** 2026-10-20 (CI green, run 39422153732); human gate (P6-1) open |
 | 7 — Text-first layer | M | Not started |
 | 8 — Audio & export | M | Not started |
 | 9 — Plugins & MIDI | L | Not started |
@@ -670,7 +670,7 @@ the meter frame counted at exactly one call) and **P3-5** (decided: no flush; te
 | **Plan** | [phase_6.md](phase_6.md) |
 | **Entry** | Phase 5 §6 complete, including the frame-rate acceptance step |
 | **Done when** | [phase_6.md](phase_6.md) §6 |
-| **Status** | Built (2026-10-20). Every automated §6 box observed locally, the 200-insert frame-rate step included. **Not done:** the human gate (P6-1) is open, and CI is pending (P6-0) |
+| **Status** | Built (2026-10-20). Every automated §6 box observed locally, the 200-insert frame-rate step included; per-push CI green (run 39422153732 at `094bc87`). **Not done:** the human gate (P6-1) is open; the full check is pending (P6-0) |
 | **Completed** | — |
 
 **What exists.** The whole §2 manifest: channel rack (a C++ step grid, 64x64 with no
@@ -683,7 +683,7 @@ peak, engine-side), browser with typed drag-and-drop, history, inspector, prefer
 and autosave, one action registry with a remappable keymap, one global selection with
 delete/copy/paste/duplicate over all six kinds, and the clipboard as `.adx` text.
 Engine work under it: arrangement commands, controllers, audition voices and the
-metronome, the geometry builders. Fourteen corrections to the plan:
+metronome, the geometry builders. Fifteen corrections to the plan:
 [phase_6.md](phase_6.md) §10.
 
 **The gate.** `test_workflow_end_to_end` writes, arranges, mixes and exports a 32-bar
@@ -709,9 +709,13 @@ The rest re-carried below with reasons.
 
 **Open issues for Phase 7:**
 
-- **P6-0** · CI not yet seen for this phase. Fixed when: per-push CI is green on all
-  three jobs at the Phase 6 commit and the full check is green on the `phase-6` tag,
-  both recorded here.
+- **P6-0** · Per-push CI **green**: run 39422153732 at `094bc87`, all three jobs. The
+  three runs before it were red on pytest only, every job, for one cause: PySide6 6.12.0
+  had shipped and the floating `>=6.7` let CI install it against the 6.11.2 Qt SDK the
+  plugin builds with (phase_6.md §10, correction 15); now pinned. The full check runs on
+  the `phase-6-built` tag (a `phase-*` tag, so it triggers the workflow) - `phase-6`
+  itself is kept for the commit that closes P6-1. Fixed when: the full check on
+  `phase-6-built` is green and recorded here.
 - **P6-1** · `BLOCKER` · The human gate (phase_6.md §6 box 2): nobody has made a piece
   of music with the build. Phase 7's entry is "Phase 6 §6 complete", so Phase 7 waits
   on it. An agent cannot close it. Fixed when: the user makes a track start to finish
