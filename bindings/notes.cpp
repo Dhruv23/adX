@@ -124,13 +124,6 @@ using NoteArray = py::object;
     return notes;
 }
 
-[[nodiscard]] std::string colorText(const adx::project::Color& color) {
-    std::array<char, 8> text{};
-    static_cast<void>(std::snprintf(text.data(), text.size(), "#%02x%02x%02x", color.red,
-                                    color.green, color.blue));
-    return {text.data()};
-}
-
 [[nodiscard]] const adx::project::NoteClip*
 clipNamed(const ProjectHandle& handle, const std::string& pattern, const std::string& channel) {
     return patternNamed(handle.project, pattern).clipFor(channelNamed(handle.project, channel).id);

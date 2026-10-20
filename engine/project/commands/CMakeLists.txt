@@ -1,4 +1,5 @@
 target_sources(adx_engine_static PRIVATE
+    ArrangeCommands.cpp
     AutomationCommands.cpp
     ChannelCommands.cpp
     CommandStack.cpp

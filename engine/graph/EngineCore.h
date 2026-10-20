@@ -17,6 +17,7 @@
 #include <cstdint>
 
 #include "engine/audio/AudioBackend.h"
+#include "engine/graph/Audition.h"
 #include "engine/graph/Scheduler.h"
 #include "engine/project/ParamRef.h"
 #include "engine/project/Snapshot.h"
@@ -37,6 +38,13 @@ enum class MessageKind : std::uint8_t {
     State,
     Loop,
     Rate,
+    /// Play `tickA` (a pitch) at velocity `value` for `tickB` frames through channel
+    /// `param.owner`, outside the arrangement (P5-1).
+    Audition,
+    /// Release every audition note.
+    AuditionStop,
+    /// The click: `flag` on or off, a beat every `tickA` ticks, `tickB` beats a bar.
+    Metronome,
 };
 
 /// Everything that crosses from the main thread to the audio thread. Trivially
@@ -108,6 +116,8 @@ private:
     rt::SpscRing<EngineMessage, kQueueCapacity> m_queue;
     project::Snapshot* m_current{nullptr};
     Scheduler m_scheduler;
+    Audition m_audition;
+    Metronome m_metronome;
     std::atomic<std::uint64_t> m_renderedRevision{0};
     std::atomic<std::uint64_t> m_swaps{0};
 };

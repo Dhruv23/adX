@@ -261,7 +261,14 @@ EventView Scheduler::eventsFor(const NodeStep& step, project::Snapshot& snapshot
                               snapshot.cursors[step.eventTrack], frames, wrapped);
     }
 
-    const std::uint32_t special = (release ? 1U : 0U) + (wrapped ? 1U : 0U);
+    const std::uint32_t channel = step.eventTrack < snapshot.trackChannels.size()
+                                      ? snapshot.trackChannels[step.eventTrack]
+                                      : kNone;
+    std::uint32_t auditions = 0;
+    for (const AuditionEvent& audition : m_audition) {
+        auditions += audition.channel == channel ? 1U : 0U;
+    }
+    const std::uint32_t special = (release ? 1U : 0U) + (wrapped ? 1U : 0U) + auditions;
     const std::uint32_t count = (range.end - range.begin) + special;
     if (count == 0) {
         return {};
@@ -299,6 +306,12 @@ EventView Scheduler::eventsFor(const NodeStep& step, project::Snapshot& snapshot
                                        .kind = BlockEventKind::LoopWrap,
                                        .pitch = 0,
                                        .velocity = 0};
+    }
+    // Auditions at offset 0, before the arrangement's events: sorted, as a node expects.
+    for (const AuditionEvent& audition : m_audition) {
+        if (audition.channel == channel) {
+            events[written++] = audition.event;
+        }
     }
     if (step.eventTrack < snapshot.eventTracks.size()) {
         written =
@@ -419,8 +432,13 @@ void Scheduler::runPiece(project::Snapshot& snapshot, transport::TransportSet& t
             .params = snapshot.params.subspan(step.paramBase, step.paramCount),
             .automation = automation,
             .arena = arena,
+            .tuningCents = snapshot.tuningCents,
         };
         step.node->process(context);
+        if (float value = 0.0F;
+            step.modulates < snapshot.params.size() && step.node->modulation(value)) {
+            snapshot.params[step.modulates] = value;
+        }
 
         // Push this node's output into every consumer's accumulator, now, in a fixed
         // order. Summation order is part of the output's bits, which is why it is
@@ -502,6 +520,8 @@ void Scheduler::render(project::Snapshot& snapshot, transport::TransportSet& tra
         }
 
         runPiece(snapshot, transport, arena, out, done, piece, outChannels);
+        // Auditions start in the block's first piece only.
+        m_audition = {};
 
         for (std::uint32_t s = 0; s < transport::kMaxTimeSources; ++s) {
             const transport::TimeSourceId id{s};

@@ -91,6 +91,18 @@ public:
     void setLoop(transport::LoopRegion loop);
     void setRate(double rate);
 
+    // --- outside the arrangement ---
+
+    /// Plays one note through `channel`'s instrument for `seconds`, now, without a
+    /// snapshot rebuild and whether or not the transport rolls (P5-1).
+    void audition(core::ChannelId channel, std::uint8_t pitch, std::uint8_t velocity,
+                  double seconds);
+    /// Releases every audition note.
+    void stopAudition();
+    /// The click: on every `beat` ticks while the arrangement rolls, the first of every
+    /// `beatsPerBar` higher. Realtime only - nothing renders it offline (P5-3).
+    void setMetronome(bool enabled, core::Ticks beat, std::uint32_t beatsPerBar);
+
     /// Where the audio thread says the arrangement is, as of its last block. O(1).
     [[nodiscard]] core::Ticks positionTicks() const noexcept;
     [[nodiscard]] std::int64_t positionSamples() const noexcept;

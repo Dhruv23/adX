@@ -1,4 +1,5 @@
 target_sources(adx_engine_static PRIVATE
+    Audition.cpp
     BufferPool.cpp
     CompiledGraph.cpp
     DelayLine.cpp
@@ -12,6 +13,7 @@ target_sources(adx_engine_static PRIVATE
     nodes/ChannelNode.cpp
     nodes/InsertNode.cpp
     nodes/MeterNode.cpp
+    nodes/PeakControllerNode.cpp
     nodes/SendNode.cpp
     nodes/SlotNode.cpp
     nodes/SumNode.cpp

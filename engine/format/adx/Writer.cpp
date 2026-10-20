@@ -411,9 +411,9 @@ void writePlaylistItem(Emitter& emitter, const Project& project,
     }
 }
 
-void writePlaylist(Emitter& emitter, const Project& project) {
-    emitter.section("[PLAYLIST]");
-    for (const project::PlaylistTrack& track : project.playlist.tracks) {
+void writeTracks(Emitter& emitter, const Project& project,
+                 const std::vector<project::PlaylistTrack>& tracks) {
+    for (const project::PlaylistTrack& track : tracks) {
         std::string text = "TRACK " + std::to_string(track.id.value);
         if (!track.name.empty()) {
             text += " name=";
@@ -424,6 +424,12 @@ void writePlaylist(Emitter& emitter, const Project& project) {
             text += std::to_string(track.height);
         }
         appendIfChanged(text, "mute", track.muted, false);
+        appendIfChanged(text, "solo", track.soloed, false);
+        if (track.group.valid()) {
+            text += " group=";
+            text += std::to_string(track.group.value);
+        }
+        appendIfChanged(text, "collapsed", track.collapsed, false);
         if (!(track.color == project::kDefaultColor)) {
             text += " color=";
             text += formatColor(track.color);
@@ -433,7 +439,74 @@ void writePlaylist(Emitter& emitter, const Project& project) {
             writePlaylistItem(emitter, project, item);
         }
     }
+}
+
+void writePlaylist(Emitter& emitter, const Project& project) {
+    emitter.section("[PLAYLIST]");
+    if (!project.playlist.arrangementName.empty()) {
+        emitter.line(keyValue("NAME", project.playlist.arrangementName));
+    }
+    writeTracks(emitter, project, project.playlist.tracks);
     emitResidue(emitter, project, "PLAYLIST", "");
+    // The arrangements that are not live, each in its own section of the same grammar
+    // (docs/adx-format-v2.md 7.4).
+    for (const project::Arrangement& arrangement : project.playlist.arrangements) {
+        emitter.section("[ARRANGEMENT " + arrangement.name + "]");
+        writeTracks(emitter, project, arrangement.tracks);
+        emitResidue(emitter, project, "ARRANGEMENT", arrangement.name);
+    }
+}
+
+void writeController(Emitter& emitter, const Project& project,
+                     const project::Controller& controller) {
+    using project::ControllerKind;
+    emitter.section("[CONTROLLER " + controller.name + "]");
+    emitter.line(keyValue("TYPE", project::toString(controller.kind)));
+    std::string target = project::ParamRegistry::pathOf(controller.target, project);
+    if (target.empty()) {
+        target = controller.targetPath;
+    }
+    if (!target.empty()) {
+        emitter.line(keyValue("TARGET", target));
+    }
+    const project::Controller defaults;
+    const auto number = [&emitter](std::string_view key, float value, float fallback) {
+        if (value != fallback) {
+            emitter.line(keyValue(key, formatFloat(value)));
+        }
+    };
+    switch (controller.kind) {
+    case ControllerKind::Lfo:
+        if (controller.shape != defaults.shape) {
+            emitter.line(keyValue("SHAPE", project::toString(controller.shape)));
+        }
+        if (controller.period != defaults.period) {
+            emitter.line(keyValue("PERIOD", formatDuration(controller.period, project.tempo)));
+        }
+        number("PHASE", controller.phase, defaults.phase);
+        break;
+    case ControllerKind::Envelope:
+        if (const project::Channel* source = project.find(controller.sourceChannel)) {
+            emitter.line(keyValue("SOURCE", "channel." + quoteIfNeeded(source->name)));
+        }
+        number("ATTACK", controller.attackMs, defaults.attackMs);
+        number("DECAY", controller.decayMs, defaults.decayMs);
+        number("SUSTAIN", controller.sustain, defaults.sustain);
+        number("RELEASE", controller.releaseMs, defaults.releaseMs);
+        break;
+    case ControllerKind::Peak:
+        if (controller.sourceInsert.valid()) {
+            emitter.line(
+                keyValue("SOURCE", "insert." + std::to_string(controller.sourceInsert.value)));
+        }
+        number("ATTACK", controller.attackMs, defaults.attackMs);
+        number("RELEASE", controller.releaseMs, defaults.releaseMs);
+        number("GAIN", controller.gainDb, defaults.gainDb);
+        break;
+    }
+    number("DEPTH", controller.depth, defaults.depth);
+    number("CENTER", controller.center, defaults.center);
+    emitResidue(emitter, project, "CONTROLLER", controller.name);
 }
 
 void writeMixer(Emitter& emitter, const Project& project) {
@@ -541,6 +614,9 @@ std::string write(const Project& project, const WriteOptions& options) {
     }
     writePlaylist(emitter, project);
     writeMixer(emitter, project);
+    for (const project::Controller& controller : project.controllers) {
+        writeController(emitter, project, controller);
+    }
     writeMarkers(emitter, project);
     writeUnknownSections(emitter, project);
 

@@ -64,6 +64,9 @@ struct Snapshot {
     /// The CommandStack revision this was built from.
     std::uint64_t revision{0};
     std::uint32_t sampleRate{48000};
+    /// The project's TUNING as an offset from A4 = 440 Hz, in cents: what every channel
+    /// adds to its pitch (P4-3).
+    float tuningCents{0.0F};
 
     core::TempoView tempo;
 
@@ -72,6 +75,8 @@ struct Snapshot {
     std::span<const EventTrack> eventTracks;
     /// Audio thread state: one cursor per track, for the source that drives it.
     std::span<EventCursor> cursors;
+    /// The ChannelId of each event track: where an audition note goes (Audition.h).
+    std::span<const std::uint32_t> trackChannels;
 
     std::span<const AutomationLane> automation;
 

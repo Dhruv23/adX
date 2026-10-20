@@ -1,6 +1,8 @@
 target_sources(adx_engine_static PRIVATE
     Automation.cpp
     Channel.cpp
+    Controller.cpp
+    ControllerCompile.cpp
     CurveCompile.cpp
     Diff.cpp
     EventCompile.cpp

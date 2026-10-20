@@ -543,8 +543,11 @@ graph, not about one strip. The routing graph is an arbitrary DAG — v1's
 this and the reason real submixing was impossible. A cycle is `ADX3005`, reported
 with the cycle's path in the message.
 
-The integer after `SLOT` is the slot's id, and slots process in ascending id
-order. The integer after `SEND` is the send's id. Both are project-wide rather than
+The integer after `SLOT` is the slot's id, and slots process in the order they are
+written - the id is the slot's identity, not its position, so moving an effect up
+the chain keeps its id, its state and every path naming it (Phase 6. Before it the
+order was ascending id; a file whose `SLOT` lines are already in ascending order,
+as every example and corpus file is, plays exactly as it did.) The integer after `SEND` is the send's id. Both are project-wide rather than
 per insert, because a parameter path names them directly
 (`insert.2.slot.7.mix`, `insert.2.send.3.level`) and an 8-byte `ParamRef` has room
 for one id, not two. They are written out so a path keeps meaning the same slot or

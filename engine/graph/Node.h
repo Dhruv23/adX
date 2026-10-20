@@ -95,6 +95,9 @@ struct ProcessContext {
     /// Per-callback scratch. Reset before the first node runs; anything taken from it
     /// is gone next block.
     rt::BlockArena& arena;
+    /// The project's tuning as an offset from A4 = 440 Hz, in cents. Instruments get it
+    /// through ChannelNode's per-voice pitch; nothing else needs to read it.
+    float tuningCents{0.0F};
 };
 
 /// Parameter `index` at frame `frame` of this call: the automated value when there is
@@ -139,6 +142,13 @@ public:
     virtual void reset() noexcept = 0;
 
     [[nodiscard]] virtual PortSpec ports() const noexcept = 0;
+
+    /// AUDIO THREAD. A controller node's output for the parameter it drives
+    /// (NodeStep::modulates), read right after process(). False for every other node.
+    [[nodiscard]] virtual bool modulation(float& out) const noexcept {
+        static_cast<void>(out);
+        return false;
+    }
 };
 
 } // namespace adx::graph

@@ -105,10 +105,28 @@ struct PlaylistTrack {
     Color color;
     std::uint16_t height{kDefaultTrackHeight};
     bool muted{false};
+    /// Any soloed track silences every track that is not soloed, not inside a soloed
+    /// group, and not the group of a soloed track (phase_6.md §4.1).
+    bool soloed{false};
+    /// The group this track belongs to: another track of the same playlist, or invalid
+    /// for none. A group's mute and solo apply to its members; collapsing it is drawing
+    /// only. One level: a group is not itself a member of a group.
+    core::PlaylistTrackId group;
+    bool collapsed{false};
     std::vector<PlaylistItem> items;
 
     [[nodiscard]] friend bool operator==(const PlaylistTrack&,
                                          const PlaylistTrack&) noexcept = default;
+};
+
+/// A named alternative arrangement: a whole set of tracks, swapped with the live one by
+/// one command (FINAL_PLAN §5.1, phase_6.md §4.1). Small data, and a swap is its own
+/// inverse, which makes switching trivially undoable.
+struct Arrangement {
+    std::string name;
+    std::vector<PlaylistTrack> tracks;
+
+    [[nodiscard]] friend bool operator==(const Arrangement&, const Arrangement&) noexcept = default;
 };
 
 struct Playlist {
@@ -116,9 +134,17 @@ struct Playlist {
     /// Automation lanes placed directly in the arrangement rather than inside a
     /// pattern. Referenced by AutomationRef, addressed by id.
     std::vector<AutomationClip> autoClips;
+    /// The live arrangement's name; empty until one is named.
+    std::string arrangementName;
+    /// The arrangements that are not live.
+    std::vector<Arrangement> arrangements;
 
     [[nodiscard]] const PlaylistTrack* find(core::PlaylistTrackId id) const noexcept;
     [[nodiscard]] PlaylistTrack* find(core::PlaylistTrackId id) noexcept;
+
+    /// Whether `track` plays: not muted, not in a muted group, and not silenced by a solo
+    /// elsewhere. What the snapshot builder asks of every track.
+    [[nodiscard]] bool audible(const PlaylistTrack& track) const noexcept;
 
     [[nodiscard]] friend bool operator==(const Playlist&, const Playlist&) noexcept = default;
 };

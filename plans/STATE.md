@@ -88,7 +88,7 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 3 — Audio graph & scheduling | L | **Done** 2026-10-01 (CI green, run 36835905774) |
 | 4 — Instruments & effects | XL | **Done** 2026-10-04 (CI green, run 37269752424; full check run 37273504347) |
 | 5 — Frontend foundation | L | **Done** 2026-10-06 (CI green, run 37509766570; full check run 37512932612) |
-| 6 — The DAW proper | XL | Not started |
+| 6 — The DAW proper | XL | **Built** 2026-10-20; human gate (P6-1) and CI (P6-0) open |
 | 7 — Text-first layer | M | Not started |
 | 8 — Audio & export | M | Not started |
 | 9 — Plugins & MIDI | L | Not started |
@@ -670,12 +670,76 @@ the meter frame counted at exactly one call) and **P3-5** (decided: no flush; te
 | **Plan** | [phase_6.md](phase_6.md) |
 | **Entry** | Phase 5 §6 complete, including the frame-rate acceptance step |
 | **Done when** | [phase_6.md](phase_6.md) §6 |
-| **Status** | Not started |
+| **Status** | Built (2026-10-20). Every automated §6 box observed locally, the 200-insert frame-rate step included. **Not done:** the human gate (P6-1) is open, and CI is pending (P6-0) |
 | **Completed** | — |
+
+**What exists.** The whole §2 manifest: channel rack (a C++ step grid, 64x64 with no
+per-cell widget), playlist (draw, paint, select, slice, slip, stretch, mute, group; track
+groups; markers; arrangements; audio clips drawn through the peak cache; clip
+envelopes), mixer (200 strips, routing matrix that disables cycle cells before a
+command exists, slots, sends), the generic parameter editor plus hand-built overviews
+for nine instruments and nine effects, automation lanes and controllers (LFO, envelope,
+peak, engine-side), browser with typed drag-and-drop, history, inspector, preferences
+and autosave, one action registry with a remappable keymap, one global selection with
+delete/copy/paste/duplicate over all six kinds, and the clipboard as `.adx` text.
+Engine work under it: arrangement commands, controllers, audition voices and the
+metronome, the geometry builders. Fourteen corrections to the plan:
+[phase_6.md](phase_6.md) §10.
+
+**The gate.** `test_workflow_end_to_end` writes, arranges, mixes and exports a 32-bar
+track through the real panels - rack, piano roll, playlist, mixer, editors, automation,
+File > Export / Save / Open - and the reopened project renders to identical bytes.
+
+Observed locally (2026-10-20): C++ - 337 cases on each of Debug, RelWithDebInfo and
+Release; clang-tidy clean over all 232 files on all three compile databases (59
+findings fixed in the new code); clang-format, ruff, ruff format, mypy `--strict`,
+headers, format-safety, positions, dsp-math and `rules` clean. Python - 156 tests green, both GPU tests included (154 without them, as CI runs).
+The mixer on real hardware (Direct3D 11), 200 inserts metering while playing: 1,189 frames with the whole application up and the transport playing: frame time (the UI frame step plus the meter view's sync and render) p50 0.29 ms, p99 **0.63 ms**, max 2.1 ms; displayed frames vsync-locked at **60.0 fps**, interval p99 18.7 ms, max 20.6 ms - not one missed vsync; exactly **1 engine call per frame**; every strip's meter moved. (The first run failed this box - see §10, correction 14.)
+The piano roll's Phase 5 measurement re-run on this build: p99 0.23 ms, 59.9 fps, interval p99 17.6 ms (Phase 5 recorded 0.22 ms and 60.0). Phase completion,
+locally in Debug: `ADX_FULL_EVIDENCE=1 ctest --preset windows-x64-debug -L slow`
+passed in 944.11 s
+
+Inherited issues: **P5-1** fixed (the piano roll auditions too; it had been done only in
+the rack); **P5-2** fixed (curves drawn through `core::Curve`); **P5-3** fixed
+(metronome: realtime only, never rendered); **P5-4** fixed (playlist audio clips through
+the peak cache, redrawn on a key change); **P5-5** decided (below); **P4-2** fixed (a
+dropped sampler preset brings its samples and plays); **P4-3** fixed
+(`tuning_reaches_instruments_at_432`); **P3-3** fixed (`send_level_ramps_across_a_block`).
+The rest re-carried below with reasons.
 
 **Open issues for Phase 7:**
 
-- _to be filled in by the agent that completes this phase_
+- **P6-0** · CI not yet seen for this phase. Fixed when: per-push CI is green on all
+  three jobs at the Phase 6 commit and the full check is green on the `phase-6` tag,
+  both recorded here.
+- **P6-1** · `BLOCKER` · The human gate (phase_6.md §6 box 2): nobody has made a piece
+  of music with the build. Phase 7's entry is "Phase 6 §6 complete", so Phase 7 waits
+  on it. An agent cannot close it. Fixed when: the user makes a track start to finish
+  with `adx gui`, no text editor, and what they made and what got in the way is
+  recorded here; anything that got in the way becomes an issue.
+- **P6-2** · Two panels exceed §3 rule 1's ~400 lines: `piano_roll/panel.py` (840,
+  Phase 5's, grown by audition) and `playlist/panel.py` (494). Ruff only limits
+  function length. Fixed when: each is split into sub-widgets under ~400 lines.
+- **P6-3** · The wavetable overview is a 2-D frame strip; §4.4's table asks for a 3-D
+  table view. Usable as is (every parameter is in the grid beside it). Fixed when: a
+  3-D (or stacked) view ships, or the table entry is struck as not worth it.
+- **P5-5** · Decided, closed: no "edit all channels" mode. Ghosts show the other
+  channels and a rack row's click opens that channel's clip in the roll, which covers
+  the use; §5.1 does not list it. Reopen only if P6-1's session asks for it.
+- **P5-6** · `CARRIED` · Both GPU measurements (piano roll, mixer) are one machine.
+  Fixed when: someone runs `pytest -m gpu` on a second machine, ideally a laptop GPU.
+- **P4-10** · `CARRIED` · `suffocation.adx` is the wrong recreation; the stem work in
+  `scripts/` and `work/` (not this phase's, uncommitted) is that effort.
+- **P4-4**, **P4-5**, **P4-7**, **P4-8** · `CARRIED` · Unchanged; nothing in Phase 6
+  touched master gain order, SubBass, WORLD caching or per-frame Voice automation.
+- **P4-6** · `CARRIED` · Voice preroll latency in realtime. Phase 11's decision.
+- **P4-9** · `CARRIED` · PitchShifter is the phase vocoder only. Phase 8.
+- **P1-1** · `CARRIED` · `_CrtSetAllocHook` is not installed. Phase 6 put audition and
+  metronome code on the callback path: fixed-size arrays, no allocation by
+  construction, but no test runs them under an allocation guard. Fixed when: as stated
+  under Phase 1, and the audition/metronome render tests run under the guard.
+- **P2-2** · `CARRIED` · Invariant diagnostics have no position. Phase 7's.
+- **P2-5** · `CARRIED` · Mini-notation is stored, not compiled. Phase 7's.
 
 ---
 

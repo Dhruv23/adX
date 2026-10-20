@@ -134,8 +134,11 @@ std::vector<PlannedNote> plan(const project::Channel& channel, const project::Pr
             NoteRenderRequest request;
             request.bank = bank;
             request.oto = *aliases[n];
+            // TUNING reaches the Voice here, where its pitch is baked (P4-3); every other
+            // instrument gets it as a pitch offset through ChannelNode.
             request.noteHz = dsp::midiToHz(static_cast<float>(note.pitch) +
-                                           (static_cast<float>(note.fineTuneCents) * 0.01F));
+                                               (static_cast<float>(note.fineTuneCents) * 0.01F),
+                                           static_cast<float>(project.meta.tuning));
             request.lengthMs = std::max(msAt(note.end()) - msAt(note.start), 10.0);
             request.cutMs = request.lengthMs;
             request.fadeOutMs = kDefaultFadeMs;

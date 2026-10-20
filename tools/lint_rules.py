@@ -200,7 +200,103 @@ def long_python_functions(root: Path) -> list[str]:
     return findings
 
 
+#: Project reads (engine_bridge.Project's methods) whose results are project state.
+PROJECT_READS = frozenset(
+    {
+        "automation_clips",
+        "automation_points",
+        "bpm_at",
+        "channel_info",
+        "channels",
+        "channels_info",
+        "content_length",
+        "controllers_info",
+        "history_info",
+        "instruments",
+        "item_envelopes",
+        "lyric_cells",
+        "markers",
+        "meter_at",
+        "mixer_info",
+        "note_extras",
+        "notes",
+        "param_descriptor",
+        "param_value",
+        "pattern_channels",
+        "pattern_length",
+        "pattern_placements",
+        "patterns",
+        "patterns_info",
+        "playlist_info",
+        "playlist_items",
+        "routing_matrix",
+        "samples",
+        "zones",
+    }
+)
+#: Methods the session runs on every change (or the panel on its own): a value they
+#: store is re-read after every edit, undo and redo, so it cannot go stale.
+_REFRESHERS = ("refresh", "_refresh", "rebuild", "_rebuild")
+
+
+def _reads_project(node: ast.AST) -> bool:
+    return any(
+        isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Attribute)
+        and call.func.attr in PROJECT_READS
+        for call in ast.walk(node)
+    )
+
+
+def _revision_keyed(function: ast.AST) -> bool:
+    """The function compares a revision: a cache that re-reads when the project moved."""
+    return any(
+        isinstance(compare, ast.Compare)
+        and any(
+            (isinstance(n, ast.Name) and "revision" in n.id)
+            or (isinstance(n, ast.Attribute) and "revision" in n.attr)
+            for n in ast.walk(compare)
+        )
+        for compare in ast.walk(function)
+    )
+
+
+def panel_caches(root: Path) -> list[str]:
+    """Panel attributes holding project state across events (phase_6.md 3 rule 2,
+    ``no_panel_caches_project_state``): ``self.x = <a project read>`` outside a method the
+    session runs after every change, and not keyed on the project's revision."""
+    findings: list[str] = []
+    for path in sorted((root / "app" / "adx" / "panels").rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for function in ast.walk(tree):
+            if not isinstance(function, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            if function.name.startswith(_REFRESHERS) or _revision_keyed(function):
+                continue
+            for node in ast.walk(function):
+                targets: list[ast.expr] = []
+                value: ast.expr | None = None
+                if isinstance(node, ast.Assign):
+                    targets, value = node.targets, node.value
+                elif isinstance(node, ast.AnnAssign) and node.value is not None:
+                    targets, value = [node.target], node.value
+                if value is None or not _reads_project(value):
+                    continue
+                for target in targets:
+                    if (
+                        isinstance(target, ast.Attribute)
+                        and isinstance(target.value, ast.Name)
+                        and target.value.id == "self"
+                    ):
+                        findings.append(
+                            f"{_rel(path, root)}:{node.lineno}: self.{target.attr} keeps a "
+                            f"project read outside refresh ({function.name})"
+                        )
+    return findings
+
+
 CHECKS = {
+    "no_panel_caches_project_state": panel_caches,
     "bridge_is_only_importer": bridge_importers,
     "no_per_note_python_objects": per_note_returns,
     "gil_released_on_heavy_calls": gil_unreleased,

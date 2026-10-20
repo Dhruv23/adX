@@ -1,6 +1,7 @@
 #include "engine/format/adx/Parser.h"
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <limits>
 #include <memory>
@@ -18,6 +19,7 @@
 #include "engine/project/Project.h"
 #include "engine/project/TypeCatalog.h"
 #include "engine/project/Validate.h"
+#include "engine/project/commands/ArrangeCommands.h"
 #include "engine/project/commands/AutomationCommands.h"
 #include "engine/project/commands/ChannelCommands.h"
 #include "engine/project/commands/CommandStack.h"
@@ -170,6 +172,10 @@ private:
     void parseAutomationBlock(core::PatternId pattern, const BlockNode& node);
     std::vector<project::Breakpoint> parseBreakpoints(const BlockNode& node);
     void parsePlaylist(Section& section);
+    void parseArrangement(Section& section);
+    void parseTracks(std::span<const BlockNode> nodes, std::string_view where);
+    void parseController(Section& section);
+    void parseControllerSource(project::Controller& controller, const Line& line);
     void parsePlaylistItem(core::PlaylistTrackId track, const BlockNode& node);
     /// ADX1004 for a name `type` does not declare, ADX2001 for a value outside the
     /// declared range (P2-4). Both keep the value. With no known type, the name is
@@ -1144,7 +1150,120 @@ void V2Parser::parseAutomationBlock(core::PatternId pattern, const BlockNode& no
 void V2Parser::parsePlaylist(Section& section) {
     section.claimed = true;
     const std::vector<BlockNode> nodes = buildBlocks(lines(), section);
+    KeyTable keys(lines(), nodes, m_diag);
+    if (Line* line = keys.take(lines(), "NAME")) {
+        execute(
+            std::make_unique<project::RenameArrangement>(std::nullopt, decodeValue(line->value)));
+    }
+    parseTracks(nodes, "[PLAYLIST]");
+}
 
+void V2Parser::parseArrangement(Section& section) {
+    section.claimed = true;
+    if (!project::isValidEntityName(section.name)) {
+        m_diag.add(code::kBadNameCharacter, section.span,
+                   "'" + section.name + "' is not a usable arrangement name");
+        return;
+    }
+    // Parsed into the live playlist, through the same commands as [PLAYLIST], with the
+    // live tracks swapped out meanwhile - so an arrangement's grammar cannot drift from
+    // the playlist's, because it is the same code.
+    auto add = std::make_unique<project::AddArrangement>(section.name, false);
+    const project::AddArrangement* raw = add.get();
+    execute(std::move(add));
+    const std::size_t index = raw->index();
+    execute(std::make_unique<project::SwitchArrangement>(index));
+    parseTracks(buildBlocks(lines(), section), "[ARRANGEMENT]");
+    execute(std::make_unique<project::SwitchArrangement>(index));
+}
+
+void V2Parser::parseController(Section& section) {
+    section.claimed = true;
+    if (!project::isValidEntityName(section.name) ||
+        m_project.findControllerByName(section.name) != nullptr) {
+        m_diag.add(m_project.findControllerByName(section.name) != nullptr
+                       ? code::kDuplicateName
+                       : code::kBadNameCharacter,
+                   section.span, "'" + section.name + "' is not a usable controller name");
+        return;
+    }
+    const std::vector<BlockNode> nodes = buildBlocks(lines(), section);
+    KeyTable keys(lines(), nodes, m_diag);
+    project::Controller controller;
+    controller.name = section.name;
+    if (Line* line = keys.take(lines(), "TYPE")) {
+        if (!project::controllerKindFromString(line->value, controller.kind)) {
+            m_diag.add(code::kUnknownKey, line->valueSpan,
+                       "unknown controller type '" + line->value + "'; using lfo");
+        }
+    }
+    if (Line* line = keys.take(lines(), "TARGET")) {
+        controller.targetPath = line->value;
+        const project::ParamResolution resolved =
+            project::ParamRegistry::resolve(controller.targetPath, m_project);
+        if (resolved.ok()) {
+            controller.target = resolved.ref;
+        } else {
+            m_diag.add(code::kUnresolvedParamPath,
+                       subSpan(line->valueSpan, resolved.segmentOffset, resolved.segmentLength),
+                       "'" + controller.targetPath + "' does not name a parameter that exists");
+        }
+    }
+    if (Line* line = keys.take(lines(), "SOURCE")) {
+        parseControllerSource(controller, *line);
+    }
+    if (Line* line = keys.take(lines(), "SHAPE")) {
+        if (!project::lfoShapeFromString(line->value, controller.shape)) {
+            m_diag.add(code::kUnknownKey, line->valueSpan,
+                       "unknown LFO shape '" + line->value + "'; using sine");
+        }
+    }
+    if (Line* line = keys.take(lines(), "PERIOD")) {
+        core::Ticks period;
+        if (parseDuration(line->value, m_project.tempo, line->valueSpan, m_diag, period) &&
+            period.value > 0) {
+            controller.period = period;
+        }
+    }
+    const std::array<std::pair<std::string_view, float*>, 8> numbers{{
+        {"PHASE", &controller.phase},
+        {"ATTACK", &controller.attackMs},
+        {"DECAY", &controller.decayMs},
+        {"SUSTAIN", &controller.sustain},
+        {"RELEASE", &controller.releaseMs},
+        {"GAIN", &controller.gainDb},
+        {"DEPTH", &controller.depth},
+        {"CENTER", &controller.center},
+    }};
+    for (const auto& [key, field] : numbers) {
+        if (Line* line = keys.take(lines(), key)) {
+            double value = 0.0;
+            if (parseDouble(line->value, line->valueSpan, m_diag, value)) {
+                *field = static_cast<float>(value);
+            }
+        }
+    }
+    execute(std::make_unique<project::AddController>(std::move(controller)));
+    unknownKeys(keys, nodes);
+}
+
+void V2Parser::parseControllerSource(project::Controller& controller, const Line& line) {
+    constexpr std::string_view kChannel = "channel.";
+    const std::string_view text = line.value;
+    if (text.starts_with(kChannel)) {
+        core::ChannelId channel;
+        if (resolveChannel(decodeValue(text.substr(kChannel.size())), line.valueSpan, channel)) {
+            controller.sourceChannel = channel;
+        }
+        return;
+    }
+    core::InsertId insert;
+    if (resolveInsert(text, line.valueSpan, insert)) {
+        controller.sourceInsert = insert;
+    }
+}
+
+void V2Parser::parseTracks(std::span<const BlockNode> nodes, std::string_view where) {
     for (const BlockNode& node : nodes) {
         Line& line = lines()[node.line];
         if (line.kind != Line::Kind::Positional) {
@@ -1189,6 +1308,16 @@ void V2Parser::parsePlaylist(Section& section) {
                 if (parseColor(token.value, token.valueSpan, m_diag, color)) {
                     track.color = color;
                 }
+            } else if (token.text == "solo" || token.text == "collapsed") {
+                bool flag = false;
+                if (parseBool(token.value, token.valueSpan, m_diag, flag)) {
+                    (token.text == "solo" ? track.soloed : track.collapsed) = flag;
+                }
+            } else if (token.text == "group") {
+                std::int64_t group = 0;
+                if (parseInt64(token.value, token.valueSpan, m_diag, group) && group > 0) {
+                    track.group = core::PlaylistTrackId{static_cast<std::uint32_t>(group)};
+                }
             } else {
                 m_diag.add(code::kUnknownInlineKey, token.span,
                            "unknown key '" + token.text + "' on a TRACK line");
@@ -1210,7 +1339,7 @@ void V2Parser::parsePlaylist(Section& section) {
         const Line& line = lines()[node.line];
         if (!line.claimed) {
             m_diag.add(code::kUnknownKey, line.contentSpan(),
-                       "unrecognised line in [PLAYLIST]; preserved on save");
+                       "unrecognised line in " + std::string(where) + "; preserved on save");
         }
     }
 }
@@ -1435,6 +1564,8 @@ void V2Parser::run() {
     }
 
     forEach("PLAYLIST", [this](Section& s) { parsePlaylist(s); });
+    forEach("ARRANGEMENT", [this](Section& s) { parseArrangement(s); });
+    forEach("CONTROLLER", [this](Section& s) { parseController(s); });
     forEach("MARKERS", [this](Section& s) { parseMarkers(s); });
 
     for (const Section& section : m_doc.sections()) {

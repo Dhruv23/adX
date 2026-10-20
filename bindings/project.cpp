@@ -223,6 +223,8 @@ void registerProjectBindings(py::module_& m) {
     defineProjectIo(project);
     defineProjectEditing(project);
     adx::bindings::defineNoteAccess(project);
+    adx::bindings::defineStructureAccess(project);
+    adx::bindings::defineSession(project);
 }
 
 namespace {

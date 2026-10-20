@@ -72,9 +72,21 @@ public:
         return m_groupDepth > 0;
     }
 
+    /// The next command starts a fresh history entry, however soon it comes. A UI calls
+    /// this when a new gesture begins (a press), so two quick drags are two undo steps
+    /// rather than one: the time window alone cannot tell a drag from two drags made
+    /// within kCoalesceWindow of each other.
+    void sealCoalescing() noexcept {
+        m_coalesceBarrier = true;
+    }
+
     [[nodiscard]] std::span<const HistoryEntry> history() const noexcept {
         return m_history;
     }
+
+    /// What redo() would redo, next first: the history panel's greyed-out future
+    /// (phase_6.md §4.8).
+    [[nodiscard]] std::vector<std::string> redoLabels() const;
 
     /// Bumped on every mutation, including undo and redo.
     ///

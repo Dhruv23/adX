@@ -4,16 +4,15 @@ Every button is one engine call; the position display reads the frame clock (one
 call a frame, shared with the meters and the playhead) and never calls the engine
 itself.
 
-Record is Phase 8's (plans/phase_8.md). The metronome needs a click source in the
-engine, which no phase has built yet; the button is here, disabled, and says so -
-open issue P5-3.
+Record is Phase 8's (plans/phase_8.md). The metronome is the engine's click (P5-3,
+closed in Phase 6): realtime only, mixed after the graph, never in a render.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QDoubleSpinBox, QLabel, QToolBar, QWidget
 
@@ -37,12 +36,12 @@ class TransportBar(QToolBar):
     stop_requested = Signal()
     loop_toggled = Signal(bool)
     tempo_changed = Signal(float)
+    metronome_toggled = Signal(bool)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__("Transport", parent)
         self.setObjectName("transport")
         self.play_action = QAction("▶ Play", self)
-        self.play_action.setShortcut("Space")
         self.play_action.setToolTip("Play / pause (Space)")
         self.play_action.triggered.connect(self.play_requested)
         self.stop_action = QAction("■ Stop", self)
@@ -55,8 +54,8 @@ class TransportBar(QToolBar):
         self.loop_action.setToolTip("Loop the arrangement")
         self.loop_action.toggled.connect(self.loop_toggled)
         self.metronome_action = QAction("Metronome", self, checkable=True)
-        self.metronome_action.setEnabled(False)
-        self.metronome_action.setToolTip("Needs a click source in the engine: open issue P5-3")
+        self.metronome_action.setToolTip("A click on every beat while playing (never rendered)")
+        self.metronome_action.toggled.connect(self.metronome_toggled)
         for action in (self.play_action, self.stop_action, self.record_action, self.loop_action):
             self.addAction(action)
         self.addSeparator()
@@ -66,6 +65,12 @@ class TransportBar(QToolBar):
         self.tempo.setSuffix(" bpm")
         self.tempo.setKeyboardTracking(False)
         self.tempo.valueChanged.connect(self._tempo_edited)
+        # Focus only on a click, and hand it back once edited: a focused text field's
+        # caret repaints every 500 ms, and in a window compositing Qt Quick views each
+        # repaint is a full flush that costs a vsync - one dropped frame per blink, for
+        # as long as the field keeps focus (phase_6.md §10).
+        self.tempo.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self.tempo.editingFinished.connect(self.tempo.clearFocus)
         self.addWidget(self.tempo)
         self.addAction(self.metronome_action)
         self.addSeparator()

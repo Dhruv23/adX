@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <span>
 
+#include "engine/graph/Audition.h"
 #include "engine/graph/Node.h"
 #include "engine/project/EventTrack.h"
 #include "engine/project/Snapshot.h"
@@ -90,6 +91,12 @@ public:
     /// audio thread is running this scheduler.
     void reset() noexcept;
 
+    /// The audition events the next render() delivers, at the start of its first piece,
+    /// to the steps of the channels they name (Audition.h). Audio thread.
+    void setAudition(std::span<const AuditionEvent> events) noexcept {
+        m_audition = events;
+    }
+
 private:
     void runPiece(project::Snapshot& snapshot, transport::TransportSet& transport,
                   rt::BlockArena& arena, float* out, std::uint32_t offset, std::uint32_t frames,
@@ -116,6 +123,7 @@ private:
     /// to the first piece that can act on it.
     std::array<bool, transport::kMaxTimeSources> m_releasePending{};
     std::array<bool, transport::kMaxTimeSources> m_wrapPending{};
+    std::span<const AuditionEvent> m_audition;
 };
 
 } // namespace adx::graph

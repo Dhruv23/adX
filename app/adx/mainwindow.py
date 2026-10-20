@@ -1,41 +1,51 @@
-"""The shell: dockable panels, menus, the transport, and layout persistence
-(phase_5.md 4.10).
+"""The shell: every panel, the transport, the menus, layout persistence (phase_5.md 4.10,
+phase_6.md 2).
 
-Widgets for the chrome and Qt Quick for the hot surfaces: ``QDockWidget`` gives real
-docking, tabbed docks, floating panels and saved layouts for free, which Qt Quick has
-no equivalent of. The layout persists to QSettings, and View > Reset layout restores
-the default - a saved layout that cannot be reset is a bug report per week.
+One :class:`~adx.session.Session` owns the open project and its engine; every panel edits
+through it and refreshes when it says the project changed. One global
+:class:`~adx.selection.Selection` and the edit operations over it (delete, copy, paste,
+duplicate) serve every panel. Every menu item is an action from the registry
+(``menus.py``), and the layout persists to QSettings - with View > Reset layout to undo
+whatever a user did to it.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
-from PySide6.QtCore import QByteArray, QSettings, Qt, QTimer
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QShowEvent
-from PySide6.QtWidgets import (
-    QApplication,
-    QFileDialog,
-    QHBoxLayout,
-    QMainWindow,
-    QMessageBox,
-    QWidget,
-)
+from PySide6.QtCore import QByteArray, QEvent, QObject, QSettings, Qt, QTimer
+from PySide6.QtGui import QCloseEvent, QShowEvent
+from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow, QMessageBox
 
 from adx import __version__, engine_bridge
-from adx.engine_bridge import Engine, FrameClock, Project
+from adx.actions import ActionRegistry
+from adx.autosave import Autosave
+from adx.edit_ops import EditOps
+from adx.engine_bridge import PPQ, Engine, FrameClock, Project
+from adx.menus import register_actions
+from adx.panels.automation.panel import AutomationPanel
 from adx.panels.base import DockPanel
 from adx.panels.browser import BrowserPanel
+from adx.panels.channel_rack.panel import ChannelRackPanel
+from adx.panels.effect.panel import EffectPanel
+from adx.panels.geometry_view import GeometryView
+from adx.panels.history.panel import HistoryPanel
+from adx.panels.inspector.panel import InspectorPanel
+from adx.panels.instrument.panel import InstrumentPanel
+from adx.panels.mixer.panel import MixerPanel
 from adx.panels.piano_roll.panel import PianoRollPanel
+from adx.panels.playlist.panel import PlaylistPanel
 from adx.panels.waveform.widget import WaveformPanel
+from adx.preferences import Preferences
+from adx.selection import Context, Kind, Selection
+from adx.session import Session
+from adx.shortcuts import Keymap
 from adx.theme.tokens import THEMES, Theme, stylesheet
 from adx.transport_bar import TransportBar
-from adx.widgets.meter import LevelMeter
 
 #: Bump when the dock layout changes shape, so an old saved layout is not restored
-#: into panels it does not describe.
-LAYOUT_VERSION = 1
+#: into panels it does not describe. 2: Phase 6's panels.
+LAYOUT_VERSION = 2
 
 NEW_PROJECT = """[PROJECT]
 ADX_VERSION=2
@@ -55,40 +65,6 @@ INSERT 1 name="Master"
 """
 
 
-class MetersPanel(DockPanel):
-    """One level meter per mixer strip, fed by the frame clock."""
-
-    panel_id = "meters"
-    title = "Meters"
-    default_area = Qt.DockWidgetArea.BottomDockWidgetArea
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._body = QWidget()
-        self._layout = QHBoxLayout(self._body)
-        self._layout.setContentsMargins(6, 6, 6, 6)
-        self._meters: list[LevelMeter] = []
-        self.setWidget(self._body)
-
-    def show_levels(self, levels: np.ndarray, strips: int) -> None:
-        """Rows from Engine.frame(): insert id, peak L/R, RMS L/R, ..."""
-        while len(self._meters) < strips:
-            meter = LevelMeter()
-            self._meters.append(meter)
-            self._layout.addWidget(meter)
-        for index, meter in enumerate(self._meters):
-            if index < strips:
-                row = levels[index]
-                meter.setToolTip(f"insert {int(row[0])}")
-                meter.set_levels(float(row[1]), float(row[2]), float(row[3]), float(row[4]))
-            meter.setVisible(index < strips)
-
-    def apply_theme(self, theme: Theme) -> None:
-        """Recolour."""
-        for meter in self._meters:
-            meter.set_theme(theme)
-
-
 class MainWindow(QMainWindow):
     """The application window."""
 
@@ -96,7 +72,10 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.engine = engine
         self.settings = settings or QSettings("adX", "adX")
-        self.project: Project | None = None
+        self.prefs = Preferences.load(self.settings)
+        self.session = Session(engine, self)
+        self.selection = Selection(self)
+        self.ops = EditOps(self.session, self.selection)
         self.path: str | None = None
         self.saved_revision = 0
         self.theme: Theme = THEMES["dark"]
@@ -104,80 +83,109 @@ class MainWindow(QMainWindow):
         self.setDockNestingEnabled(True)
         self.transport = TransportBar(self)
         self.addToolBar(self.transport)
-        self.piano_roll = PianoRollPanel(self)
-        self.browser = BrowserPanel(str(Path.cwd()), self)
-        self.waveform = WaveformPanel(self)
-        self.meters = MetersPanel(self)
-        self.panels: list[DockPanel] = [self.browser, self.piano_roll, self.waveform, self.meters]
-        self.resize(1440, 900)
+        self._build_panels()
+        self.resize(1600, 960)
         self._place_panels()
-        # Dock sizes only mean something once the window has its size; the first show
-        # applies them, unless a saved layout was restored.
         self._needs_default_sizes = True
-        self._build_menus()
+        self.keymap = Keymap(self.settings)
+        self.registry = ActionRegistry(self.keymap, self)
+        register_actions(self, self.registry)
+        self.menus = self.registry.build_menus(self.menuBar())
         self._connect()
         self.clock = FrameClock(engine, parent=self)
+        self.mixer.attach(self.clock)
         self.clock.frame.connect(self._on_frame)
+        self.autosave = Autosave(
+            self.session,
+            lambda: self.path,
+            lambda: self.prefs.project_dir or str(Path.cwd()),
+            self.prefs.autosave_minutes,
+            self,
+        )
         self.statusBar().showMessage("Ready")
         engine_bridge.errors.error.connect(
-            lambda where, message: self.statusBar().showMessage(f"{where}: {message}")
+            lambda where, message: self.status(f"{where}: {message}")
         )
         self.restore_layout()
         self.clock.start()
 
     # --- construction ---------------------------------------------------------------
 
-    def _action(
-        self, menu_name: str, text: str, slot: object, shortcut: str | None = None
-    ) -> QAction:
-        menu = self._menus[menu_name]
-        action = QAction(text, self)
-        if shortcut:
-            action.setShortcut(QKeySequence(shortcut))
-            action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
-        action.triggered.connect(slot)
-        menu.addAction(action)
-        return action
-
-    def _build_menus(self) -> None:
-        bar = self.menuBar()
-        self._menus = {name: bar.addMenu(name) for name in ("&File", "&Edit", "&View", "&Help")}
-        self._action("&File", "&New", self.new_project, "Ctrl+N")
-        self._action("&File", "&Open…", self.open_dialog, "Ctrl+O")
-        self._action("&File", "&Save", self.save, "Ctrl+S")
-        self._action("&File", "Save &As…", self.save_as, "Ctrl+Shift+S")
-        self._menus["&File"].addSeparator()
-        self._action("&File", "&Quit", self.close, "Ctrl+Q")
-        self.undo_action = self._action("&Edit", "&Undo", self.undo, "Ctrl+Z")
-        self.redo_action = self._action("&Edit", "&Redo", self.redo, "Ctrl+Y")
-        view = self._menus["&View"]
-        for panel in self.panels:
-            view.addAction(panel.toggleViewAction())
-        view.addSeparator()
-        self._action("&View", "&Reset layout", self.reset_layout)
-        for name in THEMES:
-            self._action(
-                "&View", f"{name.title()} theme", lambda _c=False, n=name: self.set_theme(THEMES[n])
-            )
-        self._action("&Help", "&About adX", self._about)
+    def _build_panels(self) -> None:
+        s, sel = self.session, self.selection
+        self.browser = BrowserPanel(str(Path.cwd()), self, session=s)
+        self.channel_rack = ChannelRackPanel(s, sel, self)
+        self.piano_roll = PianoRollPanel(self)
+        self.playlist = PlaylistPanel(s, sel, self)
+        self.mixer = MixerPanel(s, sel, self)
+        self.instrument = InstrumentPanel(s, sel, self)
+        self.effect = EffectPanel(s, sel, self)
+        self.automation = AutomationPanel(s, sel, self)
+        self.history = HistoryPanel(s, self)
+        self.inspector = InspectorPanel(s, sel, self)
+        self.waveform = WaveformPanel(self)
+        self.panels: list[DockPanel] = [
+            self.browser,
+            self.channel_rack,
+            self.history,
+            self.playlist,
+            self.piano_roll,
+            self.mixer,
+            self.automation,
+            self.waveform,
+            self.instrument,
+            self.effect,
+            self.inspector,
+        ]
 
     def _connect(self) -> None:
         self.transport.play_requested.connect(self.toggle_play)
         self.transport.stop_requested.connect(self.stop)
         self.transport.loop_toggled.connect(self._loop)
         self.transport.tempo_changed.connect(self._tempo)
+        self.transport.metronome_toggled.connect(self._metronome)
         self.browser.project_activated.connect(self.open_project)
         self.browser.audio_activated.connect(self.waveform.waveform.open)
         self.piano_roll.seek = self.engine.seek
+        self.piano_roll.on_selection = self._roll_selection
+        self.channel_rack.open_roll.connect(self._open_roll)
+        self.channel_rack.open_instrument.connect(self._open_instrument)
+        self.playlist.open_pattern.connect(self._open_pattern)
+        self.mixer.open_effect.connect(self._open_effect)
+        self.session.changed.connect(self._changed)
+        self.session.failed.connect(lambda what, why: self.status(f"{what}: {why}"))
+        self.session.after_change = self._update_title
+        self.selection.changed.connect(self.registry.update_enabled)
+        # A press starts a new gesture, so a new history entry, however quickly it
+        # follows the last: the hot surfaces say so themselves (their input arrives
+        # through QML), and every other widget's press is seen by the filter below.
+        for view in self.findChildren(GeometryView):
+            view.gesture_started.connect(self.session.seal)
+        self.piano_roll.gesture_started.connect(self.session.seal)
+        self.piano_roll.audition.connect(self._audition)
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
 
-    # --- projects -------------------------------------------------------------------
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt's name
+        """Seal coalescing on every mouse press anywhere in the window."""
+        if event.type() == QEvent.Type.MouseButtonPress:
+            self.session.seal()
+        return super().eventFilter(watched, event)
+
+    # --- the project ----------------------------------------------------------------
+
+    @property
+    def project(self) -> Project | None:
+        """The open project."""
+        return self.session.project
 
     def _adopt(self, project: Project, path: str | None) -> None:
-        self.project = project
         self.path = path
         self.saved_revision = project.revision()
-        self.engine.set_project(project)
-        self.piano_roll.set_project(project, on_edit=self.project_edited)
+        self.selection.clear()
+        self.session.open(project)
+        self.piano_roll.set_project(project, on_edit=self.session.notify)
         self.transport.set_tempo(project.bpm_at(0))
         self.transport.meter = project.meter_at(0)
         if path:
@@ -214,9 +222,9 @@ class MainWindow(QMainWindow):
         errors = [d for d in diagnostics if str(d["severity"]) == "error"]
         if errors:
             first = errors[0]
-            self.statusBar().showMessage(
-                f"{Path(path).name}: {len(errors)} error(s); "
-                f"first at line {first['line']}: {first['message']}"
+            self.status(
+                f"{Path(path).name}: {len(errors)} error(s); first at line "
+                f"{first['line']}: {first['message']}"
             )
         self._adopt(project, path)
         return True
@@ -244,6 +252,24 @@ class MainWindow(QMainWindow):
         self.path = path
         return self.save()
 
+    def export_wav(self, path: str) -> dict[str, object]:
+        """Render the arrangement offline to a 32-bit float WAV (the full export dialog is
+        Phase 8's). Returns the render statistics, the hash among them."""
+        project = self.session.require()
+        stats = engine_bridge.render_to_file(project, path)
+        seconds = float(stats["frames"]) / float(stats["sample_rate"])
+        self.status(f"Exported {Path(path).name}: {seconds:.1f} s")
+        return stats
+
+    def export_dialog(self) -> None:
+        """Ask for a file, then export."""
+        stem = Path(self.path).stem if self.path else "untitled"
+        path, _filter = QFileDialog.getSaveFileName(
+            self, "Export WAV", f"{stem}.wav", "WAV (*.wav)"
+        )
+        if path:
+            self.export_wav(path)
+
     def _dirty(self) -> bool:
         return self.project is not None and self.project.revision() != self.saved_revision
 
@@ -267,22 +293,71 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{name}{' •' if self._dirty() else ''} - adX {__version__}")
 
     def project_edited(self) -> None:
-        """After every command: the audio thread catches up, incrementally."""
-        if self.project is not None:
-            self.engine.commit(self.project)
-        self._update_title()
+        """A command was executed outside the session (kept for older callers)."""
+        self.session.notify()
+
+    def _changed(self) -> None:
+        self.piano_roll.refresh()
+        self.registry.update_enabled()
 
     def undo(self) -> None:
         """Undo one step, everywhere."""
-        if self.project is not None and self.project.undo():
-            self.project_edited()
-            self.piano_roll.refresh()
+        self.session.undo()
 
     def redo(self) -> None:
         """Redo one step, everywhere."""
-        if self.project is not None and self.project.redo():
-            self.project_edited()
-            self.piano_roll.refresh()
+        self.session.redo()
+
+    def status(self, message: str) -> None:
+        """A line in the status bar."""
+        self.statusBar().showMessage(message, 8000)
+
+    # --- cross-panel navigation -----------------------------------------------------
+
+    def _open_roll(self, pattern: str, channel: str) -> None:
+        if self.project is not None and pattern and channel:
+            self.piano_roll.select_clip(pattern, channel)
+
+    def _open_pattern(self, pattern: int) -> None:
+        if self.project is None:
+            return
+        name = next(
+            (str(p["name"]) for p in self.project.patterns_info() if int(p["id"]) == pattern), ""
+        )
+        if name:
+            self.channel_rack.select_pattern(name)
+            channels = self.project.pattern_channels(name) or self.project.channels()
+            if channels:
+                self.piano_roll.select_clip(name, channels[0])
+            self.piano_roll.raise_()
+
+    def _open_instrument(self, channel: int) -> None:
+        self.instrument.show_channel(channel)
+        self.instrument.show()
+        self.instrument.raise_()
+
+    def _open_effect(self, insert: int, slot: int) -> None:
+        self.effect.show_slot(insert, slot)
+        self.effect.show()
+        self.effect.raise_()
+
+    def _roll_selection(self) -> None:
+        model = self.piano_roll.model
+        if model is None:
+            return
+        ids = [int(i) for i in model.selection]
+        self.selection.select(
+            Kind.NOTES, ids, Context(pattern=model.pattern, channel=model.channel)
+        )
+
+    def _audition(self, channel: str, pitch: int, velocity: int) -> None:
+        """A note through a channel's instrument, now: the engine's audition voice, no
+        snapshot rebuild, heard whether or not the transport rolls (P5-1)."""
+        if self.project is None:
+            return
+        ids = {str(c["name"]): int(c["id"]) for c in self.project.channels_info()}
+        if channel in ids:
+            self.engine.audition(ids[channel], pitch, velocity, 0.3)
 
     # --- transport ------------------------------------------------------------------
 
@@ -298,26 +373,66 @@ class MainWindow(QMainWindow):
         self.engine.stop_playback()
         self.engine.seek(0)
 
+    def toggle_loop(self) -> None:
+        """Loop on or off (the transport bar's button follows)."""
+        self.transport.loop_action.toggle()
+
     def _loop(self, enabled: bool) -> None:
         if self.project is not None:
-            length = int(self.project.info()["length_ticks"])
-            self.engine.set_loop(0, max(length, engine_bridge.PPQ * 4), enabled)
+            length = self.project.content_length()
+            self.engine.set_loop(0, max(length, PPQ * 4), enabled)
+
+    def toggle_metronome(self) -> None:
+        """The click on or off."""
+        self.transport.metronome_action.toggle()
+
+    def _metronome(self, enabled: bool) -> None:
+        numerator, denominator = self.project.meter_at(0) if self.project is not None else (4, 4)
+        self.engine.set_metronome(enabled, PPQ * 4 // max(1, denominator), numerator)
+
+    def toggle_follow(self) -> None:
+        """Scroll the playlist with the playhead."""
+        self.playlist.follow = not self.playlist.follow
+
+    def add_marker_at_playhead(self) -> None:
+        """A marker at the playhead, snapped to the beat."""
+        project = self.session.require()
+        tick = round(self.clock.position_ticks / PPQ) * PPQ
+        self.session.execute(
+            engine_bridge.commands.add_marker(tick, f"Marker {len(project.markers()) + 1}")
+        )
 
     def _tempo(self, bpm: float) -> None:
-        if self.project is None:
-            return
-        self.project.execute(engine_bridge.commands.set_tempo(bpm, 0))
-        self.project_edited()
-        self.piano_roll.refresh()
+        if self.project is not None:
+            self.session.execute(engine_bridge.commands.set_tempo(bpm, 0))
 
     def _on_frame(self, ticks: int, rolling: bool) -> None:
         """The 60 Hz frame. The clock made the one engine call; this only draws."""
         self.transport.show_position(ticks, self.clock.position_seconds)
         self.transport.set_playing(rolling)
         self.piano_roll.frame(ticks, rolling)
-        self.meters.show_levels(self.clock.levels, self.clock.strips)
+        self.playlist.frame(ticks, rolling)
+        self.mixer.frame(self.clock)
 
-    # --- layout and theme -----------------------------------------------------------
+    # --- preferences, layout and theme ----------------------------------------------
+
+    def preferences_dialog(self) -> None:
+        """Edit the preferences; apply what can be applied now."""
+        from adx.panels.preferences.dialog import PreferencesDialog
+
+        latency = self.engine.latency_samples() / max(1, self.engine.sample_rate) * 1000.0
+        dialog = PreferencesDialog(self.prefs, latency, self)
+        if dialog.exec() and dialog.result_preferences is not None:
+            self.apply_preferences(dialog.result_preferences)
+
+    def apply_preferences(self, prefs: Preferences) -> None:
+        """Store and apply preferences: theme, autosave, preset folders."""
+        self.prefs = prefs
+        prefs.save(self.settings)
+        self.set_theme_name(prefs.theme)
+        self.autosave.set_interval(prefs.autosave_minutes)
+        self.browser.preset_dirs = [self.browser.preset_dirs[0], *prefs.preset_dirs]
+        self.browser.refresh()
 
     def restore_layout(self) -> None:
         """Restore the saved window, docks and panel state (tolerating none)."""
@@ -329,7 +444,9 @@ class MainWindow(QMainWindow):
             self._needs_default_sizes = False
         for panel in self.panels:
             panel.restore_state(self.settings)
-        self.set_theme(THEMES.get(str(self.settings.value("theme", "dark")), THEMES["dark"]))
+        self.set_theme(
+            THEMES.get(str(self.settings.value("theme", self.prefs.theme)), THEMES["dark"])
+        )
 
     def save_layout(self) -> None:
         """Persist the window, docks and panel state."""
@@ -340,26 +457,35 @@ class MainWindow(QMainWindow):
         self.settings.setValue("theme", self.theme.name)
 
     def _place_panels(self) -> None:
-        """The default arrangement: the piano roll large, the browser beside it, the
-        waveform and the meters along the bottom."""
+        """The default arrangement: browser and rack left, playlist and piano roll in the
+        middle, editors right, mixer and automation along the bottom."""
         for panel in self.panels:
             panel.setFloating(False)
             self.addDockWidget(panel.default_area, panel)
             panel.show()
-        self.splitDockWidget(self.waveform, self.meters, Qt.Orientation.Horizontal)
+        self.tabifyDockWidget(self.browser, self.channel_rack)
+        self.tabifyDockWidget(self.channel_rack, self.history)
+        self.tabifyDockWidget(self.playlist, self.piano_roll)
+        self.tabifyDockWidget(self.instrument, self.effect)
+        self.tabifyDockWidget(self.effect, self.inspector)
+        self.tabifyDockWidget(self.mixer, self.automation)
+        self.tabifyDockWidget(self.automation, self.waveform)
+        self.channel_rack.raise_()
+        self.playlist.raise_()
+        self.instrument.raise_()
+        self.mixer.raise_()
 
     def _size_panels(self) -> None:
-        width, height = max(800, self.width()), max(500, self.height())
+        width, height = max(1000, self.width()), max(600, self.height())
         self.resizeDocks(
-            [self.browser, self.piano_roll], [240, width - 240], Qt.Orientation.Horizontal
+            [self.channel_rack, self.playlist, self.instrument],
+            [int(width * 0.28), int(width * 0.5), int(width * 0.22)],
+            Qt.Orientation.Horizontal,
         )
         self.resizeDocks(
-            [self.piano_roll, self.waveform],
-            [int(height * 0.66), int(height * 0.2)],
+            [self.playlist, self.mixer],
+            [int(height * 0.58), int(height * 0.32)],
             Qt.Orientation.Vertical,
-        )
-        self.resizeDocks(
-            [self.waveform, self.meters], [width - 420, 420], Qt.Orientation.Horizontal
         )
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 - Qt's name
@@ -367,6 +493,8 @@ class MainWindow(QMainWindow):
         if self._needs_default_sizes:
             self._needs_default_sizes = False
             QTimer.singleShot(0, self._size_panels)
+        # Start on the arrangement, never in a text field (see TransportBar's tempo box).
+        QTimer.singleShot(0, self.playlist.canvas.setFocus)
 
     def reset_layout(self) -> None:
         """Back to the default dock layout, every panel visible."""
@@ -374,23 +502,25 @@ class MainWindow(QMainWindow):
         self._size_panels()
         self.settings.remove("window/state")
 
+    def set_theme_name(self, name: str) -> None:
+        """Switch theme by name."""
+        self.set_theme(THEMES.get(name, THEMES["dark"]))
+
     def set_theme(self, theme: Theme) -> None:
-        """Switch theme: stylesheet, QML palette and role colours. No geometry rebuilds."""
+        """Switch theme: stylesheet, QML palettes and role colours. No geometry rebuilds."""
         self.theme = theme
         app = QApplication.instance()
         if isinstance(app, QApplication):
             app.setStyleSheet(stylesheet(theme))
         self.piano_roll.apply_theme(theme)
         self.waveform.waveform.apply_theme(theme)
-        self.meters.apply_theme(theme)
+        for panel in (self.playlist, self.channel_rack, self.mixer, self.automation, self.history):
+            panel.apply_theme(theme)
 
-    def _about(self) -> None:
-        QMessageBox.about(
-            self,
-            "About adX",
-            f"adX {__version__}\n"
-            f"engine {engine_bridge.engine_version()} ({engine_bridge.git_sha()})",
-        )
+    def about(self) -> None:
+        """Version information."""
+        engine = f"{engine_bridge.engine_version()} ({engine_bridge.git_sha()})"
+        QMessageBox.about(self, "About adX", f"adX {__version__}\nengine {engine}")
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt's name
         if not self._may_discard():
@@ -398,4 +528,7 @@ class MainWindow(QMainWindow):
             return
         self.clock.stop()
         self.save_layout()
+        app = QApplication.instance()
+        if app is not None:
+            app.removeEventFilter(self)
         event.accept()

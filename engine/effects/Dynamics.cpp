@@ -96,6 +96,7 @@ void Compressor::processWet(std::span<const float> inLeft, std::span<const float
         outLeft[i] = left * gain;
         outRight[i] = right * gain;
     }
+    publishReduction(m_linear ? static_cast<float>(dsp::gainToDb(m_gain)) : m_envelopeDb);
 }
 
 // --- Ducker ---------------------------------------------------------------------
@@ -216,6 +217,7 @@ void Limiter::processWet(std::span<const float> inLeft, std::span<const float> i
         outLeft[i] = std::clamp(left * gain, -m_ceiling, m_ceiling);
         outRight[i] = std::clamp(right * gain, -m_ceiling, m_ceiling);
     }
+    publishReduction(static_cast<float>(dsp::gainToDb(m_envelope)));
 }
 
 // --- Gate -----------------------------------------------------------------------

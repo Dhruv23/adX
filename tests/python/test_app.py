@@ -45,9 +45,16 @@ def test_opens_plays_and_moves_the_playhead(window: object, repo_root: pathlib.P
     assert len(roll.model.notes()) > 0
     assert {p.objectName() for p in window.panels} == {
         "browser",
+        "channel_rack",
+        "history",
+        "playlist",
         "piano_roll",
+        "mixer",
+        "automation",
         "waveform",
-        "meters",
+        "instrument",
+        "effect",
+        "inspector",
     }
 
     window.toggle_play()

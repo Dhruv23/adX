@@ -223,6 +223,10 @@ void diffPlaylist(const Project& before, const Project& after, std::vector<Chang
             push(out, ChangeKind::Removed, subject);
             continue;
         }
+        if (old.soloed != now->soloed || old.group != now->group ||
+            old.collapsed != now->collapsed) {
+            push(out, ChangeKind::Changed, subject, "solo or group");
+        }
         if (old.name != now->name || old.muted != now->muted ||
             old.items.size() != now->items.size()) {
             push(out, ChangeKind::Changed, subject,
@@ -246,6 +250,32 @@ void diffPlaylist(const Project& before, const Project& after, std::vector<Chang
     for (const PlaylistTrack& now : after.playlist.tracks) {
         if (before.playlist.find(now.id) == nullptr) {
             push(out, ChangeKind::Added, "playlist track " + std::to_string(now.id.value));
+        }
+    }
+    if (before.playlist.arrangementName != after.playlist.arrangementName ||
+        before.playlist.arrangements != after.playlist.arrangements) {
+        push(out, ChangeKind::Changed, "arrangements");
+    }
+}
+
+void diffControllers(const Project& before, const Project& after, std::vector<Change>& out) {
+    for (const Controller& old : before.controllers) {
+        const Controller* now = after.findControllerByName(old.name);
+        if (now == nullptr) {
+            push(out, ChangeKind::Removed, "controller " + old.name);
+        } else {
+            // Matched by name, like a channel; the id is not part of the file.
+            Controller same = old;
+            same.id = now->id;
+            same.targetPath = now->targetPath;
+            if (!(same == *now)) {
+                push(out, ChangeKind::Changed, "controller " + old.name);
+            }
+        }
+    }
+    for (const Controller& now : after.controllers) {
+        if (before.findControllerByName(now.name) == nullptr) {
+            push(out, ChangeKind::Added, "controller " + now.name);
         }
     }
 }
@@ -343,6 +373,7 @@ std::vector<Change> diff(const Project& before, const Project& after) {
     diffPatterns(before, after, out);
     diffPlaylist(before, after, out);
     diffMixer(before, after, out);
+    diffControllers(before, after, out);
     diffMarkers(before, after, out);
     return out;
 }

@@ -18,6 +18,8 @@ struct EngineHandle {
     bool running{false};
     /// Reused by Engine.frame() so the 60 Hz read allocates nothing once warm (P4-1).
     std::vector<render::RenderEngine::StripLevel> levelScratch;
+    /// The same strips as the meter builder takes them (frame_with_meters).
+    std::vector<rt::LevelFrame> meterScratch;
 };
 
 /// The arrangement transport, as its own Python object: `engine.transport.play()`.

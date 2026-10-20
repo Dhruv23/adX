@@ -7,6 +7,8 @@
 #include <variant>
 
 #include "engine/core/Config.h"
+#include "engine/dsp/Math.h"
+#include "engine/project/ControllerCompile.h"
 #include "engine/project/EventCompile.h"
 #include "engine/project/Project.h"
 
@@ -53,6 +55,7 @@ struct SnapshotStorage {
     std::shared_ptr<graph::CompiledGraph> graph;
     std::vector<EventTrack> tracks;
     std::vector<EventCursor> cursors;
+    std::vector<std::uint32_t> trackChannels;
     std::vector<float> params;
     std::vector<float> paramBase;
     std::vector<AutomationLane> lanes;
@@ -79,6 +82,15 @@ Window windowOf(const PlaylistItem& item, core::Ticks naturalLength) {
     return Window{.localStart = item.sourceOffset.value,
                   .localEnd = item.sourceOffset.value + std::max<std::int64_t>(length, 0),
                   .placedAt = item.start.value};
+}
+
+/// The project's A4 as a pitch offset from 440 Hz, in cents (P4-3). Exactly zero at
+/// 440, so every project at standard pitch renders bit for bit as before.
+float tuningCents(double tuning) noexcept {
+    if (tuning == 440.0 || !(tuning > 0.0)) {
+        return 0.0F;
+    }
+    return static_cast<float>(1200.0 * dsp::log2(tuning / 440.0));
 }
 
 std::uint32_t paramIndexOf(const graph::ParamLayout& layout, ParamRef ref) {
@@ -154,8 +166,52 @@ bool addLane(const Project& project, ParamRef target, const std::vector<Breakpoi
     return true;
 }
 
+/// Appends the lanes of the LFO and envelope controllers. Last, so a controller wins
+/// over drawn automation on the parameter it drives - it is the more deliberate act.
+/// `eventsOf` gives a channel's flattened events, for an envelope's triggers.
+template<class EventsOf>
+void addControllerLanes(const Project& project, const graph::ParamLayout& layout,
+                        SnapshotStorage& storage, std::vector<LaneRange>& ranges,
+                        EventsOf eventsOf) {
+    // Far enough past the end that playing on does not run off the chain; it holds
+    // its last value beyond.
+    const std::int64_t end =
+        std::max(project.contentLength().value,
+                 project.meta.loopEnabled ? project.meta.loopEnd.value : std::int64_t{0}) +
+        (core::kPpq * 4 * 64);
+    for (const Controller& controller : project.controllers) {
+        if (controller.kind == ControllerKind::Peak || !controller.target.valid()) {
+            continue;
+        }
+        const std::uint32_t index = paramIndexOf(layout, controller.target);
+        if (index == graph::kNone) {
+            continue;
+        }
+        const ControllerRange range =
+            ControllerRange::of(ParamRegistry::descriptorFor(controller.target, project));
+        LaneRange lane{.points = storage.points.size(), .knots = storage.knots.size()};
+        if (controller.kind == ControllerKind::Lfo) {
+            compileLfo(storage.knots, controller, range, end);
+        } else {
+            compileEnvelope(storage.knots, controller, range, eventsOf(controller.sourceChannel),
+                            project.tempo);
+        }
+        lane.knotCount = storage.knots.size() - lane.knots;
+        if (lane.knotCount == 0) {
+            continue;
+        }
+        storage.lanes.push_back(AutomationLane{.paramIndex = index,
+                                               .startTick = 0,
+                                               .endTick = std::numeric_limits<std::int64_t>::max(),
+                                               .points = {},
+                                               .knots = {}});
+        ranges.push_back(lane);
+    }
+}
+
+template<class EventsOf>
 void buildAutomation(const Project& project, const graph::ParamLayout& layout,
-                     SnapshotStorage& storage) {
+                     SnapshotStorage& storage, EventsOf eventsOf) {
     // Two passes: collect every lane's points into one vector, then point each lane at
     // its slice - a span taken during the first pass would dangle the moment the
     // vector grew.
@@ -173,7 +229,7 @@ void buildAutomation(const Project& project, const graph::ParamLayout& layout,
     std::vector<std::pair<const PlaylistItem*, Window>> enveloped;
 
     for (const PlaylistTrack& track : project.playlist.tracks) {
-        if (track.muted) {
+        if (!project.playlist.audible(track)) {
             continue;
         }
         for (const PlaylistItem& item : track.items) {
@@ -213,6 +269,7 @@ void buildAutomation(const Project& project, const graph::ParamLayout& layout,
             }
         }
     }
+    addControllerLanes(project, layout, storage, ranges, eventsOf);
 
     for (std::size_t i = 0; i < storage.lanes.size(); ++i) {
         storage.lanes[i].points = std::span<const AutomationPoint>{storage.points}.subspan(
@@ -297,7 +354,7 @@ SnapshotBuilder::PlacementsByChannel
 SnapshotBuilder::collectPlacements(const Project& project) const {
     PlacementsByChannel byChannel;
     for (const PlaylistTrack& track : project.playlist.tracks) {
-        if (track.muted) {
+        if (!project.playlist.audible(track)) {
             continue;
         }
         for (const PlaylistItem& item : track.items) {
@@ -412,7 +469,10 @@ SnapshotBuildResult SnapshotBuilder::build(const Project& project, std::uint64_t
     }
 
     // --- graph ---
-    if (!m_graphBuild || (dirty & (dirty::kChannels | dirty::kMixer | dirty::kRouting)) != 0) {
+    // kMeta too: a Voice channel bakes the project's tuning into its rendered notes, so
+    // a new tuning has to reach its node's configuration check.
+    if (!m_graphBuild ||
+        (dirty & (dirty::kChannels | dirty::kMixer | dirty::kRouting | dirty::kMeta)) != 0) {
         auto candidate = std::make_shared<graph::GraphBuild>(graph::buildGraph(project, m_nodes));
         if (!candidate->ok) {
             return SnapshotBuildResult{.snapshot = nullptr, .error = candidate->error};
@@ -478,16 +538,29 @@ SnapshotBuildResult SnapshotBuilder::build(const Project& project, std::uint64_t
         }
     }
     storage->cursors.assign(storage->tracks.size(), EventCursor{});
+    storage->trackChannels.reserve(m_graphBuild->trackChannels.size());
+    for (const core::ChannelId channel : m_graphBuild->trackChannels) {
+        storage->trackChannels.push_back(channel.value);
+    }
     graph::fillParams(project, m_graphBuild->params, storage->params);
     storage->paramBase = storage->params;
-    buildAutomation(project, m_graphBuild->params, *storage);
+    buildAutomation(project, m_graphBuild->params, *storage,
+                    [this](core::ChannelId channel) -> std::span<const ScheduledEvent> {
+                        const auto found = m_channels.find(channel.value);
+                        if (found == m_channels.end() || !found->second.events) {
+                            return {};
+                        }
+                        return found->second.events->events;
+                    });
 
     Snapshot& snapshot = storage->snapshot;
     snapshot.revision = revision;
     snapshot.sampleRate = m_sampleRate;
+    snapshot.tuningCents = tuningCents(project.meta.tuning);
     snapshot.tempo = core::TempoView{.events = m_tempo->events, .cumSeconds = m_tempo->cumSeconds};
     snapshot.eventTracks = storage->tracks;
     snapshot.cursors = storage->cursors;
+    snapshot.trackChannels = storage->trackChannels;
     snapshot.automation = storage->lanes;
     snapshot.graph = m_graph->view();
     snapshot.params = storage->params;

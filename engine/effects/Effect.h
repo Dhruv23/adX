@@ -19,6 +19,7 @@
 // thread; they arrive in the ProcessContext like every other node's (§4.2).
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <span>
 
@@ -97,6 +98,13 @@ public:
     /// of the same type. effects::clone calls it. Most effects have none.
     virtual void copyConfigTo(Effect& /*fresh*/) const {}
 
+    /// The gain reduction a dynamics effect applied at the end of its last block, in dB
+    /// (zero or negative), for the editor's meter (phase_6.md 4.4). Any thread: one
+    /// relaxed atomic, written once a block. Zero for every effect that does not reduce.
+    [[nodiscard]] float gainReductionDb() const noexcept {
+        return m_reductionDb.load(std::memory_order_relaxed);
+    }
+
 protected:
     /// Main thread. Allocate here.
     virtual void prepareEffect(const graph::PrepareInfo& info) = 0;
@@ -133,7 +141,13 @@ protected:
         return m_sampleRate;
     }
 
+    /// Audio thread: what gainReductionDb() reports.
+    void publishReduction(float db) noexcept {
+        m_reductionDb.store(db, std::memory_order_relaxed);
+    }
+
 private:
+    std::atomic<float> m_reductionDb{0.0F};
     std::uint32_t m_sampleRate{48000};
     std::uint32_t m_latency{0};
     /// The dry signal, delayed by the effect's latency: a ring of latency + 1 frames.

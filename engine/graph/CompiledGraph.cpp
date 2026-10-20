@@ -128,6 +128,7 @@ CompiledGraph::CompiledGraph(const Graph& graph, const TopoResult& order, const 
         step.timeSource = source.timeSource;
         step.paramBase = source.paramBase;
         step.paramCount = source.paramCount;
+        step.modulates = source.modulates;
         m_nodes.push_back(source.node);
 
         step.firstClear = static_cast<std::uint32_t>(m_clears.size());

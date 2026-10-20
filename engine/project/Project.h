@@ -25,6 +25,7 @@
 #include "engine/format/adx/Document.h"
 #include "engine/project/Automation.h"
 #include "engine/project/Channel.h"
+#include "engine/project/Controller.h"
 #include "engine/project/Mixer.h"
 #include "engine/project/Pattern.h"
 #include "engine/project/Playlist.h"
@@ -83,6 +84,7 @@ struct IdMarks {
     std::uint32_t marker{0};
     std::uint32_t sample{0};
     std::uint32_t automationClip{0};
+    std::uint32_t controller{0};
 
     [[nodiscard]] friend bool operator==(const IdMarks&, const IdMarks&) noexcept = default;
 };
@@ -97,6 +99,7 @@ public:
     Mixer mixer;
     Resources resources;
     std::vector<Marker> markers;
+    std::vector<Controller> controllers;
 
     /// Everything the parser did not understand, carried so the writer can put it
     /// back. This is the one place the project layer depends on the format layer,
@@ -197,6 +200,13 @@ public:
         }
         return m_automationClipIds.next();
     }
+    [[nodiscard]] core::ControllerId newControllerId(core::ControllerId wanted = {}) noexcept {
+        if (wanted.valid()) {
+            m_controllerIds.observe(wanted);
+            return wanted;
+        }
+        return m_controllerIds.next();
+    }
 
     [[nodiscard]] IdMarks idMarks() const noexcept;
     void restoreIdMarks(const IdMarks& marks) noexcept;
@@ -207,9 +217,12 @@ public:
     [[nodiscard]] Pattern* find(core::PatternId id) noexcept;
     [[nodiscard]] const Marker* find(core::MarkerId id) const noexcept;
     [[nodiscard]] Marker* find(core::MarkerId id) noexcept;
+    [[nodiscard]] const Controller* find(core::ControllerId id) const noexcept;
+    [[nodiscard]] Controller* find(core::ControllerId id) noexcept;
 
     [[nodiscard]] const Channel* findChannelByName(std::string_view name) const noexcept;
     [[nodiscard]] const Pattern* findPatternByName(std::string_view name) const noexcept;
+    [[nodiscard]] const Controller* findControllerByName(std::string_view name) const noexcept;
 
     /// Automation clips live in two places - inside patterns and directly in the
     /// playlist - and a ParamRef does not say which. This looks in both.
@@ -243,6 +256,7 @@ private:
     core::IdCounter<core::MarkerTag> m_markerIds;
     core::IdCounter<core::SampleTag> m_sampleIds;
     core::IdCounter<core::AutomationClipTag> m_automationClipIds;
+    core::IdCounter<core::ControllerTag> m_controllerIds;
 };
 
 } // namespace adx::project

@@ -48,6 +48,26 @@ Palette defaultPalette() {
     at(ColorRole::kWaveFill) = rgba(120, 200, 150);
     at(ColorRole::kWavePending) = rgba(120, 128, 140);
     at(ColorRole::kSelectionRect) = rgba(255, 196, 92, 60);
+    at(ColorRole::kTrackA) = rgba(34, 37, 42);
+    at(ColorRole::kTrackB) = rgba(39, 42, 48);
+    at(ColorRole::kClip) = rgba(63, 111, 150);
+    at(ColorRole::kClipSelected) = rgba(196, 138, 42);
+    at(ColorRole::kClipMuted) = rgba(61, 66, 74);
+    at(ColorRole::kClipHeader) = rgba(90, 147, 192);
+    at(ColorRole::kClipPreview) = rgba(216, 232, 246);
+    at(ColorRole::kAutomationLine) = rgba(255, 120, 160);
+    at(ColorRole::kAutomationPoint) = rgba(255, 208, 221);
+    at(ColorRole::kAutomationPointSelected) = rgba(255, 196, 92);
+    at(ColorRole::kStepOff) = rgba(48, 52, 59);
+    at(ColorRole::kStepOn) = rgba(96, 178, 240);
+    at(ColorRole::kStepGroup) = rgba(56, 60, 68);
+    at(ColorRole::kStepVelocity) = rgba(168, 214, 250);
+    at(ColorRole::kMeterBack) = rgba(21, 23, 26);
+    at(ColorRole::kMeterRms) = rgba(61, 154, 100);
+    at(ColorRole::kMeterPeak) = rgba(120, 200, 150);
+    at(ColorRole::kMeterHot) = rgba(232, 192, 74);
+    at(ColorRole::kMeterClip) = rgba(255, 90, 80);
+    at(ColorRole::kEqCurve) = rgba(255, 196, 92);
     return palette;
 }
 

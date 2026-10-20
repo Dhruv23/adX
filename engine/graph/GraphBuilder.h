@@ -3,7 +3,7 @@
 // Project -> Graph.
 //
 //   one ChannelNode per Channel, feeding its output insert
-//   per Insert: its slots in ascending id order, then its fader, then a meter
+//   per Insert: its slots in list order, then its fader, then a meter
 //   one SendNode per Send, tapping the fader's pre or post output
 //   one edge per Route, fader to the target's first node
 //
@@ -30,6 +30,7 @@
 #include "engine/graph/Pdc.h"
 #include "engine/graph/TopoSort.h"
 #include "engine/graph/nodes/MeterNode.h"
+#include "engine/graph/nodes/PeakControllerNode.h"
 #include "engine/project/ParamDescriptor.h"
 #include "engine/project/ParamRef.h"
 #include "engine/project/Snapshot.h"
@@ -124,7 +125,11 @@ public:
     [[nodiscard]] std::shared_ptr<Node> slot(const project::Slot& slot,
                                              const project::Resources& resources);
     [[nodiscard]] std::shared_ptr<Node> send(core::SendId id);
+    /// A peak controller's node (PeakControllerNode.h), remade when its config changes.
+    [[nodiscard]] std::shared_ptr<Node> controller(core::ControllerId id, const PeakConfig& config);
 
+    /// The node of a slot, for the UI (an EQ's spectrum tap). Null when there is none.
+    [[nodiscard]] std::shared_ptr<const Node> findSlot(core::SlotId id) const;
     /// The meter for an insert, for the UI. Null when there is none.
     [[nodiscard]] std::shared_ptr<const MeterNode> findMeter(core::InsertId id) const;
     /// Every insert's meter, in insert-id order: what one UI frame reads (P3-7).
@@ -143,7 +148,7 @@ public:
     }
 
 private:
-    enum class Kind : std::uint8_t { Channel, Fader, Meter, Slot, Send };
+    enum class Kind : std::uint8_t { Channel, Fader, Meter, Slot, Send, Controller };
     using Key = std::pair<Kind, std::uint32_t>;
 
     struct Entry {

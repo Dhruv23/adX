@@ -27,8 +27,11 @@ namespace {
 
 constexpr py::ssize_t kColumns = 9;
 
-py::tuple frame(EngineHandle& self,
-                py::array_t<float, py::array::c_style | py::array::forcecast>& out) {
+} // namespace
+
+namespace adx::bindings {
+
+py::tuple frameInto(EngineHandle& self, LevelArray& out) {
     if (out.ndim() != 2 || out.shape(1) != kColumns) {
         throw py::value_error("frame() wants an (N, 9) float32 array");
     }
@@ -57,10 +60,18 @@ py::tuple frame(EngineHandle& self,
                           self.engine->positionSamples());
 }
 
-} // namespace
+} // namespace adx::bindings
 
 void defineEngineFrame(py::class_<EngineHandle>& engine) {
-    engine.def("frame", &frame, py::arg("levels"), // GIL: trivial - a few floats per strip
+    // GIL: trivial - a few floats per strip, and the meters' vertices: O(strips)
+    engine.def("frame_with_meters", &adx::bindings::frameWithMeters, py::arg("levels"),
+               py::arg("meters"),
+               "frame(), also building every strip's meter into `meters` (MeterGeometry) in the "
+               "same call. Returns (position_ticks, rolling, strip_count, position_samples, "
+               "meter_address, meter_vertex_count, meter_revision): the upload reads the "
+               "address before any other engine call, so it cannot go stale (phase_6.md 4.3).");
+    engine.def("frame", &adx::bindings::frameInto,
+               py::arg("levels"), // GIL: trivial - a few floats per strip
                "Everything one UI frame reads and does, in one call: pumps the engine, fills "
                "`levels` (N x 9, as levels() "
                "lays it out) and returns (position_ticks, rolling, strip_count, position_samples). "

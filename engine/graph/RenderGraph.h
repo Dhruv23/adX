@@ -43,6 +43,9 @@ struct NodeStep {
     /// This node's slice of the snapshot's parameter storage.
     std::uint32_t paramBase{0};
     std::uint32_t paramCount{0};
+    /// A controller's target parameter, written from Node::modulation() after the node
+    /// runs; kNone for every other node.
+    std::uint32_t modulates{kNone};
 };
 
 /// Sums one output port of the step that owns it into another step's accumulator.

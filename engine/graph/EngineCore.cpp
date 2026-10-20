@@ -1,5 +1,7 @@
 #include "engine/graph/EngineCore.h"
 
+#include <algorithm>
+
 #include "engine/rt/Violation.h"
 
 namespace adx::graph {
@@ -69,6 +71,21 @@ void EngineCore::drain() noexcept {
         case MessageKind::Rate:
             m_transport.get(transport::TimeSourceId{message.timeSource}).requestRate(message.rate);
             break;
+        case MessageKind::Audition:
+            m_audition.start(
+                message.param.owner,
+                static_cast<std::uint8_t>(std::clamp<std::int64_t>(message.tickA, 0, 127)),
+                static_cast<std::uint8_t>(std::clamp(message.value, 1.0F, 127.0F)),
+                static_cast<std::uint32_t>(std::max<std::int64_t>(message.tickB, 1)));
+            break;
+        case MessageKind::AuditionStop:
+            m_audition.releaseAll();
+            break;
+        case MessageKind::Metronome:
+            m_metronome.setEnabled(
+                message.flag, message.tickA,
+                static_cast<std::uint32_t>(std::max<std::int64_t>(message.tickB, 1)));
+            break;
         }
     }
 }
@@ -88,7 +105,24 @@ void EngineCore::process(float* out, std::uint32_t frames, std::uint32_t channel
         }
         return;
     }
+    m_scheduler.setAudition(m_audition.beginBlock(frames));
     m_scheduler.render(*m_current, m_transport, arena, out, frames, channels);
+    // The click is the device's, not the mix's: after the graph, so it never reaches a
+    // meter or a bounce. Positions are read after the render, which applied this block's
+    // play, seek and loop requests; the block's start is its end less what it played. A
+    // block that wrapped a loop places its clicks as if it had not - a click at most a
+    // block off, once per wrap.
+    const transport::TimeSource& arrangement = m_transport.arrangement();
+    const std::int64_t toSamples = arrangement.positionSamples();
+    const std::int64_t toTicks = arrangement.positionTicks().value;
+    const auto played = static_cast<std::int64_t>(static_cast<double>(frames) * arrangement.rate());
+    const std::int64_t fromSamples = std::max<std::int64_t>(0, toSamples - played);
+    const std::int64_t fromTicks =
+        arrangement.rolling() ? arrangement.tempo()
+                                    .toTicks(core::Samples{fromSamples}, arrangement.sampleRate())
+                                    .value
+                              : toTicks;
+    m_metronome.mix(arrangement, fromTicks, toTicks, fromSamples, out, frames, channels);
 }
 
 void EngineCore::processStep(void* user, float* out, const float* /*in*/, std::uint32_t frames,

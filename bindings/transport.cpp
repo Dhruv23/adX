@@ -232,6 +232,7 @@ void defineEngine(py::module_& m) {
             },
             "The slowest audio callback since the stream started, in milliseconds.");
     defineEngineFrame(engine);
+    adx::bindings::defineEngineExtras(engine);
 }
 
 } // namespace

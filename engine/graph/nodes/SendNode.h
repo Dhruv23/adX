@@ -21,6 +21,11 @@ public:
     void process(ProcessContext& context) noexcept override;
     void reset() noexcept override;
     [[nodiscard]] PortSpec ports() const noexcept override;
+
+private:
+    /// The level the previous block ended on, where this block's ramp starts.
+    float m_level{0.0F};
+    bool m_hasLevel{false};
 };
 
 } // namespace adx::graph

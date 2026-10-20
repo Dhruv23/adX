@@ -142,7 +142,8 @@ void ChannelNode::renderSegment(std::span<float> left, std::span<float> right,
         // advanced along whatever glide it is on. Advancing it here, one frame at a
         // time, is what makes a slide smooth rather than stepped at block boundaries.
         for (std::uint32_t i = 0; i < frames; ++i) {
-            voiceCents[i] = paramAt(context, kPitch, render.frameOffset + i) + voice.pitchOffset;
+            voiceCents[i] = paramAt(context, kPitch, render.frameOffset + i) + voice.pitchOffset +
+                            context.tuningCents;
             if (voice.glideRemaining > 0) {
                 --voice.glideRemaining;
                 voice.pitchOffset = voice.glideRemaining == 0 ? voice.glideTarget

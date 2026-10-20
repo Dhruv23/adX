@@ -113,6 +113,25 @@ TEST_CASE("a group boundary prevents coalescing", "[commands]") {
     CHECK(scene.stack.undoDepth() == before + 3);
 }
 
+TEST_CASE("a sealed gesture does not coalesce into the last", "[commands]") {
+    // Phase 6: a UI seals on every press, so two quick drags are two undo steps while
+    // the moves inside each drag still merge.
+    Scene scene;
+    const std::size_t before = scene.stack.undoDepth();
+    const auto move = [&scene](int ms) {
+        scene.at(
+            std::chrono::milliseconds{ms},
+            std::make_unique<MoveNotes>(scene.pattern, scene.channel, scene.notes, Ticks{10}, 0));
+    };
+    scene.stack.sealCoalescing();
+    move(0);
+    move(20);
+    scene.stack.sealCoalescing();
+    move(40);
+    move(60);
+    CHECK(scene.stack.undoDepth() == before + 2);
+}
+
 TEST_CASE("a group is one undo step and reverts in reverse order", "[commands]") {
     Fixture fixture;
     fixture.stack.beginGroup("Build a mixer");

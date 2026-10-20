@@ -5,12 +5,15 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "engine/dsp/Math.h"
 #include "engine/effects/Factory.h"
 #include "engine/graph/nodes/ChannelNode.h"
 #include "engine/graph/nodes/InsertNode.h"
+#include "engine/graph/nodes/PeakControllerNode.h"
 #include "engine/graph/nodes/SendNode.h"
 #include "engine/graph/nodes/SlotNode.h"
 #include "engine/instruments/Factory.h"
+#include "engine/project/ParamRegistry.h"
 #include "engine/project/Project.h"
 #include "engine/project/TypeCatalog.h"
 
@@ -104,6 +107,23 @@ std::shared_ptr<Node> NodeStore::slot(const project::Slot& slot,
 
 std::shared_ptr<Node> NodeStore::send(core::SendId id) {
     return getOrMake(Key{Kind::Send, id.value}, [] { return std::make_shared<SendNode>(); });
+}
+
+std::shared_ptr<Node> NodeStore::controller(core::ControllerId id, const PeakConfig& config) {
+    const Key key{Kind::Controller, id.value};
+    // The audio thread reads a node's configuration unlocked, so a changed one is a new
+    // node rather than an edit to the live one.
+    const auto found = m_nodes.find(key);
+    if (found != m_nodes.end() && found->second.node &&
+        !(static_cast<const PeakControllerNode*>(found->second.node.get())->config() == config)) {
+        m_nodes.erase(found);
+    }
+    return getOrMake(key, [&config] { return std::make_shared<PeakControllerNode>(config); });
+}
+
+std::shared_ptr<const Node> NodeStore::findSlot(core::SlotId id) const {
+    const auto found = m_nodes.find(Key{Kind::Slot, id.value});
+    return found == m_nodes.end() ? nullptr : found->second.node;
 }
 
 std::shared_ptr<const MeterNode> NodeStore::findMeter(core::InsertId id) const {
@@ -407,17 +427,12 @@ std::pair<NodeId, NodeId> addInsertChain(const project::Insert& insert, bool mas
                                          const project::Resources& resources) {
     const std::string label = insertLabel(insert.id);
 
-    std::vector<const project::Slot*> slots;
-    slots.reserve(insert.slots.size());
-    for (const project::Slot& slot : insert.slots) {
-        slots.push_back(&slot);
-    }
-    // Slots process in ascending id order (Mixer.h), whatever order the vector holds.
-    std::ranges::sort(slots, {}, [](const project::Slot* slot) { return slot->id.value; });
-
+    // Slots process in list order (Mixer.h): reordering effects is a move in the list,
+    // and a slot keeps its id - and so its node, its state and its automation.
     NodeId entry{kNone};
     NodeId previous{kNone};
-    for (const project::Slot* slot : slots) {
+    for (const project::Slot& slotValue : insert.slots) {
+        const project::Slot* slot = &slotValue;
         const NodeId id = graph.add(nodes.slot(*slot, resources), label);
         if (slot->sidechain.valid()) {
             keyed.emplace_back(id, slot->sidechain);
@@ -468,6 +483,47 @@ std::pair<NodeId, NodeId> addInsertChain(const project::Insert& insert, bool mas
     const NodeId meter = graph.add(nodes.meter(insert.id, master), label);
     graph.connect(fader, kPortPost, meter, kPortMain);
     return {entry, fader};
+}
+
+/// The peak controllers: each a node fed from its source insert's post-fader output,
+/// writing the parameter it drives (PeakControllerNode.h). Added after every parameter
+/// binding exists, because the target is found in the finished index. A controller
+/// whose source or target is gone builds nothing.
+void addPeakControllers(const project::Project& project, Graph& graph, const ParamLayout& layout,
+                        NodeStore& nodes, const std::unordered_map<std::uint32_t, NodeId>& faders) {
+    for (const project::Controller& controller : project.controllers) {
+        if (controller.kind != project::ControllerKind::Peak || !controller.target.valid()) {
+            continue;
+        }
+        const auto source = faders.find(controller.sourceInsert.value);
+        const auto target = std::ranges::lower_bound(
+            layout.index, controller.target,
+            [](const project::ParamRef& a, const project::ParamRef& b) {
+                return project::paramRefLess(a, b);
+            },
+            &project::ParamSlot::ref);
+        if (source == faders.end() || target == layout.index.end() ||
+            !(target->ref == controller.target)) {
+            continue;
+        }
+        const project::ParamDescriptor* descriptor =
+            project::ParamRegistry::descriptorFor(controller.target, project);
+        PeakConfig config{.attackMs = controller.attackMs,
+                          .releaseMs = controller.releaseMs,
+                          .gain = static_cast<float>(dsp::dbToGain(controller.gainDb)),
+                          .depth = controller.depth,
+                          .center = controller.center};
+        if (descriptor != nullptr && descriptor->maximum > descriptor->minimum) {
+            config.minimum = descriptor->minimum;
+            config.maximum = descriptor->maximum;
+            config.logarithmic =
+                descriptor->scale == project::ScaleKind::Logarithmic && descriptor->minimum > 0.0F;
+        }
+        const NodeId id =
+            graph.add(nodes.controller(controller.id, config), "controller." + controller.name);
+        graph.find(id)->modulates = target->index;
+        graph.connect(source->second, kPortPost, id, kPortMain);
+    }
 }
 
 } // namespace
@@ -590,6 +646,7 @@ GraphBuild buildGraph(const project::Project& project, NodeStore& nodes) {
     std::ranges::sort(layout.index, [](const project::ParamSlot& a, const project::ParamSlot& b) {
         return project::paramRefLess(a.ref, b.ref);
     });
+    addPeakControllers(project, graph, layout, nodes, faders);
 
     build.order = topoSort(graph);
     if (!build.order.ok) {
@@ -613,7 +670,8 @@ bool GraphBuild::sameStructure(const GraphBuild& other) const noexcept {
         const GraphNode& a = graph.nodes()[i];
         const GraphNode& b = other.graph.nodes()[i];
         if (a.node != b.node || a.eventTrack != b.eventTrack || a.timeSource != b.timeSource ||
-            a.paramBase != b.paramBase || a.paramCount != b.paramCount) {
+            a.paramBase != b.paramBase || a.paramCount != b.paramCount ||
+            a.modulates != b.modulates) {
             return false;
         }
     }

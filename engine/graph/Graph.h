@@ -31,6 +31,8 @@ struct GraphNode {
     std::uint32_t timeSource{0};
     std::uint32_t paramBase{0};
     std::uint32_t paramCount{0};
+    /// A controller node's target: an index into the snapshot's parameters, or kNone.
+    std::uint32_t modulates{kNone};
 };
 
 struct GraphEdge {

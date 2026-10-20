@@ -94,6 +94,23 @@ PlaylistTrack* Playlist::find(core::PlaylistTrackId id) noexcept {
     return findById(tracks, id);
 }
 
+bool Playlist::audible(const PlaylistTrack& track) const noexcept {
+    const PlaylistTrack* group = find(track.group);
+    if (track.muted || (group != nullptr && group->muted)) {
+        return false;
+    }
+    const bool anySolo = std::ranges::any_of(tracks, &PlaylistTrack::soloed);
+    if (!anySolo) {
+        return true;
+    }
+    if (track.soloed || (group != nullptr && group->soloed)) {
+        return true;
+    }
+    // A group plays when one of its members is soloed, or the member would be silent.
+    return std::ranges::any_of(
+        tracks, [&track](const PlaylistTrack& t) { return t.soloed && t.group == track.id; });
+}
+
 // --- Mixer -------------------------------------------------------------------
 
 const SlotParam* Slot::find(std::string_view name) const noexcept {
@@ -196,7 +213,8 @@ IdMarks Project::idMarks() const noexcept {
                    .item = m_itemIds.mark(),
                    .marker = m_markerIds.mark(),
                    .sample = m_sampleIds.mark(),
-                   .automationClip = m_automationClipIds.mark()};
+                   .automationClip = m_automationClipIds.mark(),
+                   .controller = m_controllerIds.mark()};
 }
 
 void Project::restoreIdMarks(const IdMarks& marks) noexcept {
@@ -212,6 +230,7 @@ void Project::restoreIdMarks(const IdMarks& marks) noexcept {
     m_markerIds.restore(marks.marker);
     m_sampleIds.restore(marks.sample);
     m_automationClipIds.restore(marks.automationClip);
+    m_controllerIds.restore(marks.controller);
 }
 
 const Channel* Project::find(core::ChannelId id) const noexcept {
@@ -246,6 +265,19 @@ const Channel* Project::findChannelByName(std::string_view name) const noexcept 
 const Pattern* Project::findPatternByName(std::string_view name) const noexcept {
     const auto match = std::ranges::find(patterns, name, &Pattern::name);
     return match == patterns.end() ? nullptr : &*match;
+}
+
+const Controller* Project::find(core::ControllerId id) const noexcept {
+    return findById(controllers, id);
+}
+
+Controller* Project::find(core::ControllerId id) noexcept {
+    return findById(controllers, id);
+}
+
+const Controller* Project::findControllerByName(std::string_view name) const noexcept {
+    const auto match = std::ranges::find(controllers, name, &Controller::name);
+    return match == controllers.end() ? nullptr : &*match;
 }
 
 const AutomationClip* Project::findAutomationClip(core::AutomationClipId id) const noexcept {

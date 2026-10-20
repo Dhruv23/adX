@@ -10,6 +10,7 @@
 #include <QtCore/QtGlobal>
 #include <QtQml/qqml.h>
 
+#include "bindings/qml/GeometryItem.h"
 #include "bindings/qml/PianoRollItem.h"
 #include "bindings/qml/WaveformItem.h"
 
@@ -28,7 +29,7 @@ __declspec(dllexport) const char* adx_quick_qt_version() {
     return kBuiltAgainst;
 }
 
-/// Registers `import Adx 1.0`: PianoRollItem and WaveformItem. Returns 0 on success,
+/// Registers `import Adx 1.0`: PianoRollItem, WaveformItem and GeometryItem. Returns 0 on success,
 /// 1 when the running Qt is older than the one this was built against (a plugin built
 /// against a newer Qt is not loadable into an older one).
 // NOLINTNEXTLINE(readability-identifier-naming) - a C export; ctypes looks it up by name
@@ -40,6 +41,7 @@ __declspec(dllexport) int adx_quick_register() {
     }
     qmlRegisterType<adx::quick::PianoRollItem>("Adx", 1, 0, "PianoRollItem");
     qmlRegisterType<adx::quick::WaveformItem>("Adx", 1, 0, "WaveformItem");
+    qmlRegisterType<adx::quick::GeometryItem>("Adx", 1, 0, "GeometryItem");
     return 0;
 }
 }

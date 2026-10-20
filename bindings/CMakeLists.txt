@@ -1,12 +1,16 @@
 pybind11_add_module(adx_engine MODULE
     module.cpp
     audio.cpp
+    edit.cpp
     format.cpp
     geometry.cpp
     meters.cpp
     notes.cpp
+    panels.cpp
     project.cpp
     render.cpp
+    session.cpp
+    structure.cpp
     transport.cpp
 )
 target_link_libraries(adx_engine PRIVATE adx::engine)

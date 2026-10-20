@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import pathlib
 import random
+from collections.abc import Iterator
 
 import pytest
 
@@ -122,3 +123,23 @@ def quick(qapp: object) -> None:
             pytest.fail("adx_quick was not built in CI: the Qt SDK step failed (phase_5.md 4.3)")
         pytest.skip("adx_quick not built (python tools/fetch_qt.py; pip install -e .)")
     engine_bridge.load_quick_plugin()
+
+
+@pytest.fixture
+def studio(quick: None, tmp_path: pathlib.Path) -> Iterator[object]:
+    """The whole application on the null backend, a new project open, settings in
+    ``tmp_path`` (phase_6.md 5: panel tests drive real widgets). Yields the MainWindow."""
+    from PySide6.QtCore import QSettings
+
+    from adx.application import create
+
+    settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
+    _app, main = create(null_audio=True, settings=settings)
+    main.clock.stop()
+    main.new_project()
+    yield main
+    main.clock.stop()
+    main.engine.stop()
+    main.saved_revision = main.project.revision() if main.project else 0
+    main.close()
+    dispose(main)

@@ -106,6 +106,22 @@ enum class CommandId : std::uint16_t {
     kSetBreakpoints,
 
     kAddSample,
+
+    // Phase 6. Appended, so every earlier id keeps its number.
+    kMoveSlot,
+    kSetPlaylistItem,
+    kSetPlaylistTrack,
+    kMovePlaylistTrack,
+    kAddArrangement,
+    kRemoveArrangement,
+    kSwitchArrangement,
+    kRenameArrangement,
+    kAddController,
+    kRemoveController,
+    kSetController,
+    kSetInstrument,
+    kSetSlotEffect,
+    kSetSlotImpulse,
 };
 
 class Command {

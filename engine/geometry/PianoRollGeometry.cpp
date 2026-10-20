@@ -66,6 +66,52 @@ void finish(GeometryBuffer& buffer, const float* begin, const float* end) {
     return worldRowTop(pitch) + 0.5F - (cents / 100.0F);
 }
 
+/// Line pieces one curved segment is drawn with (P5-2). Fixed, so the buffer can be
+/// sized before writing; 16 keeps the steepest Exponential within a pixel at the
+/// roll's widest zoom.
+constexpr std::size_t kCurvePieces = 16;
+
+[[nodiscard]] std::size_t curvePieces(const core::Curve& curve) noexcept {
+    switch (curve.kind) {
+    case core::CurveKind::Linear:
+        return 1;
+    case core::CurveKind::Step:
+    case core::CurveKind::Hold:
+        return 2;
+    default:
+        return kCurvePieces;
+    }
+}
+
+/// The segment from (x0, y0) to (x1, y1) shaped by `curve`, through core::Curve - the
+/// evaluator the engine compiles slides with, so what is drawn is what is heard.
+float* curvedLine(float* out, float x0, float y0, float x1, float y1,
+                  const core::Curve& curve) noexcept {
+    switch (curve.kind) {
+    case core::CurveKind::Linear:
+        return line(out, x0, y0, x1, y1, ColorRole::kCurve);
+    case core::CurveKind::Step:
+        out = line(out, x0, y0, x1, y0, ColorRole::kCurve);
+        return line(out, x1, y0, x1, y1, ColorRole::kCurve);
+    case core::CurveKind::Hold:
+        out = line(out, x0, y0, x0, y1, ColorRole::kCurve);
+        return line(out, x0, y1, x1, y1, ColorRole::kCurve);
+    default:
+        break;
+    }
+    float px = x0;
+    float py = y0;
+    for (std::size_t i = 1; i <= kCurvePieces; ++i) {
+        const float t = static_cast<float>(i) / static_cast<float>(kCurvePieces);
+        const float x = x0 + ((x1 - x0) * t);
+        const float y = core::interpolate(curve, y0, y1, t);
+        out = line(out, px, py, x, y, ColorRole::kCurve);
+        px = x;
+        py = y;
+    }
+    return out;
+}
+
 } // namespace
 
 float laneValue(const project::Note& note, LaneKind lane) noexcept {
@@ -426,7 +472,11 @@ void PianoRollGeometry::buildCurves(const project::NoteClip& clip) {
     std::size_t segments = 0;
     for (const std::uint32_t index : m_visibleIndex) {
         if (const project::NoteExtras* extras = clip.extrasFor(clip.notes[index].id)) {
-            segments += (extras->slide ? 3 : 0) + extras->pitchCurve.size() + 1;
+            segments += extras->slide ? 2 + curvePieces(extras->slide->curve) : 0;
+            for (const project::PitchPoint& point : extras->pitchCurve) {
+                segments += curvePieces(point.curve);
+            }
+            segments += 1;
         }
     }
     const std::span<float> out = m_curves.resize(segments * 2, kFloatsPerVertex);
@@ -446,16 +496,21 @@ void PianoRollGeometry::buildCurves(const project::NoteClip& clip) {
             const float target = curveY(note.pitch, static_cast<float>(slide.targetCents));
             w = line(w, worldX(s), curveY(note.pitch, 0.0F), worldX(a), curveY(note.pitch, 0.0F),
                      ColorRole::kCurve);
-            w = line(w, worldX(a), curveY(note.pitch, 0.0F), worldX(b), target, ColorRole::kCurve);
+            w = curvedLine(w, worldX(a), curveY(note.pitch, 0.0F), worldX(b), target, slide.curve);
             w = line(w, worldX(b), target, worldX(e), target, ColorRole::kCurve);
         }
         if (!extras->pitchCurve.empty()) {
+            // A point's curve shapes the segment that starts at it; the implicit start
+            // at the note's own pitch is linear into the first point.
             float px = worldX(s);
             float py = curveY(note.pitch, 0.0F);
+            const core::Curve linear{};
+            const core::Curve* shape = &linear;
             for (const project::PitchPoint& point : extras->pitchCurve) {
                 const float x = worldX(std::min(e, s + point.at.value));
                 const float y = curveY(note.pitch, static_cast<float>(point.cents));
-                w = line(w, px, py, x, y, ColorRole::kCurve);
+                w = curvedLine(w, px, py, x, y, *shape);
+                shape = &point.curve;
                 px = x;
                 py = y;
             }

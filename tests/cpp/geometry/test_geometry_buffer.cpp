@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <random>
 #include <set>
 #include <stdexcept>
@@ -10,6 +11,7 @@
 #include "engine/geometry/ColorPalette.h"
 #include "engine/geometry/GeometryBuffer.h"
 #include "engine/geometry/PianoRollGeometry.h"
+#include "engine/project/commands/NoteCommands.h"
 #include "engine/rt/AllocGuard.h"
 #include "engine/rt/RtSection.h"
 #include "engine/rt/Violation.h"
@@ -232,4 +234,46 @@ TEST_CASE("geometry_scale_highlight_rows", "[geometry]") {
     REQUIRE(roleOfRow(61) == roleValue(ColorRole::kRowInScale));
     REQUIRE(roleOfRow(60) == roleValue(ColorRole::kRowBlack));
     REQUIRE(geometry.grid().vertexCount() > 0);
+}
+
+TEST_CASE("geometry_curved_slide_follows_curve", "[geometry]") {
+    // P5-2: a curved slide is drawn through core::Curve, not as one straight line.
+    adx::test::RollScene scene(1, 1);
+    const adx::project::Note note = scene.clip().notes.front();
+    const auto slideWith = [&](adx::core::Curve curve) {
+        scene.run(std::make_unique<adx::project::SetNoteSlide>(
+            scene.pattern, scene.lead, note.id,
+            adx::project::NoteSlide{.targetCents = 1200,
+                                    .start = adx::core::Ticks{0},
+                                    .length = note.length,
+                                    .curve = curve}));
+        PianoRollGeometry geometry;
+        geometry.build(scene.project, fullView(scene), optionsFor(scene));
+        return std::vector<float>(geometry.curves().floats().begin(),
+                                  geometry.curves().floats().end());
+    };
+    const float x0 = worldX(note.start.value);
+    const float x1 = worldX(note.end().value);
+    const float y0 = worldRowTop(note.pitch) + 0.5F;
+    const float y1 = y0 - 12.0F;
+
+    // Linear: one line for the slide, plus its two flat legs.
+    REQUIRE(slideWith({}).size() == std::size_t{3} * 2 * kFloatsPerVertex);
+
+    const adx::core::Curve curved{.kind = adx::core::CurveKind::Exponential, .tension = 0.6F};
+    const std::vector<float> floats = slideWith(curved);
+    REQUIRE(floats.size() > std::size_t{3} * 2 * kFloatsPerVertex);
+    std::size_t inside = 0;
+    for (std::size_t v = 0; v < floats.size(); v += kFloatsPerVertex) {
+        const float x = floats[v];
+        if (x <= x0 || x >= x1) {
+            continue;
+        }
+        const float t = (x - x0) / (x1 - x0);
+        REQUIRE(std::abs(floats[v + 1] - adx::core::interpolate(curved, y0, y1, t)) < 1e-4F);
+        ++inside;
+    }
+    // Interior vertices exist, and they bend: the midpoint is not on the chord.
+    REQUIRE(inside > 4);
+    REQUIRE(std::abs(adx::core::interpolate(curved, y0, y1, 0.5F) - ((y0 + y1) / 2.0F)) > 0.5F);
 }

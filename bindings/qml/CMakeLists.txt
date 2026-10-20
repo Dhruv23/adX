@@ -35,6 +35,7 @@ set(ADX_HAVE_QUICK ON PARENT_SCOPE)
 
 add_library(adx_quick SHARED
     AdxQuickPlugin.cpp
+    GeometryItem.cpp
     PianoRollItem.cpp
     SceneLayers.cpp
     WaveformItem.cpp

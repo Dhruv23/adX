@@ -223,6 +223,23 @@ class _Commands:
         result: Native = _native.commands.SetTempo(bpm, at_ticks)
         return result
 
+    @_ffi
+    def add_marker(self, at_ticks: int, name: str) -> Native:
+        """A marker on the ruler."""
+        result: Native = _native.commands.AddMarker(at_ticks, name)
+        return result
+
+    @_ffi
+    def build(self, name: str, *args: object) -> Native:
+        """Phase 6's id-addressed constructors (bindings/edit.cpp), by name:
+        ``commands.build("SetChannelField", channel_id, "volume", 0.8)``. One engine
+        call; an unknown name or a bad argument raises before anything executes."""
+        constructor = getattr(_native.commands, name, None)
+        if constructor is None:
+            raise AttributeError(f"no command {name}")
+        result: Native = constructor(*args)
+        return result
+
 
 commands = _Commands()
 
@@ -372,6 +389,192 @@ class Project:
         """Execute a command built by :data:`commands` (the build was its own call)."""
         self.execute(command)
 
+    # --- Phase 6: the structure the panels read (bindings/structure.cpp) ---------------
+
+    @_ffi
+    def channels_info(self) -> list[dict[str, Any]]:
+        """Every channel's settings, in id order."""
+        return [dict(d) for d in self.native.channels_info()]
+
+    @_ffi
+    def mixer_info(self) -> dict[str, Any]:
+        """Inserts (with slots and sends), routes and the master's id."""
+        return dict(self.native.mixer_info())
+
+    @_ffi
+    def patterns_info(self) -> list[dict[str, Any]]:
+        """Every pattern: id, name, colour, length, channels, automation clips."""
+        return [dict(d) for d in self.native.patterns_info()]
+
+    @_ffi
+    def playlist_info(self) -> dict[str, Any]:
+        """Tracks and arrangements."""
+        return dict(self.native.playlist_info())
+
+    @_ffi
+    def playlist_items(self) -> npt.NDArray[np.void]:
+        """Every placement as ONE structured array (ITEM_DTYPE)."""
+        result: npt.NDArray[np.void] = self.native.playlist_items()
+        return result
+
+    @_ffi
+    def automation_clips(self) -> list[dict[str, Any]]:
+        """Every automation clip: id, pattern (0: playlist), target, validity."""
+        return [dict(d) for d in self.native.automation_clips()]
+
+    @_ffi
+    def automation_points(self, clip: int) -> npt.NDArray[np.float64]:
+        """A clip's points: (n, 8) tick, value, curve kind, tension, c1x, c1y, c2x, c2y."""
+        result: npt.NDArray[np.float64] = self.native.automation_points(clip)
+        return result
+
+    @_ffi
+    def item_envelopes(self, track: int, item: int) -> list[dict[str, Any]]:
+        """A placement's clip envelopes."""
+        return [dict(d) for d in self.native.item_envelopes(track, item)]
+
+    @_ffi
+    def controllers_info(self) -> list[dict[str, Any]]:
+        """Every controller's settings."""
+        return [dict(d) for d in self.native.controllers_info()]
+
+    @_ffi
+    def markers(self) -> list[tuple[int, int, str]]:
+        """(id, tick, name) per marker."""
+        return [(int(i), int(t), str(n)) for i, t, n in self.native.markers()]
+
+    @_ffi
+    def samples(self) -> list[tuple[int, str, str]]:
+        """(id, path as written, resolved path) per pool entry."""
+        return [(int(i), str(p), str(f)) for i, p, f in self.native.samples()]
+
+    @_ffi
+    def history_info(self) -> tuple[list[str], list[str]]:
+        """(done labels oldest first, redo labels next first)."""
+        done, redo = self.native.history_info()
+        return [str(s) for s in done], [str(s) for s in redo]
+
+    @_ffi
+    def param_value(self, path: str) -> float | None:
+        """The model's value at a parameter path, or None."""
+        value = self.native.param_value(path)
+        return None if value is None else float(value)
+
+    @_ffi
+    def param_descriptor(self, path: str) -> dict[str, Any] | None:
+        """A parameter path's range, unit and scale, or None."""
+        value = self.native.param_descriptor(path)
+        return None if value is None else dict(value)
+
+    @_ffi
+    def param_valid(self, path: str) -> bool:
+        """Whether a parameter path names something."""
+        return bool(self.native.param_valid(path))
+
+    @_ffi
+    def notes_fragment(self, pattern: str, channel: str, ids: list[int]) -> str:
+        """Notes as .adx text, written by the Phase 2 writer (the clipboard)."""
+        return str(self.native.notes_fragment(pattern, channel, ids))
+
+    @_ffi
+    def content_length(self) -> int:
+        """The end of the last placement, in ticks."""
+        return int(self.native.content_length())
+
+    # --- Phase 6: groups, history and drops (bindings/session.cpp) -----------------------
+
+    @_ffi
+    def begin_group(self, label: str) -> None:
+        """Everything executed until end_group() is one undo step."""
+        self.native.begin_group(label)
+
+    @_ffi
+    def end_group(self) -> None:
+        """Close the group begin_group() opened."""
+        self.native.end_group()
+
+    @_ffi
+    def seal_coalescing(self) -> None:
+        """The next command starts a new history entry: a new gesture began."""
+        self.native.seal_coalescing()
+
+    @_ffi
+    def undo_depth(self) -> int:
+        """Steps that undo() could undo."""
+        return int(self.native.undo_depth)
+
+    @_ffi
+    def undo_to(self, depth: int) -> bool:
+        """Undo or redo until ``depth`` steps are done."""
+        return bool(self.native.undo_to(depth))
+
+    @_ffi
+    def add_audio_item(self, track: int, path: str, start: int, length: int = 0) -> int:
+        """A sample on the playlist: pool entry and placement, one step. The item id."""
+        return int(self.native.add_audio_item(track, path, start, length))
+
+    @_ffi
+    def add_sampler_channel(self, name: str, path: str, output: int = 0) -> int:
+        """A sampler channel playing ``path``, one step. The channel id."""
+        return int(self.native.add_sampler_channel(name, path, output))
+
+    @_ffi
+    def apply_preset(self, channel: int, path: str) -> list[dict[str, Any]]:
+        """An instrument preset, samples included, onto a channel: one step."""
+        return list(self.native.apply_preset(channel, path))
+
+    @_ffi
+    def apply_effect_preset(
+        self, insert: int, slot: int, path: str
+    ) -> tuple[int, list[dict[str, Any]]]:
+        """An effect preset onto a slot (slot 0: a new one on ``insert``): one step."""
+        slot_id, diagnostics = self.native.apply_effect_preset(insert, slot, path)
+        return int(slot_id), list(diagnostics)
+
+    @_ffi
+    def routing_matrix(self) -> tuple[list[int], npt.NDArray[np.uint8]]:
+        """(insert ids ascending, n x n states): 0 none, 1 route, 2 send, 3 sidechain,
+        4 would close a cycle, 5 self. Rows are sources."""
+        ids, matrix = self.native.routing_matrix()
+        return [int(i) for i in ids], matrix
+
+    @_ffi
+    def add_zone(
+        self, channel: int, path: str, key_low: int = 0, key_high: int = 127, root: int = 60
+    ) -> None:
+        """One more sampler zone playing ``path``, one step."""
+        self.native.add_zone(channel, path, key_low, key_high, root)
+
+    @_ffi
+    def zones(self, channel: int) -> list[dict[str, Any]]:
+        """A sampler channel's zones."""
+        return [dict(d) for d in self.native.zones(channel)]
+
+    @_ffi
+    def duplicate_channel(self, channel: int) -> int:
+        """A copy of a channel, one step. The new id."""
+        return int(self.native.duplicate_channel(channel))
+
+    @_ffi
+    def duplicate_insert(self, insert: int) -> int:
+        """A copy of an insert with its effects, sends and routes, one step."""
+        return int(self.native.duplicate_insert(insert))
+
+    @_ffi
+    def duplicate_slot(self, slot: int) -> int:
+        """A copy of an effect slot on its insert, one step."""
+        return int(self.native.duplicate_slot(slot))
+
+    @_ffi
+    def set_slot_impulse(self, slot: int, path: str) -> None:
+        """A Convolution slot's impulse response file (empty: synthetic), one step."""
+        self.native.set_slot_impulse(slot, path)
+
+    @_ffi
+    def set_slot_effect(self, slot: int, effect_type: str) -> None:
+        """Replace a slot's effect with a fresh one of ``effect_type``."""
+        self.native.set_slot_effect(slot, effect_type)
+
 
 # --- the engine ----------------------------------------------------------------------
 
@@ -456,12 +659,70 @@ class Engine:
         """The slowest audio callback since the stream started."""
         return float(self.native.worst_callback_ms)
 
+    @_ffi
+    def frame_with_meters(
+        self, levels: npt.NDArray[np.float32], meters: MeterGeometry
+    ) -> tuple[int, bool, int, int, int, int, int]:
+        """frame(), also building every strip's meter vertices - still ONE call. Adds
+        (meter address, vertex count, revision); upload before any other engine call."""
+        ticks, rolling, strips, samples, address, count, revision = self.native.frame_with_meters(
+            levels, meters.native
+        )
+        return (
+            int(ticks),
+            bool(rolling),
+            int(strips),
+            int(samples),
+            int(address),
+            int(count),
+            int(revision),
+        )
+
+    @_ffi
+    def set_param(self, project: Project, path: str, value: float) -> bool:
+        """A knob turn: into the project and undo, and to the audio thread with no
+        rebuild. Consecutive turns of one control coalesce into one step."""
+        return bool(self.native.set_param(project.native, path, value))
+
+    @_ffi
+    def audition(self, channel: int, pitch: int, velocity: int = 100, seconds: float = 0.3) -> None:
+        """Play one note through a channel's instrument, outside the arrangement."""
+        self.native.audition(channel, pitch, velocity, seconds)
+
+    @_ffi
+    def stop_audition(self) -> None:
+        """Release every audition note."""
+        self.native.stop_audition()
+
+    @_ffi
+    def set_metronome(self, enabled: bool, beat_ticks: int = PPQ, beats_per_bar: int = 4) -> None:
+        """The click, realtime only."""
+        self.native.set_metronome(enabled, beat_ticks, beats_per_bar)
+
+    @_ffi
+    def eq_spectrum(self, slot: int, geometry: EqCurveGeometry) -> bool:
+        """Fill ``geometry``'s spectrum from a running ParametricEq's tap."""
+        return bool(self.native.eq_spectrum(slot, geometry.native))
+
+    @_ffi
+    def gain_reduction(self, slot: int) -> float:
+        """A compressor's or limiter's gain reduction over its last block, dB."""
+        return float(self.native.gain_reduction(slot))
+
+    @_ffi
+    def latency_samples(self) -> int:
+        """Latency along the slowest path: the preferences' readout."""
+        return int(self.native.latency_samples)
+
 
 class FrameClock(QObject):
     """The 60 Hz UI frame: one :meth:`Engine.frame` call per tick (phase_5.md 4.8).
 
     Emits ``frame(position_ticks, rolling)`` and keeps the latest meter rows in
-    :attr:`levels`, a buffer allocated once and refilled in place.
+    :attr:`levels`, a buffer allocated once and refilled in place. With :attr:`meters`
+    set (the mixer sets it), the same one call also builds every strip's meter vertices,
+    and :attr:`meter_upload` holds (address, vertex count, revision) for this frame's
+    upload - which must happen before any other engine call (phase_6.md 4.3).
     """
 
     frame = Signal(int, bool)
@@ -476,6 +737,8 @@ class FrameClock(QObject):
         self.position_ticks = 0
         self.position_seconds = 0.0
         self.rolling = False
+        self.meters: MeterGeometry | None = None
+        self.meter_upload: tuple[int, int, int] = (0, 0, 0)
         self._timer = QTimer(self)
         self._timer.setInterval(interval_ms)
         self._timer.timeout.connect(self.tick)
@@ -490,7 +753,13 @@ class FrameClock(QObject):
 
     def tick(self) -> None:
         """One frame: exactly one engine call."""
-        ticks, rolling, strips, samples = self._engine.frame(self.levels)
+        if self.meters is not None:
+            ticks, rolling, strips, samples, address, count, revision = (
+                self._engine.frame_with_meters(self.levels, self.meters)
+            )
+            self.meter_upload = (address, count, revision)
+        else:
+            ticks, rolling, strips, samples = self._engine.frame(self.levels)
         if strips > self.levels.shape[0]:
             # Too small: grow once (no engine call); the next frame fills every strip.
             self.levels = np.zeros((strips * 2, LEVEL_COLUMNS), dtype=np.float32)
@@ -657,6 +926,288 @@ def hit_test_lane(
         project.native, pattern, channel, viewport, lane_height, x, y
     )
     return int(note), float(value)
+
+
+# --- Phase 6: catalog, presets, render ----------------------------------------------
+
+#: The structured dtype of one placement row (bindings/structure.cpp, ItemRecord).
+ITEM_DTYPE: np.dtype[Any] = _native.ITEM_DTYPE
+CLIP_DETAIL_PIXELS: float = float(_native.CLIP_DETAIL_PIXELS)
+METER_FLOOR_DB: float = float(_native.METER_FLOOR_DB)
+
+
+@_ffi
+def enumerate_devices() -> list[dict[str, Any]]:
+    """Every audio device the system exposes (the preferences' device list)."""
+    return [dict(d) for d in _native.enumerate_devices()]
+
+
+@_ffi
+def type_catalog() -> list[dict[str, Any]]:
+    """Every instrument and effect type with its parameter descriptors."""
+    return [dict(d) for d in _native.type_catalog()]
+
+
+@_ffi
+def curve_evaluate(
+    kind: int, tension: float, c1x: float, c1y: float, c2x: float, c2y: float, t: float
+) -> float:
+    """core::Curve::evaluate - the engine's own curve, for a tooltip or a test."""
+    return float(_native.curve_evaluate(kind, tension, c1x, c1y, c2x, c2y, t))
+
+
+@_ffi
+def scan_presets(directories: list[str]) -> list[dict[str, Any]]:
+    """Every .adxpreset under the folders: name, type, pack, tags, path, kind."""
+    return [dict(d) for d in _native.scan_presets(directories)]
+
+
+@_ffi
+def read_preset(path: str) -> dict[str, Any]:
+    """One preset's summary."""
+    return dict(_native.read_preset(path))
+
+
+@_ffi
+def render_to_file(project: Project, path: str, tail_seconds: float = 2.0) -> dict[str, Any]:
+    """Render the arrangement offline through the realtime engine's code and write a
+    32-bit float WAV: the statistics, including the golden-corpus hash."""
+    return dict(_native.render_offline(project.native, path, tail_seconds=tail_seconds))
+
+
+@_ffi
+def steps_of(
+    project: Project, pattern: int, channel: int, step_ticks: int, steps: int
+) -> npt.NDArray[np.uint32]:
+    """One channel's steps: (n, 2) note id (0: none) and velocity."""
+    result: npt.NDArray[np.uint32] = _native.steps_of(
+        project.native, pattern, channel, step_ticks, steps
+    )
+    return result
+
+
+@_ffi
+def hit_test_lane_point(
+    points: npt.NDArray[np.float64],
+    lane: tuple[float, float, bool],
+    tick_start: float,
+    pixels_per_tick: float,
+    height_px: float,
+    x: float,
+    y: float,
+) -> int:
+    """The automation point under a pixel, or -1."""
+    return int(
+        _native.hit_test_lane_point(
+            points, lane[0], lane[1], lane[2], tick_start, pixels_per_tick, height_px, x, y
+        )
+    )
+
+
+def lane_normalise(value: float, lane: tuple[float, float, bool]) -> float:
+    """A value's position in its range, 0..1, as the engine computes it."""
+    CALLS.count += 1
+    return float(_native.lane_normalise(value, lane[0], lane[1], lane[2]))
+
+
+def lane_positions(
+    values: npt.NDArray[np.float64], lane: tuple[float, float, bool]
+) -> npt.NDArray[np.float64]:
+    """Every value's position in its range, 0..1: one call, one array."""
+    CALLS.count += 1
+    result: npt.NDArray[np.float64] = _native.lane_positions(
+        np.ascontiguousarray(values, dtype=np.float64), lane[0], lane[1], lane[2]
+    )
+    return result
+
+
+def lane_denormalise(position: float, lane: tuple[float, float, bool]) -> float:
+    """The inverse of :func:`lane_normalise`."""
+    CALLS.count += 1
+    return float(_native.lane_denormalise(position, lane[0], lane[1], lane[2]))
+
+
+@_ffi
+def fm_algorithm(number: int) -> tuple[list[int], int, int, int]:
+    """The FM instrument's routing for algorithm 1..32: (modulator bitmask per
+    operator, carrier bitmask, feedback from, feedback to)."""
+    modulators, carriers, source, target = _native.fm_algorithm(number)
+    return [int(m) for m in modulators], int(carriers), int(source), int(target)
+
+
+@_ffi
+def wavetable_frames(bank: int, samples_per_frame: int = 128) -> npt.NDArray[np.float32]:
+    """A built-in wavetable's frames, (frames, samples)."""
+    result: npt.NDArray[np.float32] = _native.wavetable_frames(bank, samples_per_frame)
+    return result
+
+
+@_ffi
+def grossbeat_curve(pattern: int, points: int = 128) -> npt.NDArray[np.float64]:
+    """GrossBeat's time map for a pattern, at evenly spaced positions."""
+    result: npt.NDArray[np.float64] = _native.grossbeat_curve(pattern, points)
+    return result
+
+
+@_ffi
+def eq_axis_position(frequency: float) -> float:
+    """Where a frequency sits on the EQ curve's 20 Hz - 20 kHz log axis, 0..1."""
+    return float(_native.eq_axis_position(frequency))
+
+
+@_ffi
+def eq_axis_frequency(x: float) -> float:
+    """The frequency at an EQ axis position."""
+    return float(_native.eq_axis_frequency(x))
+
+
+class _Builder:
+    """A native geometry builder whose buffers are leased by name."""
+
+    LAYERS: tuple[str, ...] = ()
+
+    def __init__(self, native: object) -> None:
+        CALLS.count += 1
+        self.native: Any = native
+
+    @contextmanager
+    def view(self, layer: int) -> Iterator[GeometryView]:
+        """Lease one layer's buffer: one engine call, a zero-copy view inside."""
+        CALLS.count += 1
+        with _lease(getattr(self.native, self.LAYERS[layer])) as view:
+            yield view
+
+
+class PlaylistGeometry(_Builder):
+    """engine/geometry/PlaylistGeometry.h."""
+
+    LAYERS = ("lanes", "grid", "clips", "previews", "curves")
+
+    def __init__(self) -> None:
+        super().__init__(_native.PlaylistGeometry())
+
+    @_ffi
+    def build(
+        self,
+        project: Project,
+        view: tuple[float, float, float, float, float, float],
+        selected: IdArray,
+        peaks: PeakCache | None = None,
+    ) -> None:
+        """Fill every layer: ``view`` is (tick_start, tick_end, row_start, row_end,
+        pixels_per_tick, pixels_per_row)."""
+        self.native.build(project.native, *view, selected, None if peaks is None else peaks.native)
+
+    @_ffi
+    def rows(self) -> npt.NDArray[np.float64]:
+        """(n, 3): track id, top row, height - the last build's layout."""
+        result: npt.NDArray[np.float64] = self.native.rows()
+        return result
+
+    @_ffi
+    def visible(self) -> npt.NDArray[np.float64]:
+        """(n, 8) per drawn clip: item, track, start, end, top, height, kind, ref."""
+        result: npt.NDArray[np.float64] = self.native.visible()
+        return result
+
+    @_ffi
+    def hit_test(
+        self, view: tuple[float, float, float, float], x: float, y: float
+    ) -> tuple[int, int, int]:
+        """(track, item or 0, part) under a pixel; view is (tick_start, row_start,
+        pixels_per_tick, pixels_per_row)."""
+        track, item, part = self.native.hit_test(*view, x, y)
+        return int(track), int(item), int(part)
+
+    @_ffi
+    def status(self) -> tuple[bool, int]:
+        """(peaks still pending, clips drawn with detail)."""
+        return bool(self.native.pending_peaks), int(self.native.detailed)
+
+
+class StepGridGeometry(_Builder):
+    """engine/geometry/StepGridGeometry.h."""
+
+    LAYERS = ("cells", "velocity")
+
+    def __init__(self) -> None:
+        super().__init__(_native.StepGridGeometry())
+
+    @_ffi
+    def build(
+        self,
+        project: Project,
+        pattern: int,
+        channels: IdArray,
+        step_ticks: int,
+        steps: int,
+        group_size: int = 4,
+    ) -> int:
+        """The whole grid in one C++ build; returns the lit cell count."""
+        self.native.build(project.native, pattern, channels, step_ticks, steps, group_size)
+        return int(self.native.lit)
+
+
+class AutomationGeometry(_Builder):
+    """engine/geometry/AutomationGeometry.h."""
+
+    LAYERS = ("line", "points")
+
+    def __init__(self) -> None:
+        super().__init__(_native.AutomationGeometry())
+
+    @_ffi
+    def build(
+        self,
+        points: npt.NDArray[np.float64],
+        lane: tuple[float, float, bool],
+        view: tuple[float, float, float, float],
+        selected: npt.NDArray[np.uint8],
+        segments: int = 0,
+        place: tuple[float, float, float] = (0.0, 0.0, 1.0),
+    ) -> None:
+        """Tessellate with the engine's curve: view is (tick_start, tick_end,
+        pixels_per_tick, height_px); ``place`` is (tick offset, y top, y scale) for an
+        envelope drawn on its clip."""
+        self.native.build(points, lane[0], lane[1], lane[2], *view, segments, selected, *place)
+
+
+class MeterGeometry(_Builder):
+    """engine/geometry/MeterGeometry.h. Engine.frame_with_meters() builds it."""
+
+    LAYERS = ("bars",)
+
+    def __init__(self) -> None:
+        super().__init__(_native.MeterGeometry())
+
+    @_ffi
+    def build(self, levels: npt.NDArray[np.float32], count: int) -> None:
+        """Build from a levels array (tests; the frame clock uses frame_with_meters)."""
+        self.native.build(levels, count)
+
+    @_ffi
+    def reset_clips(self) -> None:
+        """Clear every latched clip indicator."""
+        self.native.reset_clips()
+
+
+class EqCurveGeometry(_Builder):
+    """engine/geometry/EqCurveGeometry.h."""
+
+    LAYERS = ("curve", "handles", "spectrum")
+
+    def __init__(self) -> None:
+        super().__init__(_native.EqCurveGeometry())
+
+    @_ffi
+    def build(
+        self, effect_type: str, params: npt.NDArray[np.float32], sample_rate: float = 48000.0
+    ) -> npt.NDArray[np.float64]:
+        """The response of ``effect_type`` with ``params`` (descriptor order); returns
+        the response in dB at each point."""
+        self.native.build(effect_type, params, sample_rate)
+        result: npt.NDArray[np.float64] = self.native.response()
+        return result
 
 
 # --- waveforms -----------------------------------------------------------------------

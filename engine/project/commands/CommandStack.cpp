@@ -108,6 +108,15 @@ void CommandStack::push(std::unique_ptr<Command> command, Clock::time_point now)
     m_coalesceBarrier = false;
 }
 
+std::vector<std::string> CommandStack::redoLabels() const {
+    std::vector<std::string> labels;
+    labels.reserve(m_undone.size());
+    for (const auto& command : std::ranges::reverse_view(m_undone)) {
+        labels.emplace_back(command->name());
+    }
+    return labels;
+}
+
 bool CommandStack::undo(Project& project) {
     ADX_ASSERT(m_groupDepth == 0);
     if (m_done.empty() || m_groupDepth > 0) {

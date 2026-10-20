@@ -39,10 +39,12 @@ adx_add_cpp_test(adx_tests
         project/test_undo_random.cpp
         project/test_edit_notes.cpp
         project/test_validate.cpp
+        project/test_phase6_commands.cpp
         geometry/test_geometry_buffer.cpp
         geometry/test_hittest.cpp
         geometry/test_peak_cache.cpp
         geometry/bench_piano_roll.cpp
+        geometry/test_phase6_geometry.cpp
         format/test_lexer.cpp
         format/test_diagnostics.cpp
         format/test_roundtrip.cpp
@@ -77,6 +79,7 @@ adx_add_cpp_test(adx_tests
         render/test_levels.cpp
         render/test_no_alloc_under_load.cpp
         render/test_snapshot.cpp
+        render/test_phase6_engine.cpp
 )
 
 # The corpus in docs/examples/ is a permanent parser regression fixture

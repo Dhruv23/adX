@@ -1,5 +1,6 @@
 #include "engine/render/RenderEngine.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "engine/project/Project.h"
@@ -244,6 +245,28 @@ void RenderEngine::stopPlayback() {
 void RenderEngine::seek(core::Ticks at) {
     graph::EngineMessage message = messageOf(graph::MessageKind::Seek);
     message.tickA = at.value;
+    post(message);
+}
+
+void RenderEngine::audition(core::ChannelId channel, std::uint8_t pitch, std::uint8_t velocity,
+                            double seconds) {
+    graph::EngineMessage message = messageOf(graph::MessageKind::Audition);
+    message.param.owner = channel.value;
+    message.tickA = pitch;
+    message.value = static_cast<float>(velocity);
+    message.tickB = static_cast<std::int64_t>(std::max(0.0, seconds) * m_options.sampleRate);
+    post(message);
+}
+
+void RenderEngine::stopAudition() {
+    post(messageOf(graph::MessageKind::AuditionStop));
+}
+
+void RenderEngine::setMetronome(bool enabled, core::Ticks beat, std::uint32_t beatsPerBar) {
+    graph::EngineMessage message = messageOf(graph::MessageKind::Metronome);
+    message.flag = enabled;
+    message.tickA = beat.value;
+    message.tickB = beatsPerBar;
     post(message);
 }
 

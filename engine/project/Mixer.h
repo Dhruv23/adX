@@ -28,7 +28,8 @@ struct SlotParam {
 
 struct Slot {
     core::SlotId id;
-    /// Opaque to Phase 2. Slots process in ascending id order.
+    /// An effect type name (TypeCatalog). Slots process in the order the insert lists
+    /// them; the id is identity, not position (phase_6.md §4.3, MoveSlot).
     std::string type;
     float mix{1.0F};
     bool bypass{false};

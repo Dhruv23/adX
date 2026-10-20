@@ -18,7 +18,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QEvent, QObject, QSettings, Qt, QUrl, Slot
+from PySide6.QtCore import QEvent, QObject, QSettings, Qt, QUrl, Signal, Slot
 from PySide6.QtGui import QAction, QActionGroup, QColor, QKeyEvent, QKeySequence
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtQuickWidgets import QQuickWidget
@@ -73,6 +73,7 @@ class RollInput(QObject):
 
     @Slot(float, float, int, int)
     def pressed(self, x: float, y: float, button: int, modifiers: int) -> None:
+        self._panel.gesture_started.emit()
         self._panel.on_press(Pointer(x, y, button, modifiers))
 
     @Slot(float, float, int, int)
@@ -111,6 +112,12 @@ class PianoRollPanel(DockPanel):
     title = "Piano roll"
     default_area = Qt.DockWidgetArea.RightDockWidgetArea
 
+    #: A press arrived: a new gesture, so a new history entry (geometry_view.py's).
+    gesture_started = Signal()
+    #: (channel name, pitch, velocity): sound this note once through the channel's
+    #: instrument - a note drawn, a pitch dragged to, a key clicked (P5-1).
+    audition = Signal(str, int, int)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.theme: Theme = DARK
@@ -128,6 +135,9 @@ class PianoRollPanel(DockPanel):
         self.follow = True
         self.humanize_seed = 1
         self._pan_origin: tuple[float, float] | None = None
+        #: The pitch the gesture's previewed note last sounded at: a drawn note sounds
+        #: when it is pressed in, a dragged one at each new pitch - once each.
+        self._drag_pitch: int | None = None
         self._placements = np.zeros((0, 3), dtype=np.int64)
         self._lyric_ids = np.zeros(0, dtype=np.uint32)
         self._lyric_note = 0
@@ -144,6 +154,7 @@ class PianoRollPanel(DockPanel):
             outer.addWidget(bar)
         self.ruler = Ruler(PPQ)
         self.keyboard = PianoKeyboard()
+        self.keyboard.key_clicked.connect(lambda pitch: self._sound(pitch, 100))
         self.timeline = Timeline()
         self.quick = QQuickWidget()
         self.quick.setResizeMode(QQuickWidget.ResizeMode.SizeRootObjectToView)
@@ -179,6 +190,8 @@ class PianoRollPanel(DockPanel):
         self._lyric_edit.returnPressed.connect(lambda: self._commit_lyric(advance=False))
         self._lyric_edit.installEventFilter(self)
         self.seek: Callable[[int], None] | None = None
+        #: Called when the roll's note selection changes (the global selection follows).
+        self.on_selection: Callable[[], None] | None = None
         self.apply_theme(self.theme)
 
     def _build_toolbars(self) -> tuple[QToolBar, QToolBar]:
@@ -330,7 +343,7 @@ class PianoRollPanel(DockPanel):
             self.lane_box.setCurrentIndex(LYRIC_LANE)
         self.ruler.set_meter(*self.project.meter_at(0))
         self.timeline.set_length(self.project.pattern_length(pattern))
-        self._placements = self.project.pattern_placements(pattern)
+        self._refresh_placements()
         self.fit_pattern()
 
     def _clear(self) -> None:
@@ -403,10 +416,15 @@ class PianoRollPanel(DockPanel):
         self.apply_view()
         self.rebuild(force=True)
 
-    def _committed(self) -> None:
-        """After any command: rebuild, and let the engine catch up."""
+    def _refresh_placements(self) -> None:
+        """Re-read where the edited pattern is placed: after every change, so the
+        playhead mapping never uses a stale arrangement (phase_6.md 3 rule 2)."""
         if self.project is not None and self.model is not None:
             self._placements = self.project.pattern_placements(self.model.pattern)
+
+    def _committed(self) -> None:
+        """After any command: rebuild, and let the engine catch up."""
+        self._refresh_placements()
         self.rebuild(force=True)
         self._refresh_overlays()
         if self.on_edit is not None:
@@ -423,6 +441,8 @@ class PianoRollPanel(DockPanel):
 
     def _selection_changed(self) -> None:
         """Recolour in place: no rebuild."""
+        if self.on_selection is not None:
+            self.on_selection()
         if self.model is None or self.built is None:
             return
         self.builder.update_selection(self.model.selection)
@@ -506,7 +526,9 @@ class PianoRollPanel(DockPanel):
             if self.lane_box.currentIndex() != LYRIC_LANE:
                 self.lane_editor.press(self.model, p)
             return
+        self._drag_pitch = None
         self.tool.press(self.model, p)
+        self._sound_pressed()
         self._after_input(before)
 
     def on_move(self, p: Pointer) -> None:
@@ -522,6 +544,7 @@ class PianoRollPanel(DockPanel):
             self.lane_editor.move(self.model, p)
             return
         self.tool.move(self.model, p)
+        self._sound_dragged()
         self._refresh_overlays()
 
     def on_release(self, p: Pointer) -> None:
@@ -536,6 +559,30 @@ class PianoRollPanel(DockPanel):
             return
         self.tool.release(self.model, p)
         self._after_input(before)
+
+    def _sound(self, pitch: int, velocity: int) -> None:
+        if self.model is not None:
+            self.audition.emit(self.model.channel, pitch, max(1, velocity))
+
+    def _sound_pressed(self) -> None:
+        """A press that previews one new note (the draw tool's) sounds it once. A press
+        on an existing note previews nothing until it moves."""
+        preview = self.tool.preview
+        if len(preview) == 1:
+            self._drag_pitch = int(preview[0][2])
+            self._sound(self._drag_pitch, int(getattr(self.tool, "velocity", 100)))
+
+    def _sound_dragged(self) -> None:
+        """While one note is dragged (its preview), sound each new pitch it reaches."""
+        preview = self.tool.preview
+        if len(preview) != 1:
+            return
+        pitch = int(preview[0][2])
+        if self._drag_pitch is None:
+            self._drag_pitch = pitch  # where the drag began: already heard
+        elif pitch != self._drag_pitch:
+            self._drag_pitch = pitch
+            self._sound(pitch, 100)
 
     def _after_input(self, before: np.ndarray) -> None:
         if self.model is not None and not np.array_equal(before, self.model.selection):
