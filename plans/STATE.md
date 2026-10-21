@@ -683,7 +683,7 @@ the meter frame counted at exactly one call) and **P3-5** (decided: no flush; te
 | **Plan** | [phase_6.md](phase_6.md) |
 | **Entry** | Phase 5 §6 complete, including the frame-rate acceptance step |
 | **Done when** | [phase_6.md](phase_6.md) §6 |
-| **Status** | Done (2026-10-21). Every automated §6 box observed locally, the 200-insert frame-rate step included; per-push CI green (run 39422153732 at `094bc87`); full check green (run 39430247203 on `phase-6-built`); the human gate (P6-1) closed by the user |
+| **Status** | Done (2026-10-21). Every automated §6 box observed locally, the 200-insert frame-rate step included; per-push CI green (run 39422153732 at `094bc87`); full check green (run 39430247203 on `phase-6-built`); the human gate (P6-1) closed by the user. At the closing commit `0259310` (tag `phase-6`): per-push CI green (run 39563772077), full check green (run 39563772177) |
 | **Completed** | 2026-10-21 |
 
 **What exists.** The whole §2 manifest: channel rack (a C++ step grid, 64x64 with no
