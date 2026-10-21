@@ -42,6 +42,19 @@ either fixing them or explicitly re-carrying them forward with a reason.
    `docs/adx-format-v2.md`, which a test reads). Set 2026-10-02, at the user's
    request: per-push runs had reached ~30 minutes, half of it full clang-tidy.
 
+6. **The launcher runs the latest build.** `adX.cmd` in the repository root is how the
+   user opens adX (double-click; drop a `.adx` on it to open that project). It runs the
+   code as last installed, so finish every phase - and any session that changes code -
+   with a fresh build and the launcher check, and record the check's line here:
+
+   ```
+   py -3.12 -m pip install -e .[dev]
+   py -3.12 tools/check_launcher.py
+   ```
+
+   The check opens the app through `adX.cmd` exactly as a double-click does and fails
+   unless the whole window comes up. Set 2026-10-20, at the user's request.
+
 ### When you start a phase
 
 1. Read this file top to bottom. Read the previous phase's open issues first.
@@ -698,6 +711,9 @@ The mixer on real hardware (Direct3D 11), 200 inserts metering while playing: 1,
 The piano roll's Phase 5 measurement re-run on this build: p99 0.23 ms, 59.9 fps, interval p99 17.6 ms (Phase 5 recorded 0.22 ms and 60.0). Phase completion,
 locally in Debug: `ADX_FULL_EVIDENCE=1 ctest --preset windows-x64-debug -L slow`
 passed in 944.11 s
+
+Launcher (2026-10-20, after the last build): `check_launcher: adX.cmd opened adX 0.1.0 -
+11 panels, audio device open`.
 
 Inherited issues: **P5-1** fixed (the piano roll auditions too; it had been done only in
 the rack); **P5-2** fixed (curves drawn through `core::Curve`); **P5-3** fixed

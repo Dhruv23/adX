@@ -34,6 +34,10 @@ small C++ Qt Quick plugin (`bindings/qml/`), and PySide6 ships Qt's DLLs but not
 headers and import libraries a C++ plugin compiles against. Without the SDK, everything
 except that plugin still builds, and the application says at start-up what is missing.
 
+**To use adX, double-click `adX.cmd`** in this folder (drop a `.adx` file on it to open
+that project). It runs the latest build; build once with `py -3.12 -m pip install -e .[dev]`
+(each phase rebuilds and checks it with `py -3.12 tools/check_launcher.py`).
+
 `python -m adx` opens the application (`adx gui [FILE]`, with `--null-audio` to render
 on a timer instead of an audio device); `adx version` prints the app and engine
 versions. `pytest -m gpu` runs the frame-rate measurement, which needs a real GPU and

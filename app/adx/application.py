@@ -8,11 +8,13 @@ moves its playhead.
 
 from __future__ import annotations
 
+import json
+import os
 import sys
 import traceback
 from types import TracebackType
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from adx import engine_bridge
@@ -85,10 +87,34 @@ def run(project: str | None = None, null_audio: bool = False) -> int:
     else:
         window.new_project()
     window.show()
+    smoke = os.environ.get("ADX_SMOKE")
+    if smoke:
+        _smoke_after_start(app, window, smoke)
     status = int(app.exec())
     window.engine.stop()
     _teardown(window)
     return status
+
+
+def _smoke_after_start(app: QApplication, window: MainWindow, report: str) -> None:
+    """The release check (tools/build_exe.py): once the window has run for a moment,
+    write what came up to ``report`` and quit with status 0. A windowed executable has
+    no console, so a file is how it says that the whole application started."""
+
+    def done() -> None:
+        facts = {
+            "version": engine_bridge.engine_version(),
+            "panels": sorted(p.objectName() for p in window.panels),
+            "visible": window.isVisible(),
+            "channels": len(window.session.require().channels_info()),
+            "status": window.statusBar().currentMessage(),
+        }
+        with open(report, "w", encoding="utf-8") as out:
+            json.dump(facts, out)
+        window.saved_revision = window.session.require().revision()
+        app.quit()
+
+    QTimer.singleShot(1500, done)
 
 
 def _teardown(window: MainWindow) -> None:
