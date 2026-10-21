@@ -30,3 +30,7 @@ CMakeLists.txt text eol=lf
 # Batch files: cmd.exe mis-parses labels and goto in LF files.
 *.cmd text eol=crlf
 *.bat text eol=crlf
+
+# cmd.exe misparses batch files without CRLF (adX.cmd, the launcher).
+*.cmd text eol=crlf
+*.bat text eol=crlf
