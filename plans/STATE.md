@@ -741,7 +741,13 @@ The rest re-carried below with reasons.
   (2026-10-21):** editing and saving worked; the interface did not - the piano roll
   could not be resized, and the screen was crowded and unclear. Every finding is fixed
   and tested (phase_6.md §11). Still open: a full track, and the user's verdict on the
-  revised interface.
+  revised interface. **Session 2 (2026-10-21):** the user wrote a phrase
+  (`wanna_cry_human.adx`) and tried to repeat it with copy and paste; the file holds
+  6 distinct notes, each stacked 12 times - every paste landed at tick 0 on top of the
+  original. That, Stop rewinding, an undraggable unsnapped playhead, a faint rubber
+  band and redo being Ctrl+Y only are fixed and tested (phase_6.md §11, second table).
+  `output/transcription/wannacry_piano.adx` was written by an agent and does not count
+  toward this gate.
 - **P6-2** · Two panels exceed §3 rule 1's ~400 lines: `piano_roll/panel.py` (840,
   Phase 5's, grown by audition) and `playlist/panel.py` (494). Ruff only limits
   function length. Fixed when: each is split into sub-widgets under ~400 lines.

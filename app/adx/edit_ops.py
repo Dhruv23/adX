@@ -128,13 +128,26 @@ class EditOps:
         self.clipboard = Clipboard(text, current.kind, current.ids, current.context)
         return True
 
+    def holds_notes(self) -> bool:
+        """Whether a paste would paste notes: adX's own copy, or ``.adx`` text on the
+        system clipboard - unless something else was copied in adX since."""
+        if self.clipboard.kind is Kind.NOTES:
+            return True
+        return self.clipboard.kind is Kind.NONE and FRAGMENT_MARKER in _system_clipboard_get()
+
     def paste(self, kind: Kind | None = None, context: Context | None = None) -> bool:
-        """Paste into the current selection's place (or ``context``): one undo step."""
+        """Paste into the current selection's place (or ``context``) at
+        :attr:`paste_tick`: one undo step."""
         target_context = context or self.selection.current.context
-        system = _system_clipboard_get()
-        if (kind in (None, Kind.NOTES)) and FRAGMENT_MARKER in system and target_context.pattern:
-            return self._paste_notes(system, target_context)
         clip = self.clipboard
+        system = _system_clipboard_get()
+        if (
+            kind in (None, Kind.NOTES)
+            and clip.kind in (Kind.NONE, Kind.NOTES)
+            and FRAGMENT_MARKER in system
+            and target_context.pattern
+        ):
+            return self._paste_notes(system, target_context)
         if clip.kind is Kind.NONE:
             return False
         if clip.kind is Kind.NOTES and target_context.pattern:

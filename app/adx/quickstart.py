@@ -20,8 +20,11 @@ GUIDE = """
     others back.</li>
 <li>Drag the borders between panels to resize them. Drag a panel's title bar to move it.
     <i>View &gt; Reset layout</i> puts everything back.</li>
-<li><b>Space</b> plays and pauses, <b>Ctrl+Z</b> undoes anything, <b>Ctrl+S</b> saves,
-    <b>Ctrl+E</b> exports a WAV.</li>
+<li><b>Space</b> plays and pauses, <b>Ctrl+Space</b> stops where it is, <b>Home</b>
+    returns to the start. Click or drag the ruler to move the playhead: it snaps to the
+    grid (hold <b>Alt</b> to place it freely).</li>
+<li><b>Ctrl+Z</b> undoes anything, <b>Ctrl+Shift+Z</b> redoes (both are buttons on the
+    transport bar too), <b>Ctrl+S</b> saves, <b>Ctrl+E</b> exports a WAV.</li>
 </ul>
 
 <h3>1. Make sounds - Channel rack (F6)</h3>
@@ -36,7 +39,10 @@ GUIDE = """
 <h3>2. Write notes - Piano roll (F7)</h3>
 <ul>
 <li>With <b>Draw</b>: click to add a note, drag to set its length; right-click deletes.
-    Use <b>Select</b> to drag notes around.</li>
+    Use <b>Select</b> to drag a box around notes, then drag them around.</li>
+<li>To repeat part of a melody: select it, <b>Ctrl+C</b>, put the playhead where the copy
+    should start, <b>Ctrl+V</b>. The pasted notes come selected, ready to move.
+    <b>Ctrl+D</b> duplicates the selection right after itself.</li>
 <li>Mouse wheel scrolls pitch, <b>Shift</b>+wheel scrolls time, <b>Ctrl</b>+wheel zooms
     time, <b>Alt</b>+wheel zooms pitch. Click a key to hear it.</li>
 </ul>

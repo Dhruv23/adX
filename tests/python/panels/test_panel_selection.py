@@ -118,7 +118,7 @@ def test_clipboard_is_adx_text(studio: MainWindow) -> None:
     edited = text.replace("\n  C4 ", "\n  D4 ")
     assert edited != text
     QApplication.clipboard().setText(edited)
-    studio.ops.paste_tick = PPQ * 8
+    studio.piano_roll.set_cursor(PPQ * 8)  # a paste lands at the playhead
     before = studio.project.undo_depth()
     assert studio.registry.trigger("edit.paste")
     assert studio.project.undo_depth() == before + 1

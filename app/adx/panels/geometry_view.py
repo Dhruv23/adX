@@ -178,8 +178,10 @@ class GeometryView(QQuickWidget):
         """The rubber band, in pixels, or none."""
         if rect is None:
             call(self.item, "setSelectionRect", 0.0, 0.0, 0.0, 0.0, False)
+            self.root.setProperty("band", [])
         else:
             call(self.item, "setSelectionRect", *[float(c) for c in rect], True)
+            self.root.setProperty("band", [float(c) for c in rect])
 
     def set_labels(self, labels: list[list[object]]) -> None:
         """[x, y, width, text] per label, in pixels."""

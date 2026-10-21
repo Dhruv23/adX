@@ -141,6 +141,11 @@ class PianoRollPanel(DockPanel):
         self._placements = np.zeros((0, 3), dtype=np.int64)
         self._lyric_ids = np.zeros(0, dtype=np.uint32)
         self._lyric_note = 0
+        #: The edit cursor, in pattern ticks: where the playhead last was in this
+        #: pattern, or where the ruler was last clicked - so where a paste lands, even
+        #: in a pattern the arrangement never plays.
+        self.cursor_tick = 0
+        self._rolling = False
         self._build_ui()
 
     # --- construction ---------------------------------------------------------------
@@ -184,6 +189,7 @@ class PianoRollPanel(DockPanel):
         outer.addLayout(grid, 1)
         self.setWidget(body)
         self.ruler.seek_requested.connect(self._seek_from_ruler)
+        self.ruler.snap_ticks = self.snap_ticks
         self.timeline.scroll_requested.connect(self._scroll_to)
         self._lyric_edit = QLineEdit(self.quick)
         self._lyric_edit.hide()
@@ -439,6 +445,12 @@ class PianoRollPanel(DockPanel):
         self.rebuild(force=True)
         self._refresh_overlays()
 
+    def selection_changed(self) -> None:
+        """The roll's note selection was changed from outside (a paste selects what it
+        pasted): recolour, and let the global selection follow."""
+        self._selection_changed()
+        self._refresh_overlays()
+
     def _selection_changed(self) -> None:
         """Recolour in place: no rebuild."""
         if self.on_selection is not None:
@@ -460,8 +472,10 @@ class PianoRollPanel(DockPanel):
         band = self.tool.band
         if band is not None:
             call(self.item, "setSelectionRect", *[float(c) for c in band], True)
+            self.root.setProperty("band", [float(c) for c in band])
         else:
             call(self.item, "setSelectionRect", 0.0, 0.0, 0.0, 0.0, False)
+            self.root.setProperty("band", [])
         self.root.setProperty("laneTop", v.note_height)
         if self.lane_box.currentIndex() == LYRIC_LANE:
             self._position_lyrics()
@@ -500,9 +514,13 @@ class PianoRollPanel(DockPanel):
             if start <= position_ticks < end:
                 local = float(position_ticks - start + offset)
                 break
-        self.item.setProperty("playheadBeats", local / PPQ if local >= 0 else -1.0)
-        self.ruler.set_playhead(local)
-        self.timeline.set_playhead(local)
+        self._rolling = rolling
+        if local >= 0:
+            self.cursor_tick = int(local)
+        elif not rolling:
+            # Stopped outside this pattern: the red line is the edit cursor.
+            local = float(self.cursor_tick)
+        self._show_playhead(local)
         if (
             rolling
             and self.follow
@@ -691,10 +709,28 @@ class PianoRollPanel(DockPanel):
         self.item.setProperty("laneHeight", self.view.lane_height)
         self.apply_view()
 
-    def _seek_from_ruler(self, tick: float) -> None:
+    def _show_playhead(self, local: float) -> None:
+        self.item.setProperty("playheadBeats", local / PPQ if local >= 0 else -1.0)
+        self.ruler.set_playhead(local)
+        self.timeline.set_playhead(local)
+
+    def snap_ticks(self) -> int:
+        """The grid the playhead snaps to: the roll's, or none when snap is off."""
+        if self.model is None or not self.model.snap:
+            return 0
+        return self.model.grid
+
+    def set_cursor(self, tick: int) -> None:
+        """Move the edit cursor (and the playhead, where the pattern is placed)."""
+        self.cursor_tick = max(0, int(tick))
         if self.seek is not None and len(self._placements):
             start, _end, offset = self._placements[0]
-            self.seek(int(start - offset + tick))
+            self.seek(int(start - offset + self.cursor_tick))
+        if not self._rolling:
+            self._show_playhead(float(self.cursor_tick))
+
+    def _seek_from_ruler(self, tick: float) -> None:
+        self.set_cursor(int(tick))
 
     def _scroll_to(self, tick: float) -> None:
         self.view.tick_start = tick

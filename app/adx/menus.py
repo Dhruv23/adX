@@ -8,6 +8,7 @@ work only while it has focus.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -31,8 +32,6 @@ def register_actions(window: MainWindow, registry: ActionRegistry) -> None:
     """Declare every action of the main window."""
     w = window
     has_project = lambda: w.session.project is not None  # noqa: E731
-    selected = lambda: bool(w.selection.current)  # noqa: E731
-    can_undo = lambda: w.session.project is not None and w.session.project.undo_depth() > 0  # noqa: E731
     specs = [
         ActionSpec("file.new", "&New", w.new_project, "&File", "Ctrl+N"),
         ActionSpec("file.open", "&Open…", w.open_dialog, "&File", "Ctrl+O"),
@@ -56,13 +55,7 @@ def register_actions(window: MainWindow, registry: ActionRegistry) -> None:
             separator=True,
         ),
         ActionSpec("file.quit", "&Quit", w.close, "&File", "Ctrl+Q", separator=True),
-        ActionSpec("edit.undo", "&Undo", w.undo, "&Edit", "Ctrl+Z", can_undo),
-        ActionSpec("edit.redo", "&Redo", w.redo, "&Edit", "Ctrl+Y", has_project),
-        ActionSpec("edit.copy", "&Copy", w.ops.copy, "&Edit", "Ctrl+C", selected, separator=True),
-        ActionSpec("edit.paste", "&Paste", w.ops.paste, "&Edit", "Ctrl+V", has_project),
-        ActionSpec("edit.duplicate", "D&uplicate", w.ops.duplicate, "&Edit", "Ctrl+D", selected),
-        ActionSpec("edit.delete", "&Delete", w.ops.delete, "&Edit", "Del", selected),
-        ActionSpec("edit.deselect", "Select &none", w.selection.clear, "&Edit", "Esc", selected),
+        *_edit_specs(w, has_project),
         ActionSpec(
             "insert.channel",
             "&Channel",
@@ -111,27 +104,7 @@ def register_actions(window: MainWindow, registry: ActionRegistry) -> None:
             "",
             has_project,
         ),
-        ActionSpec("transport.play", "&Play / pause", w.toggle_play, "&Transport", "Space"),
-        ActionSpec("transport.stop", "&Stop", w.stop, "&Transport", "Ctrl+Space"),
-        ActionSpec(
-            "transport.loop", "&Loop", w.toggle_loop, "&Transport", "Ctrl+L", checkable=True
-        ),
-        ActionSpec(
-            "transport.metronome",
-            "&Metronome",
-            w.toggle_metronome,
-            "&Transport",
-            "Ctrl+K",
-            checkable=True,
-        ),
-        ActionSpec(
-            "transport.follow",
-            "&Follow playhead",
-            w.toggle_follow,
-            "&Transport",
-            "Ctrl+F",
-            checkable=True,
-        ),
+        *_transport_specs(w),
     ]
     for panel in w.panels:
         specs.append(
@@ -175,3 +148,74 @@ def register_actions(window: MainWindow, registry: ActionRegistry) -> None:
         registry.register(spec)
     for action in registry.scoped("playlist"):
         w.playlist.addAction(action)
+
+
+def _edit_specs(w: MainWindow, has_project: Callable[[], bool]) -> list[ActionSpec]:
+    """The Edit menu: undo and redo, and the four operations over the selection."""
+    selected = lambda: bool(w.selection.current)  # noqa: E731
+    can_undo = lambda: w.session.project is not None and w.session.project.undo_depth() > 0  # noqa: E731
+    return [
+        ActionSpec(
+            "edit.undo", "&Undo", w.undo, "&Edit", "Ctrl+Z", can_undo, tooltip="Undo (Ctrl+Z)"
+        ),
+        ActionSpec(
+            "edit.redo",
+            "&Redo",
+            w.redo,
+            "&Edit",
+            "Ctrl+Shift+Z",
+            has_project,
+            tooltip="Redo (Ctrl+Shift+Z or Ctrl+Y)",
+            alternates=("Ctrl+Y",),
+        ),
+        ActionSpec("edit.copy", "&Copy", w.ops.copy, "&Edit", "Ctrl+C", selected, separator=True),
+        ActionSpec(
+            "edit.paste",
+            "&Paste",
+            w.paste,
+            "&Edit",
+            "Ctrl+V",
+            has_project,
+            tooltip="Paste at the playhead (Ctrl+V)",
+        ),
+        ActionSpec("edit.duplicate", "D&uplicate", w.ops.duplicate, "&Edit", "Ctrl+D", selected),
+        ActionSpec("edit.delete", "&Delete", w.ops.delete, "&Edit", "Del", selected),
+        ActionSpec("edit.deselect", "Select &none", w.selection.clear, "&Edit", "Esc", selected),
+    ]
+
+
+def _transport_specs(w: MainWindow) -> list[ActionSpec]:
+    """The Transport menu."""
+    return [
+        ActionSpec("transport.play", "&Play / pause", w.toggle_play, "&Transport", "Space"),
+        ActionSpec(
+            "transport.stop", "&Stop", w.stop, "&Transport", "Ctrl+Space", tooltip="Stop in place"
+        ),
+        ActionSpec(
+            "transport.rewind",
+            "Return to s&tart",
+            w.rewind,
+            "&Transport",
+            "Home",
+            tooltip="Move the playhead to the start",
+        ),
+        ActionSpec(
+            "transport.loop", "&Loop", w.toggle_loop, "&Transport", "Ctrl+L", checkable=True
+        ),
+        ActionSpec(
+            "transport.metronome",
+            "&Metronome",
+            w.toggle_metronome,
+            "&Transport",
+            "Ctrl+K",
+            checkable=True,
+        ),
+        ActionSpec(
+            "transport.follow",
+            "&Follow playhead",
+            w.toggle_follow,
+            "&Transport",
+            "Ctrl+F",
+            checkable=True,
+        ),
+    ]

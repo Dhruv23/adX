@@ -65,6 +65,11 @@ INSERT 1 name="Master"
 """
 
 
+def _snap(tick: int, grid: int) -> int:
+    """``tick`` to the nearest line of ``grid`` (0: as it is)."""
+    return int(round(tick / grid) * grid) if grid > 0 else int(tick)
+
+
 class MainWindow(QMainWindow):
     """The application window."""
 
@@ -94,6 +99,9 @@ class MainWindow(QMainWindow):
         self.keymap = Keymap(self.settings)
         self.registry = ActionRegistry(self.keymap, self)
         register_actions(self, self.registry)
+        self.transport.add_edit_actions(
+            self.registry.action("edit.undo"), self.registry.action("edit.redo")
+        )
         self.menus = self.registry.build_menus(self.menuBar())
         self._connect()
         self.clock = FrameClock(engine, parent=self)
@@ -143,6 +151,7 @@ class MainWindow(QMainWindow):
         ]
 
     def _connect(self) -> None:
+        self.transport.rewind_requested.connect(self.rewind)
         self.transport.play_requested.connect(self.toggle_play)
         self.transport.stop_requested.connect(self.stop)
         self.transport.loop_toggled.connect(self._loop)
@@ -320,6 +329,29 @@ class MainWindow(QMainWindow):
         """Redo one step, everywhere."""
         self.session.redo()
 
+    def paste(self) -> bool:
+        """Paste at the playhead, snapped to the grid: notes into the piano roll's clip
+        at its cursor (then selected, ready to drag), anything else at the arrangement's
+        playhead. One undo step."""
+        roll = self.piano_roll.model
+        if self.ops.holds_notes() and roll is not None:
+            self.ops.paste_tick = _snap(self.piano_roll.cursor_tick, self.piano_roll.snap_ticks())
+            roll.invalidate()
+            before = {int(i) for i in roll.notes()["id"]}
+            context = Context(pattern=roll.pattern, channel=roll.channel)
+            if not self.ops.paste(Kind.NOTES, context):
+                return False
+            model = self.piano_roll.model
+            if model is not None:
+                model.invalidate()
+                pasted = [int(i) for i in model.notes()["id"] if int(i) not in before]
+                model.select(pasted)
+                self.piano_roll.selection_changed()
+            return True
+        playhead = self.engine.position_ticks()
+        self.ops.paste_tick = _snap(playhead, self.playlist.toolbar.snap_ticks())
+        return self.ops.paste()
+
     def status(self, message: str) -> None:
         """A line in the status bar."""
         self.statusBar().showMessage(message, 8000)
@@ -386,8 +418,12 @@ class MainWindow(QMainWindow):
             self.engine.play()
 
     def stop(self) -> None:
-        """Stop and return to the start."""
+        """Stop where the playhead is (Return to start is its own button, Home)."""
         self.engine.stop_playback()
+
+    def rewind(self) -> None:
+        """The playhead (and the piano roll's cursor) back to the start."""
+        self.piano_roll.cursor_tick = 0
         self.engine.seek(0)
 
     def toggle_loop(self) -> None:

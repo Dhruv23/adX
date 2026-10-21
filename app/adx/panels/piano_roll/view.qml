@@ -17,6 +17,7 @@ Item {
     property bool lyricsVisible: false
     property real laneTop: 0
     property string hint: ""
+    property var band: []
 
     // The lane strip's background; PianoRollItem draws its bars over it.
     Rectangle {
@@ -84,6 +85,19 @@ Item {
                 font.pixelSize: 10
             }
         }
+    }
+
+    // The rubber band's outline while a selection is dragged out: [x0, y0, x1, y1],
+    // or empty. The item draws its translucent fill; this makes its edge plain.
+    Rectangle {
+        visible: root.band.length === 4
+        x: visible ? Math.min(root.band[0], root.band[2]) : 0
+        y: visible ? Math.min(root.band[1], root.band[3]) : 0
+        width: visible ? Math.abs(root.band[2] - root.band[0]) : 0
+        height: visible ? Math.abs(root.band[3] - root.band[1]) : 0
+        color: "transparent"
+        border.color: adxTheme.accent
+        border.width: 1
     }
 
     Text {

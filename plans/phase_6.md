@@ -556,6 +556,23 @@ and what was done:
 | Nothing explains how to start | - | **Help > Quick start (F1)**, opened once on first launch |
 | Additive's overview was an unexplained empty box | 192 bars in 430 px, no caption | Bar outlines, harmonic numbers, and a caption |
 
-The human gate (§6 box 2) stays open: this session found usability problems, which is
+A second pass the same day, from the user editing a melody: "I can't easily drag the red
+bar back to the beginning ... stop should stop the cursor in place"; the playhead should
+snap to the chosen subdivision; a visible box while dragging a selection; Ctrl+Shift+Z
+for redo, with buttons; Ctrl+C / Ctrl+V to repeat part of a melody.
+
+| Found | Cause | Fix |
+|---|---|---|
+| Stop rewound; no separate return to start | `MainWindow.stop` sought to 0 | Stop stops in place; **⇤ Start** (Home) is its own button and action |
+| The playhead could only be clicked, not dragged, and landed between grid lines | The ruler seeked on press only, unsnapped | The ruler scrubs while dragged, snaps to its panel's grid (the roll's grid box, the playlist's snap; Alt: free), and draws a handle |
+| Ctrl+V seemed to do nothing | `EditOps.paste_tick` was never set: every paste landed at tick 0, notes exactly on top of the originals they were copied from | A paste lands at the playhead snapped to the grid - notes at the piano roll's edit cursor (`PianoRollPanel.cursor_tick`, which also works in a pattern the arrangement never plays), clips at the arrangement's playhead; pasted notes come selected |
+| Notes text left on the system clipboard beat a later clip copy | `EditOps.paste` read the system clipboard first | The latest copy in adX wins; `.adx` text from outside still pastes when adX's own clipboard holds notes or nothing |
+| Redo was Ctrl+Y only; no buttons | - | Redo is Ctrl+Shift+Z (Ctrl+Y still works: `ActionSpec.alternates`); Undo and Redo are the transport bar's first buttons |
+| The rubber band was easy to miss | A 24 % fill with no edge | An accent outline over the fill, in the roll and every GeometryView |
+| The playlist toolbar showed the wrong tool after a tool key | `PlaylistPanel.set_tool` did not check its action | It does |
+
+`tests/python/panels/test_panel_editing_flow.py` covers each row.
+
+The human gate (§6 box 2) stays open: these sessions found usability problems, which is
 what the gate is for; it closes when a track is made start to finish and the user says
 the interface held up.

@@ -96,6 +96,7 @@ class PlaylistPanel(DockPanel):
         top = QHBoxLayout()
         top.setSpacing(0)
         self.ruler = Ruler(PPQ, markers=True)
+        self.ruler.snap_ticks = self.toolbar.snap_ticks
         self.ruler.seek_requested.connect(lambda t: self.session.engine.seek(int(t)))
         self.ruler.marker_added.connect(self._add_marker)
         self.ruler.marker_moved.connect(
@@ -369,6 +370,8 @@ class PlaylistPanel(DockPanel):
         """Choose a tool."""
         self.tool = self.tools[name]
         self.canvas.set_hint(self.tool.label)
+        if name in self._tool_actions:
+            self._tool_actions[name].setChecked(True)
 
     # --- input ----------------------------------------------------------------------
 
@@ -484,6 +487,7 @@ class PlaylistPanel(DockPanel):
         """The tool buttons (for the toolbar)."""
         group = QActionGroup(self)
         actions = []
+        self._tool_actions: dict[str, QAction] = {}
         for tool in self.tools.values():
             action = QAction(tool.label, self, checkable=True)
             action.setToolTip(f"{tool.label} ({tool.shortcut})")
@@ -491,4 +495,5 @@ class PlaylistPanel(DockPanel):
             action.triggered.connect(lambda _c=False, n=tool.name: self.set_tool(n))
             group.addAction(action)
             actions.append(action)
+            self._tool_actions[tool.name] = action
         return actions

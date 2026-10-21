@@ -1,4 +1,5 @@
-"""A time ruler: bar numbers and beat ticks above a timeline view; click to seek.
+"""A time ruler: bar numbers and beat ticks above a timeline view; click or drag to move
+the playhead, snapped to the owner's grid (Alt: no snap).
 
 With markers (the playlist's): each is a flag with its name. Drag a flag to move the
 marker, double-click empty ruler to add one, right-click a flag to rename, delete or
@@ -8,8 +9,18 @@ view state - and every change is a signal the owner turns into a command.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QContextMenuEvent, QMouseEvent, QPainter, QPaintEvent, QPen
+from PySide6.QtGui import (
+    QColor,
+    QContextMenuEvent,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+    QPen,
+    QPolygonF,
+)
 from PySide6.QtWidgets import QInputDialog, QMenu, QWidget
 
 from adx.theme.tokens import DARK, Theme
@@ -39,6 +50,11 @@ class Ruler(QWidget):
         self._markers: list[tuple[int, int, str]] = []
         self._drag: tuple[int, str] | None = None
         self._drag_tick = 0
+        self._scrubbing = False
+        #: The grid a seek snaps to, in ticks (0: none) - the owner's snap setting.
+        self.snap_ticks: Callable[[], int] = lambda: 0
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("Click or drag to move the playhead (snaps to the grid; Alt: free)")
         self.setFixedHeight(DARK.metrics.ruler_height + (14 if markers else 0))
 
     def set_theme(self, theme: Theme) -> None:
@@ -77,6 +93,12 @@ class Ruler(QWidget):
     def x_of(self, tick: float) -> float:
         """The pixel column of a tick."""
         return (tick - self._tick_start) * self._pixels_per_tick
+
+    def seek_tick(self, x: float, free: bool = False) -> float:
+        """The tick a click at ``x`` seeks to: snapped to the grid unless ``free``."""
+        tick = max(0.0, self.tick_at(x))
+        grid = 0 if free else self.snap_ticks()
+        return float(round(tick / grid) * grid) if grid > 0 else tick
 
     def marker_at(self, x: float) -> tuple[int, int, str] | None:
         """The marker whose flag is under a pixel column."""
@@ -120,8 +142,17 @@ class Ruler(QWidget):
             painter.drawText(QRectF(x + 4, 0, 200, 13), Qt.AlignmentFlag.AlignVCenter, name)
         if self._playhead >= 0:
             x = (self._playhead - self._tick_start) * self._pixels_per_tick
-            painter.setPen(QPen(QColor(theme.roles["playhead"]), 2))
+            color = QColor(theme.roles["playhead"])
+            painter.setPen(QPen(color, 2))
             painter.drawLine(QPointF(x, 0), QPointF(x, self.height()))
+            # A handle to grab: the playhead's head, as in every DAW.
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color)
+            top = float(flags)
+            painter.drawPolygon(
+                QPolygonF([QPointF(x - 6, top), QPointF(x + 6, top), QPointF(x, top + 9)])
+            )
         painter.end()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt's name
@@ -133,9 +164,17 @@ class Ruler(QWidget):
             self._drag = (marker[0], marker[2])
             self._drag_tick = marker[1]
             return
-        self.seek_requested.emit(max(0.0, self.tick_at(x)))
+        self._scrubbing = True
+        self._scrub(event)
+
+    def _scrub(self, event: QMouseEvent) -> None:
+        free = bool(event.modifiers() & Qt.KeyboardModifier.AltModifier)
+        self.seek_requested.emit(self.seek_tick(event.position().x(), free))
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt's name
+        if self._scrubbing:
+            self._scrub(event)
+            return
         if self._drag is not None:
             beat = self._ppq * 4 // self._denominator
             tick = max(0, round(self.tick_at(event.position().x()) / beat) * beat)
@@ -145,6 +184,7 @@ class Ruler(QWidget):
             self.update()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt's name
+        self._scrubbing = False
         if self._drag is not None:
             marker_id, name = self._drag
             self._drag = None

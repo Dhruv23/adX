@@ -46,6 +46,9 @@ class ActionSpec:
     #: "" for a global action; a panel id for one whose shortcut works only while that
     #: panel has focus (a tool key), so two panels may use the same key.
     scope: str = ""
+    #: Further keys that always work too (Ctrl+Y beside Ctrl+Shift+Z): fixed, not in
+    #: the keymap, so remapping changes only the main shortcut.
+    alternates: tuple[str, ...] = ()
 
 
 class ActionRegistry(QObject):
@@ -85,7 +88,9 @@ class ActionRegistry(QObject):
 
     def _apply_shortcut(self, action_id: str) -> None:
         text = self.keymap.shortcut(action_id)
-        self._actions[action_id].setShortcut(QKeySequence(text) if text else QKeySequence())
+        keys = [text] if text else []
+        keys += [key for key in self._specs[action_id].alternates if key != text]
+        self._actions[action_id].setShortcuts([QKeySequence(key) for key in keys])
 
     def remap(self, action_id: str, shortcut: str) -> None:
         """Give an action a new shortcut, persisted by the keymap."""

@@ -1,4 +1,5 @@
-"""The transport bar: play, stop, record, loop, tempo, position, metronome.
+"""The transport bar: undo and redo, return to start, play, stop, record, loop, tempo,
+position, metronome.
 
 Every button is one engine call; the position display reads the frame clock (one engine
 call a frame, shared with the meters and the playhead) and never calls the engine
@@ -32,6 +33,7 @@ def format_position(ticks: int, numerator: int, denominator: int, seconds: float
 class TransportBar(QToolBar):
     """Emits requests; the main window turns them into engine calls and commands."""
 
+    rewind_requested = Signal()
     play_requested = Signal()
     stop_requested = Signal()
     loop_toggled = Signal(bool)
@@ -41,11 +43,14 @@ class TransportBar(QToolBar):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__("Transport", parent)
         self.setObjectName("transport")
+        self.rewind_action = QAction("⇤ Start", self)
+        self.rewind_action.setToolTip("Return the playhead to the start (Home)")
+        self.rewind_action.triggered.connect(self.rewind_requested)
         self.play_action = QAction("▶ Play", self)
         self.play_action.setToolTip("Play / pause (Space)")
         self.play_action.triggered.connect(self.play_requested)
         self.stop_action = QAction("■ Stop", self)
-        self.stop_action.setToolTip("Stop and return to the start")
+        self.stop_action.setToolTip("Stop where it is (Ctrl+Space); ⇤ Start returns to the start")
         self.stop_action.triggered.connect(self.stop_requested)
         self.record_action = QAction("● Rec", self)
         self.record_action.setEnabled(False)
@@ -56,7 +61,14 @@ class TransportBar(QToolBar):
         self.metronome_action = QAction("Metronome", self, checkable=True)
         self.metronome_action.setToolTip("A click on every beat while playing (never rendered)")
         self.metronome_action.toggled.connect(self.metronome_toggled)
-        for action in (self.play_action, self.stop_action, self.record_action, self.loop_action):
+        self._edit_separator = self.addSeparator()
+        for action in (
+            self.rewind_action,
+            self.play_action,
+            self.stop_action,
+            self.record_action,
+            self.loop_action,
+        ):
             self.addAction(action)
         self.addSeparator()
         self.tempo = QDoubleSpinBox()
@@ -80,6 +92,13 @@ class TransportBar(QToolBar):
         self._quiet = False
         self.seconds_at: Callable[[int], float] | None = None
         self.meter = (4, 4)
+
+    def add_edit_actions(self, undo: QAction, redo: QAction) -> None:
+        """Undo and redo at the bar's left: the main window's actions themselves, so
+        their keys, tooltips and enablement are the menu's."""
+        undo.setIconText("↶ Undo")
+        redo.setIconText("↷ Redo")
+        self.insertActions(self._edit_separator, [undo, redo])
 
     def _tempo_edited(self, bpm: float) -> None:
         if not self._quiet:
