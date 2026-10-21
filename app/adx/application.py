@@ -88,6 +88,8 @@ def run(project: str | None = None, null_audio: bool = False) -> int:
         window.new_project()
     window.show()
     smoke = os.environ.get("ADX_SMOKE")
+    if not smoke:
+        window.maybe_show_quickstart()
     if smoke:
         _smoke_after_start(app, window, smoke)
     status = int(app.exec())

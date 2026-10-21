@@ -15,12 +15,16 @@ from adx.actions import ActionRegistry, ActionSpec
 
 if TYPE_CHECKING:
     from adx.mainwindow import MainWindow
-    from adx.panels.base import DockPanel
 
 
-def _toggle_visible(panel: DockPanel) -> None:
-    """Show a hidden panel, hide a shown one."""
-    panel.setVisible(not panel.isVisible())
+#: FL Studio's keys for the panels a musician switches between most.
+PANEL_KEYS = {
+    "playlist": "F5",
+    "channel_rack": "F6",
+    "piano_roll": "F7",
+    "browser": "F8",
+    "mixer": "F9",
+}
 
 
 def register_actions(window: MainWindow, registry: ActionRegistry) -> None:
@@ -134,15 +138,26 @@ def register_actions(window: MainWindow, registry: ActionRegistry) -> None:
             ActionSpec(
                 f"view.{panel.panel_id}",
                 panel.title,
-                partial(_toggle_visible, panel),
+                partial(w.show_panel, panel),
                 "&View",
-                checkable=True,
+                PANEL_KEYS.get(panel.panel_id, ""),
+                tooltip=f"Show {panel.title} and bring it to the front",
             )
         )
     specs += [
-        ActionSpec("view.reset_layout", "&Reset layout", w.reset_layout, "&View", separator=True),
+        ActionSpec(
+            "view.maximize",
+            "&Maximize panel",
+            w.toggle_maximize,
+            "&View",
+            "F11",
+            separator=True,
+            tooltip="Fill the window with the panel you are working in; again to restore",
+        ),
+        ActionSpec("view.reset_layout", "&Reset layout", w.reset_layout, "&View"),
         ActionSpec("view.dark", "Dark theme", lambda: w.set_theme_name("dark"), "&View"),
         ActionSpec("view.light", "Light theme", lambda: w.set_theme_name("light"), "&View"),
+        ActionSpec("help.quickstart", "&Quick start", w.show_quickstart, "&Help", "F1"),
         ActionSpec("help.about", "&About adX", w.about, "&Help"),
     ]
     for tool in w.playlist.tools.values():

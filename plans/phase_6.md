@@ -534,3 +534,28 @@ fixed what those found. What changed against the plan:
     `tests/python/conftest.py` learned to report each failure as a workflow annotation,
     which the public API returns. PySide6 is now pinned exactly; bump it with
     `fetch_qt.DEFAULT_VERSION`.
+
+---
+
+## 11. The first user session (2026-10-21)
+
+The user opened the build through `adX.cmd`: "I can edit and save, etc etc, but the
+overall UI is pretty bad, I can't drag to resize the piano roll ... the UI should be way
+easier to understand and use." Happy with the features. What their screenshot showed,
+and what was done:
+
+| Found | Cause | Fix |
+|---|---|---|
+| The piano roll could not be dragged taller | It shared the right column with the instrument panel, whose hand-built overview demanded 357 px | Form panels (instrument, effect, inspector, automation) scroll (`DockPanel.scrolls`); `test_no_panel_pins_a_splitter` caps every panel's minimum |
+| The piano roll was a thin strip; the screen was crowded | The default layout gave the channel rack half the width and stacked the editors under the roll | Playlist, channel rack and piano roll share one large middle area; browser and history a narrow left column; instrument/effect/inspector a right column; mixer along the bottom. `LAYOUT_VERSION` 3 discards old saved layouts |
+| White step buttons, white playlist, white meters | `GeometryView` (every Phase 6 hot surface) never set its clear colour; a QQuickWidget clears to white | Clear colour follows the theme (`test_geometry_views_never_clear_to_white`) |
+| Mute read as "V" | 6 px of stylesheet padding in a 22 px button clipped the "M" | Toggles have their own style: no padding, a visible box, amber when muted, green when soloed |
+| The rack's controls were unlabelled; no way from a channel to its notes | - | A column header (M, S, Vol, Pan, Channel, Output, Voices, Instrument) and a **Notes** button per row |
+| The mixer showed meters but no faders | Strip order put eight effect slots above the fader; a 96 px meter band | Name, mute/solo, pan, fader, output first, effects below; meter band 56 px |
+| Hard to move between editors | - | View menu shows and raises (FL's keys: F5 playlist, F6 rack, F7 roll, F8 browser, F9 mixer); **F11** maximises the panel in use and restores |
+| Nothing explains how to start | - | **Help > Quick start (F1)**, opened once on first launch |
+| Additive's overview was an unexplained empty box | 192 bars in 430 px, no caption | Bar outlines, harmonic numbers, and a caption |
+
+The human gate (§6 box 2) stays open: this session found usability problems, which is
+what the gate is for; it closes when a track is made start to finish and the user says
+the interface held up.

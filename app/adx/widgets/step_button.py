@@ -12,12 +12,17 @@ class StepButton(QToolButton):
 
     toggled_by_user = Signal(bool)
 
-    def __init__(self, text: str, tooltip: str = "", parent: QWidget | None = None) -> None:
+    def __init__(
+        self, text: str, tooltip: str = "", parent: QWidget | None = None, kind: str = ""
+    ) -> None:
         super().__init__(parent)
         self.setText(text)
         self.setCheckable(True)
         self.setToolTip(tooltip or text)
-        self.setFixedSize(22, 20)
+        # Styled as a toggle (tokens.stylesheet): "mute" lights amber, "solo" green.
+        self.setProperty("toggle", True)
+        self.setProperty("kind", kind)
+        self.setFixedSize(24, 22)
         self.clicked.connect(self.toggled_by_user)
 
     def set_checked(self, checked: bool) -> None:

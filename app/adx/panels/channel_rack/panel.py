@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 from adx import dnd, engine_bridge
 from adx.engine_bridge import PPQ
 from adx.panels.base import DockPanel
-from adx.panels.channel_rack.channel_row import ChannelRow
+from adx.panels.channel_rack.channel_row import HEADER_HEIGHT, ChannelRow
 from adx.panels.channel_rack.step_grid import StepGrid
 from adx.panels.params import channel_path
 from adx.selection import Context, Kind, Selection
@@ -62,12 +62,14 @@ class ChannelRackPanel(DockPanel):
 
     panel_id = "channel_rack"
     title = "Channel rack"
-    default_area = Qt.DockWidgetArea.LeftDockWidgetArea
+    default_area = Qt.DockWidgetArea.RightDockWidgetArea
 
     #: (pattern name, channel name): open the piano roll on that clip.
     open_roll = Signal(str, str)
     #: A channel id: show its instrument editor.
     open_instrument = Signal(int)
+    #: (pattern name, channel name): open that clip in the piano roll and show it.
+    edit_notes = Signal(str, str)
 
     def __init__(
         self, session: Session, selection: Selection, parent: QWidget | None = None
@@ -88,13 +90,23 @@ class ChannelRackPanel(DockPanel):
         content_layout = QHBoxLayout(self.content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(4)
+        rows_column = QVBoxLayout()
+        rows_column.setSpacing(0)
+        rows_column.setContentsMargins(0, 0, 0, 0)
+        rows_column.addWidget(ChannelRow.header())
         self.row_column = QVBoxLayout()
         self.row_column.setSpacing(0)
         self.row_column.setContentsMargins(0, 0, 0, 0)
+        rows_column.addLayout(self.row_column)
         rows_widget = QWidget()
-        rows_widget.setLayout(self.row_column)
+        rows_widget.setLayout(rows_column)
         content_layout.addWidget(rows_widget, 0, Qt.AlignmentFlag.AlignTop)
-        content_layout.addWidget(self.grid.view, 0, Qt.AlignmentFlag.AlignTop)
+        grid_column = QVBoxLayout()
+        grid_column.setContentsMargins(0, 0, 0, 0)
+        grid_column.addSpacing(HEADER_HEIGHT)
+        grid_column.addWidget(self.grid.view)
+        grid_column.addStretch(1)
+        content_layout.addLayout(grid_column)
         content_layout.addStretch(1)
         self.scroller.setWidget(self.content)
         outer.addWidget(self.scroller, 1)
@@ -199,6 +211,7 @@ class ChannelRackPanel(DockPanel):
         )
         row.selected.connect(self._row_selected)
         row.open_instrument.connect(self.open_instrument)
+        row.open_notes.connect(self._open_notes)
         row.dropped.connect(self._dropped_on_channel)
 
     # --- edits ----------------------------------------------------------------------
@@ -216,6 +229,12 @@ class ChannelRackPanel(DockPanel):
         self.selection.select(Kind.CHANNELS, [channel], Context())
         if self.grid.state.pattern:
             self.open_roll.emit(self.grid.state.pattern, self._channel_name(channel))
+
+    def _open_notes(self, channel: int) -> None:
+        name = self._channel_name(channel)
+        self.selection.select(Kind.CHANNELS, [channel], Context())
+        if self.grid.state.pattern and name:
+            self.edit_notes.emit(self.grid.state.pattern, name)
 
     def add_channel(self) -> None:
         """A new channel with the chosen instrument, feeding the master."""

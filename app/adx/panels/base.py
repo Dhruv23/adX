@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import ClassVar
 
 from PySide6.QtCore import QSettings, Qt
-from PySide6.QtWidgets import QDockWidget, QWidget
+from PySide6.QtWidgets import QDockWidget, QFrame, QScrollArea, QWidget
 
 
 class DockPanel(QDockWidget):
@@ -21,6 +21,10 @@ class DockPanel(QDockWidget):
     panel_id: ClassVar[str] = "panel"
     title: ClassVar[str] = "Panel"
     default_area: ClassVar[Qt.DockWidgetArea] = Qt.DockWidgetArea.RightDockWidgetArea
+    #: Form-like panels (editors full of controls) scroll rather than insist on their
+    #: full height: a panel's minimum size pins the splitter beside it, and the
+    #: instrument editor's 357 px minimum once kept the piano roll from growing.
+    scrolls: ClassVar[bool] = False
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(self.title, parent)
@@ -30,6 +34,24 @@ class DockPanel(QDockWidget):
             | QDockWidget.DockWidgetFeature.DockWidgetFloatable
             | QDockWidget.DockWidgetFeature.DockWidgetClosable
         )
+
+    def setWidget(self, widget: QWidget) -> None:  # noqa: N802 - Qt's name
+        """Install the panel's body - inside a scroll area when :attr:`scrolls`."""
+        if not self.scrolls:
+            super().setWidget(widget)
+            return
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.Shape.NoFrame)
+        area.setWidget(widget)
+        super().setWidget(area)
+
+    def body(self) -> QWidget | None:
+        """The panel's own widget, inside the scroll area if there is one."""
+        widget = self.widget()
+        if isinstance(widget, QScrollArea) and self.scrolls:
+            return widget.widget()
+        return widget
 
     def save_state(self, settings: QSettings) -> None:
         """Store this panel's own UI state (override; call within its group)."""

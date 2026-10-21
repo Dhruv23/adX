@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from PySide6.QtCore import QObject, Qt, QUrl, Signal, Slot
+from PySide6.QtGui import QColor
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtWidgets import QWidget
@@ -189,8 +190,10 @@ class GeometryView(QQuickWidget):
         self.root.setProperty("hint", text)
 
     def apply_theme(self, theme: Theme) -> None:
-        """Recolour every layer: no new geometry."""
+        """Recolour every layer: no new geometry. The clear colour too - a QQuickWidget
+        clears to white, which showed through wherever no geometry was drawn."""
         self.rootContext().setContextProperty("adxTheme", qml_palette(theme))
+        self.setClearColor(QColor(theme.window))
         call(self.item, "setPalette", list(role_colors(theme)))
 
     def paint_counts(self) -> tuple[int, int, int]:

@@ -25,7 +25,7 @@ from adx.selection import Context, Kind, Selection
 from adx.session import Session
 from adx.theme.tokens import Theme
 
-METER_HEIGHT = 96
+METER_HEIGHT = 56
 
 
 class _MeterInput:

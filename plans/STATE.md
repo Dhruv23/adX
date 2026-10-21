@@ -737,7 +737,11 @@ The rest re-carried below with reasons.
   of music with the build. Phase 7's entry is "Phase 6 §6 complete", so Phase 7 waits
   on it. An agent cannot close it. Fixed when: the user makes a track start to finish
   with `adx gui`, no text editor, and what they made and what got in the way is
-  recorded here; anything that got in the way becomes an issue.
+  recorded here; anything that got in the way becomes an issue. **Session 1
+  (2026-10-21):** editing and saving worked; the interface did not - the piano roll
+  could not be resized, and the screen was crowded and unclear. Every finding is fixed
+  and tested (phase_6.md §11). Still open: a full track, and the user's verdict on the
+  revised interface.
 - **P6-2** · Two panels exceed §3 rule 1's ~400 lines: `piano_roll/panel.py` (840,
   Phase 5's, grown by audition) and `playlist/panel.py` (494). Ruff only limits
   function length. Fixed when: each is split into sub-widgets under ~400 lines.

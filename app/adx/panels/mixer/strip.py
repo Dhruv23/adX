@@ -139,7 +139,6 @@ class MixerStrip(QWidget):
         self.name = QLabel()
         self.name.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.name.setToolTip("Double-click to rename")
-        layout.addWidget(self.name)
         self.slots: list[SlotRow] = []
         for index in range(SLOTS):
             row = SlotRow(index)
@@ -152,16 +151,13 @@ class MixerStrip(QWidget):
                 lambda i, s, payload: self.slot_dropped.emit(self.insert, i, s, payload)
             )
             self.slots.append(row)
-            layout.addWidget(row)
         self.sends = QVBoxLayout()
         self.sends.setSpacing(1)
-        layout.addLayout(self.sends)
         send_button = QPushButton("+ Send")
         send_button.setFixedHeight(18)
         send_button.clicked.connect(
             lambda: self.add_send.emit(self.insert, send_button.mapToGlobal(QPoint(0, 18)))
         )
-        layout.addWidget(send_button)
         knobs = QGridLayout()
         self.pan = Knob(-1.0, 1.0, 0.0, 0.0, "pan")
         self.pan.value_changed.connect(lambda v: self.field_turned.emit(self.insert, "pan", v))
@@ -171,10 +167,9 @@ class MixerStrip(QWidget):
         )
         knobs.addWidget(self.pan, 0, 0)
         knobs.addWidget(self.width_knob, 0, 1)
-        layout.addLayout(knobs)
         buttons = QHBoxLayout()
-        self.mute = StepButton("M", "Mute")
-        self.solo = StepButton("S", "Solo")
+        self.mute = StepButton("M", "Mute", kind="mute")
+        self.solo = StepButton("S", "Solo", kind="solo")
         self.invert = StepButton("Ø", "Invert polarity")
         self.arm = StepButton("R", "Recording arrives in Phase 8 (plans/phase_8.md)")
         self.arm.setEnabled(False)
@@ -184,19 +179,30 @@ class MixerStrip(QWidget):
             )
             buttons.addWidget(button)
         buttons.addWidget(self.arm)
-        layout.addLayout(buttons)
         self.fader = Fader(1.0)
-        self.fader.setMinimumHeight(120)
+        self.fader.setMinimumHeight(90)
         self.fader.value_changed.connect(lambda g: self.field_turned.emit(self.insert, "gain", g))
-        layout.addWidget(self.fader, 1)
         self.db = QLabel()
         self.db.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.db)
         self.output = QComboBox()
         self.output.setToolTip("Output: the insert this one routes to")
         self.output.activated.connect(self._output_chosen)
-        layout.addWidget(self.output)
         self._targets: list[int] = []
+        # The order a user reaches for: what it is, mute/solo, pan, level, where it goes -
+        # then its effects and sends, which scroll into view below.
+        layout.addWidget(self.name)
+        layout.addLayout(buttons)
+        layout.addLayout(knobs)
+        layout.addWidget(self.fader, 1)
+        layout.addWidget(self.db)
+        layout.addWidget(self.output)
+        effects = QLabel("Effects")
+        effects.setObjectName("columnHeader")
+        layout.addWidget(effects)
+        for row in self.slots:
+            layout.addWidget(row)
+        layout.addLayout(self.sends)
+        layout.addWidget(send_button)
 
     def show_insert(
         self,

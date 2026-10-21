@@ -21,6 +21,23 @@ from adx.widgets.step_button import StepButton
 
 #: Every row is this tall, and the step grid's rows match it.
 ROW_HEIGHT = 30
+#: The column header above the rows (and the gap above the step grid).
+HEADER_HEIGHT = 18
+
+#: (caption, width, tooltip) per column, left to right - the header and every row
+#: lay their widgets out at these widths so the captions line up.
+COLUMNS: tuple[tuple[str, int, str], ...] = (
+    ("", 14, "Colour"),
+    ("M", 24, "Mute"),
+    ("S", 24, "Solo"),
+    ("Vol", 26, "Volume"),
+    ("Pan", 26, "Pan"),
+    ("Channel", 96, "Click to select (its notes load in the piano roll); double-click to rename"),
+    ("Output", 84, "The mixer insert this channel plays into"),
+    ("Voices", 58, "Polyphony: notes it can sound at once"),
+    ("Instrument", 76, "Open the instrument editor"),
+    ("", 64, ""),
+)
 
 
 class ChannelRow(QWidget):
@@ -32,6 +49,8 @@ class ChannelRow(QWidget):
     output_changed = Signal(int, int)
     selected = Signal(int)
     open_instrument = Signal(int)
+    #: The Notes button: edit this channel's notes in the piano roll.
+    open_notes = Signal(int)
     dropped = Signal(int, object)
 
     def __init__(self, channel: int, parent: QWidget | None = None) -> None:
@@ -44,11 +63,11 @@ class ChannelRow(QWidget):
         layout.setSpacing(3)
         self.swatch = ColorSwatch()
         self.swatch.color_chosen.connect(lambda c: self.color_changed.emit(self.channel, c))
-        self.mute = StepButton("M", "Mute")
+        self.mute = StepButton("M", "Mute", kind="mute")
         self.mute.toggled_by_user.connect(
             lambda on: self.field_changed.emit(self.channel, "mute", 1.0 if on else 0.0)
         )
-        self.solo = StepButton("S", "Solo")
+        self.solo = StepButton("S", "Solo", kind="solo")
         self.solo.toggled_by_user.connect(
             lambda on: self.field_changed.emit(self.channel, "solo", 1.0 if on else 0.0)
         )
@@ -71,7 +90,8 @@ class ChannelRow(QWidget):
         self.output.activated.connect(self._output_chosen)
         self.polyphony = QSpinBox()
         self.polyphony.setRange(1, 256)
-        self.polyphony.setFixedWidth(48)
+        self.polyphony.setFixedWidth(58)
+        self.polyphony.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
         self.polyphony.setToolTip("Polyphony")
         self.polyphony.setKeyboardTracking(False)
         self.polyphony.valueChanged.connect(
@@ -81,6 +101,10 @@ class ChannelRow(QWidget):
         self.instrument.setFixedWidth(76)
         self.instrument.setToolTip("Open the instrument editor")
         self.instrument.clicked.connect(lambda: self.open_instrument.emit(self.channel))
+        self.notes = QPushButton("Notes")
+        self.notes.setFixedWidth(64)
+        self.notes.setToolTip("Edit this channel's notes in the piano roll (F7)")
+        self.notes.clicked.connect(lambda: self.open_notes.emit(self.channel))
         for widget in (
             self.swatch,
             self.mute,
@@ -91,6 +115,7 @@ class ChannelRow(QWidget):
             self.output,
             self.polyphony,
             self.instrument,
+            self.notes,
         ):
             layout.addWidget(widget)
         self._inserts: list[int] = []
@@ -121,6 +146,23 @@ class ChannelRow(QWidget):
         self.polyphony.blockSignals(True)
         self.polyphony.setValue(int(info["polyphony"]))
         self.polyphony.blockSignals(False)
+
+    @staticmethod
+    def header() -> QWidget:
+        """Captions for the row's columns, laid out at the row's widths."""
+        header = QWidget()
+        header.setFixedHeight(HEADER_HEIGHT)
+        layout = QHBoxLayout(header)
+        layout.setContentsMargins(2, 0, 2, 0)
+        layout.setSpacing(3)
+        for caption, width, tooltip in COLUMNS:
+            label = QLabel(caption)
+            label.setObjectName("columnHeader")
+            label.setFixedWidth(width)
+            label.setToolTip(tooltip)
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(label)
+        return header
 
     def _output_chosen(self, index: int) -> None:
         if 0 <= index < len(self._inserts):

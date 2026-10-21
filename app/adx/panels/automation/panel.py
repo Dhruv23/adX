@@ -41,6 +41,7 @@ class AutomationPanel(DockPanel):
     panel_id = "automation"
     title = "Automation"
     default_area = Qt.DockWidgetArea.BottomDockWidgetArea
+    scrolls = True
 
     def __init__(
         self, session: Session, selection: Selection, parent: QWidget | None = None

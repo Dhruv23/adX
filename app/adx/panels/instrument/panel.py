@@ -34,6 +34,7 @@ class InstrumentPanel(DockPanel):
     panel_id = "instrument"
     title = "Instrument"
     default_area = Qt.DockWidgetArea.RightDockWidgetArea
+    scrolls = True
 
     def __init__(
         self, session: Session, selection: Selection, parent: QWidget | None = None

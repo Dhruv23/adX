@@ -28,6 +28,7 @@ class InspectorPanel(DockPanel):
     panel_id = "inspector"
     title = "Inspector"
     default_area = Qt.DockWidgetArea.RightDockWidgetArea
+    scrolls = True
 
     def __init__(
         self, session: Session, selection: Selection, parent: QWidget | None = None

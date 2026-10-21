@@ -256,6 +256,20 @@ def stylesheet(theme: Theme) -> str:
             f"background: {t.raised}; border-color: {t.accent}; color: {t.accent}",
         ),
         ("QToolButton:disabled", f"color: {t.text_dim}"),
+        # Toggles (StepButton: mute, solo, bypass...): a visible box, no padding - at
+        # 3px 6px an "M" was clipped to a "V" - and a filled, coloured "on" state.
+        (
+            'QToolButton[toggle="true"]',
+            f"padding: 0px; border: 1px solid {t.border}; background: {t.raised}; "
+            "font-weight: bold",
+        ),
+        (
+            'QToolButton[toggle="true"]:checked',
+            f"background: {t.accent}; border-color: {t.accent}; color: {t.window}",
+        ),
+        ("QLabel#columnHeader", f"color: {t.text_dim}; font-size: {m.font_pt - 1}pt"),
+        ('QToolButton[kind="mute"]:checked', "background: #e0a040; border-color: #e0a040"),
+        ('QToolButton[kind="solo"]:checked', "background: #5ec27a; border-color: #5ec27a"),
         ("QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit", f"{box}; padding: 2px 6px"),
         ("QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover", f"border-color: {t.accent}"),
         ("QMenuBar, QMenu", f"background: {t.panel}"),

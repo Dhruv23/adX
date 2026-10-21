@@ -15,7 +15,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QEvent, QObject, QSettings, Qt, QTimer
 from PySide6.QtGui import QCloseEvent, QKeyEvent, QShowEvent
-from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QMainWindow, QMessageBox
 
 from adx import __version__, engine_bridge
 from adx.actions import ActionRegistry
@@ -44,8 +44,8 @@ from adx.theme.tokens import THEMES, Theme, stylesheet
 from adx.transport_bar import TransportBar
 
 #: Bump when the dock layout changes shape, so an old saved layout is not restored
-#: into panels it does not describe. 2: Phase 6's panels.
-LAYOUT_VERSION = 2
+#: into panels it does not describe. 2: Phase 6's panels. 3: the editors in the middle.
+LAYOUT_VERSION = 3
 
 NEW_PROJECT = """[PROJECT]
 ADX_VERSION=2
@@ -79,6 +79,10 @@ class MainWindow(QMainWindow):
         self.path: str | None = None
         self.saved_revision = 0
         self.theme: Theme = THEMES["dark"]
+        #: The panel F11 filled the window with, and the layout to put back.
+        self._maximized: DockPanel | None = None
+        self._before_maximize = QByteArray()
+        self._quickstart: QDialog | None = None
         self.setWindowTitle("adX")
         self.setDockNestingEnabled(True)
         self.transport = TransportBar(self)
@@ -150,6 +154,7 @@ class MainWindow(QMainWindow):
         self.piano_roll.on_selection = self._roll_selection
         self.channel_rack.open_roll.connect(self._open_roll)
         self.channel_rack.open_instrument.connect(self._open_instrument)
+        self.channel_rack.edit_notes.connect(self._edit_notes)
         self.playlist.open_pattern.connect(self._open_pattern)
         self.mixer.open_effect.connect(self._open_effect)
         self.session.changed.connect(self._changed)
@@ -325,6 +330,11 @@ class MainWindow(QMainWindow):
         if self.project is not None and pattern and channel:
             self.piano_roll.select_clip(pattern, channel)
 
+    def _edit_notes(self, pattern: str, channel: str) -> None:
+        if self.project is not None:
+            self.piano_roll.select_clip(pattern, channel)
+            self.show_panel(self.piano_roll)
+
     def _open_pattern(self, pattern: int) -> None:
         if self.project is None:
             return
@@ -464,36 +474,80 @@ class MainWindow(QMainWindow):
         self.settings.setValue("theme", self.theme.name)
 
     def _place_panels(self) -> None:
-        """The default arrangement: browser and rack left, playlist and piano roll in the
-        middle, editors right, mixer and automation along the bottom."""
+        """The default arrangement. The editors you work in - playlist, channel rack, piano
+        roll - share one large area in the middle (F5, F6, F7 switch between them); the
+        browser and history sit in a narrow column on the left; the instrument, effect and
+        inspector editors in a column on the right; the mixer, automation and waveform
+        along the bottom. Every splitter between them drags."""
+        self._maximized = None
         for panel in self.panels:
             panel.setFloating(False)
             self.addDockWidget(panel.default_area, panel)
             panel.show()
-        self.tabifyDockWidget(self.browser, self.channel_rack)
-        self.tabifyDockWidget(self.channel_rack, self.history)
-        self.tabifyDockWidget(self.playlist, self.piano_roll)
+        self.setCorner(Qt.Corner.BottomLeftCorner, Qt.DockWidgetArea.LeftDockWidgetArea)
+        self.setCorner(Qt.Corner.TopLeftCorner, Qt.DockWidgetArea.LeftDockWidgetArea)
+        self.tabifyDockWidget(self.browser, self.history)
+        self.splitDockWidget(self.playlist, self.instrument, Qt.Orientation.Horizontal)
+        self.tabifyDockWidget(self.playlist, self.channel_rack)
+        self.tabifyDockWidget(self.channel_rack, self.piano_roll)
         self.tabifyDockWidget(self.instrument, self.effect)
         self.tabifyDockWidget(self.effect, self.inspector)
         self.tabifyDockWidget(self.mixer, self.automation)
         self.tabifyDockWidget(self.automation, self.waveform)
-        self.channel_rack.raise_()
+        self.browser.raise_()
         self.playlist.raise_()
         self.instrument.raise_()
         self.mixer.raise_()
 
     def _size_panels(self) -> None:
         width, height = max(1000, self.width()), max(600, self.height())
+        side = min(300, int(width * 0.16))
+        editors = min(460, int(width * 0.24))
         self.resizeDocks(
-            [self.channel_rack, self.playlist, self.instrument],
-            [int(width * 0.28), int(width * 0.5), int(width * 0.22)],
+            [self.browser, self.playlist, self.instrument],
+            [side, width - side - editors, editors],
             Qt.Orientation.Horizontal,
         )
         self.resizeDocks(
             [self.playlist, self.mixer],
-            [int(height * 0.58), int(height * 0.32)],
+            [int(height * 0.58), int(height * 0.36)],
             Qt.Orientation.Vertical,
         )
+
+    def show_panel(self, panel: DockPanel) -> None:
+        """Show a panel, bring it to the front of its tab group and give it the keyboard
+        (View menu; F5 playlist, F6 channel rack, F7 piano roll, F8 browser, F9 mixer)."""
+        if self._maximized is not None and panel is not self._maximized:
+            self.toggle_maximize()
+        panel.show()
+        panel.raise_()
+        panel.widget().setFocus()
+
+    def _panel_with_focus(self) -> DockPanel:
+        """The panel the keyboard is in, else the front editor of the middle area."""
+        widget = QApplication.focusWidget()
+        while widget is not None:
+            if isinstance(widget, DockPanel):
+                return widget
+            widget = widget.parentWidget()
+        middle = (self.piano_roll, self.channel_rack, self.playlist)
+        return next((p for p in middle if not p.visibleRegion().isEmpty()), self.playlist)
+
+    def toggle_maximize(self) -> None:
+        """Fill the window with the panel being worked in (F11); again to put the others
+        back exactly where they were."""
+        if self._maximized is not None:
+            self.restoreState(self._before_maximize, LAYOUT_VERSION)
+            self._maximized = None
+            return
+        panel = self._panel_with_focus()
+        self._before_maximize = self.saveState(LAYOUT_VERSION)
+        for other in self.panels:
+            if other is not panel:
+                other.hide()
+        panel.show()
+        panel.raise_()
+        self._maximized = panel
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 - Qt's name
         super().showEvent(event)
@@ -523,6 +577,21 @@ class MainWindow(QMainWindow):
         self.waveform.waveform.apply_theme(theme)
         for panel in (self.playlist, self.channel_rack, self.mixer, self.automation, self.history):
             panel.apply_theme(theme)
+
+    def show_quickstart(self) -> None:
+        """Help > Quick start: how to get around and make a first track."""
+        from adx.quickstart import QuickStart
+
+        if self._quickstart is None:
+            self._quickstart = QuickStart(self)
+        self._quickstart.show()
+        self._quickstart.raise_()
+
+    def maybe_show_quickstart(self) -> None:
+        """The quick start, the first time adX opens on this machine."""
+        if not self.settings.value("quickstart_seen", False, type=bool):
+            self.settings.setValue("quickstart_seen", True)
+            self.show_quickstart()
 
     def about(self) -> None:
         """Version information."""

@@ -6,7 +6,7 @@ whole stroke is one undo step (a gesture group), however many bars it crosses.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRectF
+from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPaintEvent
 from PySide6.QtWidgets import QWidget
 
@@ -55,12 +55,29 @@ class HarmonicBars(QWidget):
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor(DARK.raised))
         width = self.width() / max(1, self.count)
+        # Each bar's slot, faintly, so the empty ones read as bars waiting to be drawn.
+        painter.setPen(QColor(DARK.border))
+        for index in range(self.count):
+            painter.drawRect(QRectF(index * width + 1, 0, width - 2, self.height() - 1))
         for index, value in enumerate(self.values):
             height = value * self.height()
             painter.fillRect(
                 QRectF(index * width + 1, self.height() - height, width - 2, height),
                 QColor(DARK.accent),
             )
+        painter.setPen(QColor(DARK.text_dim))
+        painter.drawText(
+            QRectF(8, 4, self.width() - 16, 18),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            f"Harmonics 1-{self.count}: drag across the bars to set each one's level",
+        )
+        for index in (0, 7, 15, 31, 63):
+            if index < self.count:
+                painter.drawText(
+                    QRectF(index * width, self.height() - 16, max(width, 18), 14),
+                    Qt.AlignmentFlag.AlignLeft,
+                    str(index + 1),
+                )
         painter.end()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt's name

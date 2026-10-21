@@ -35,6 +35,7 @@ class EffectPanel(DockPanel):
     panel_id = "effect"
     title = "Effect"
     default_area = Qt.DockWidgetArea.RightDockWidgetArea
+    scrolls = True
 
     def __init__(
         self, session: Session, selection: Selection, parent: QWidget | None = None
