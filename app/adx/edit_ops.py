@@ -157,8 +157,9 @@ class EditOps:
         return True
 
     def _paste_notes(self, text: str, context: Context) -> bool:
-        """Notes from ``.adx`` text: whatever the fragment's first pattern holds, at the
-        paste position."""
+        """Notes from ``.adx`` text: whatever the fragment's first pattern holds, its
+        first note at the paste position. (The text keeps the notes' place in their bar,
+        for whoever reads it; a paste goes where the user points, not a bar later.)"""
         fragment, diagnostics = Project.loads(text)
         if any(str(d["severity"]) == "error" for d in diagnostics):
             self.session.failed.emit("paste", "the clipboard is not valid .adx")
@@ -168,7 +169,8 @@ class EditOps:
         if not channels:
             return False
         notes = fragment.notes(patterns[0], channels[0])
-        notes["start"] = notes["start"] + self.paste_tick
+        if len(notes):
+            notes["start"] = notes["start"] - notes["start"].min() + self.paste_tick
         notes["id"] = 0
         command = engine_bridge.commands.edit_notes(
             context.pattern,

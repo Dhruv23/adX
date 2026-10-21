@@ -140,6 +140,23 @@ def test_notes_paste_at_the_cursor_and_come_selected(studio: MainWindow) -> None
     assert len(studio.project.notes("P1", "Lead")) == 2
 
 
+def test_the_first_copied_note_lands_on_the_cursor(studio: MainWindow) -> None:
+    """Notes copied from mid-bar paste with their first note at the cursor - not offset
+    by where they sat in their bar (the user's C#-D phrase landed a beat late)."""
+    roll_ready(studio)
+    roll = studio.piano_roll
+    roll.grid_box.setCurrentIndex(QUARTER)
+    draw(studio, PPQ, 61)
+    draw(studio, 2 * PPQ, 62)
+    roll.on_key(int(Qt.Key.Key_A.value), CTRL)
+    assert studio.registry.trigger("edit.copy")
+    roll.set_cursor(8 * PPQ)
+    assert studio.registry.trigger("edit.paste")
+    notes = studio.project.notes("P1", "Lead")
+    pasted = sorted(int(s) for s in notes["start"] if s >= 8 * PPQ)
+    assert pasted == [8 * PPQ, 9 * PPQ]
+
+
 def test_clips_paste_at_the_playhead(studio: MainWindow) -> None:
     project = studio.project
     assert project is not None
