@@ -377,7 +377,8 @@ half is P6-0 in plans/STATE.md.
       dsp-math and `rules` (now 6 checks, `no_panel_caches_project_state` among them);
       pytest 156 tests green, both GPU tests included (154 without them, as CI runs).
       The slow suite in Debug with full evidence: passed in 944.11 s. The full check
-      (clang-tidy over every file in Debug and Release, the 10-minute fuzz): P6-0.
+      (clang-tidy over every file in Debug and Release, the 10-minute fuzz): green, run
+      39430247203 on the `phase-6-built` tag.
 - [x] FINAL_PLAN.md §10 Phase 6 row updated.
 
 ### The §5 tests, where they live
