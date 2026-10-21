@@ -101,7 +101,7 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 3 — Audio graph & scheduling | L | **Done** 2026-10-01 (CI green, run 36835905774) |
 | 4 — Instruments & effects | XL | **Done** 2026-10-04 (CI green, run 37269752424; full check run 37273504347) |
 | 5 — Frontend foundation | L | **Done** 2026-10-06 (CI green, run 37509766570; full check run 37512932612) |
-| 6 — The DAW proper | XL | **Built** 2026-10-20 (CI green, run 39422153732; full check run 39430247203); human gate (P6-1) open |
+| 6 — The DAW proper | XL | **Done** 2026-10-21 (CI green, run 39422153732; full check run 39430247203; human gate P6-1 closed by the user) |
 | 7 — Text-first layer | M | Not started |
 | 8 — Audio & export | M | Not started |
 | 9 — Plugins & MIDI | L | Not started |
@@ -676,15 +676,15 @@ the meter frame counted at exactly one call) and **P3-5** (decided: no flush; te
 
 ---
 
-## [ ] Phase 6 — The DAW proper · XL
+## [x] Phase 6 — The DAW proper · XL
 
 | | |
 |---|---|
 | **Plan** | [phase_6.md](phase_6.md) |
 | **Entry** | Phase 5 §6 complete, including the frame-rate acceptance step |
 | **Done when** | [phase_6.md](phase_6.md) §6 |
-| **Status** | Built (2026-10-20). Every automated §6 box observed locally, the 200-insert frame-rate step included; per-push CI green (run 39422153732 at `094bc87`); full check green (run 39430247203 on `phase-6-built`). **Not done:** the human gate (P6-1) is open |
-| **Completed** | — |
+| **Status** | Done (2026-10-21). Every automated §6 box observed locally, the 200-insert frame-rate step included; per-push CI green (run 39422153732 at `094bc87`); full check green (run 39430247203 on `phase-6-built`); the human gate (P6-1) closed by the user |
+| **Completed** | 2026-10-21 |
 
 **What exists.** The whole §2 manifest: channel rack (a C++ step grid, 64x64 with no
 per-cell widget), playlist (draw, paint, select, slice, slip, stretch, mute, group; track
@@ -733,7 +733,7 @@ The rest re-carried below with reasons.
   itself is kept for the commit that closes P6-1. Full check **green**: run 39430247203
   on `phase-6-built` (`f1580f3`) - clang-tidy over every file in Debug and Release, and
   the 10-minute loader fuzz.
-- **P6-1** · `BLOCKER` · The human gate (phase_6.md §6 box 2): nobody has made a piece
+- **P6-1** · **Closed 2026-10-21** · The human gate (phase_6.md §6 box 2): nobody has made a piece
   of music with the build. Phase 7's entry is "Phase 6 §6 complete", so Phase 7 waits
   on it. An agent cannot close it. Fixed when: the user makes a track start to finish
   with `adx gui`, no text editor, and what they made and what got in the way is
@@ -747,7 +747,13 @@ The rest re-carried below with reasons.
   original. That, Stop rewinding, an undraggable unsnapped playhead, a faint rubber
   band and redo being Ctrl+Y only are fixed and tested (phase_6.md §11, second table).
   `output/transcription/wannacry_piano.adx` was written by an agent and does not count
-  toward this gate.
+  toward this gate. **Session 3 (2026-10-21):** a paste still landed a beat late when the
+  copied notes began mid-bar (the clipboard text keeps notes' place in their bar; the
+  paste kept that offset) - fixed: the first copied note lands on the cursor. Then, in
+  the user's words: "the track is done. phase 6 is complete mark it as done."
+  `wanna_cry_human.adx`, made in the app: one additive channel, one 4-bar pattern, 28
+  notes, placed once; it loads with no diagnostics. What got in the way across the three
+  sessions is phase_6.md §11; all of it is fixed and tested, so no new issue.
 - **P6-2** · Two panels exceed §3 rule 1's ~400 lines: `piano_roll/panel.py` (840,
   Phase 5's, grown by audition) and `playlist/panel.py` (494). Ruff only limits
   function length. Fixed when: each is split into sub-widgets under ~400 lines.

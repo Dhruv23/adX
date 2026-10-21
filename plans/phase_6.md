@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Built 2026-10-20; every automated §6 box observed locally; per-push CI green (run 39422153732); **the human gate (§6 box 2) is open** - see plans/STATE.md (P6-0, P6-1) |
+| **Status** | Done 2026-10-21; every automated §6 box observed locally; per-push CI green (run 39422153732); full check green (run 39430247203); the human gate (§6 box 2) closed by the user - see plans/STATE.md (P6-1) |
 | **Governs** | every remaining panel in `app/adx/panels/`, their geometry builders, the generic parameter-editor system |
 | **FINAL_PLAN refs** | §3.3.10, §5.1 (playlist, automation, history), §5.2 mixer UI, §5.10 meters, §7 Phase 6 |
 | **Entry criteria** | [phase_5.md](phase_5.md) §6 complete, **including the frame-rate acceptance step** |
@@ -349,9 +349,10 @@ half is P6-0 in plans/STATE.md.
       from a knob's "Create automation" and drawn with the mouse; File > Export, File >
       Save, File > Open, export again: **identical hash and identical bytes**. Every
       quarter of the song is audible. No step writes project text.
-- [ ] **A human has actually made a piece of music with it.** *Open - P6-1.* No person
-      has used the build yet; this box is the user's to check and cannot be closed by
-      an agent. Everything it needs is in place (`adx gui`).
+- [x] **A human has actually made a piece of music with it.** *Closed 2026-10-21 by
+      the user (P6-1):* "the track is done. phase 6 is complete mark it as done." The
+      track, `wanna_cry_human.adx`, was made in the app over three sessions; what got
+      in the way is §11, all fixed and tested.
 - [x] Every instrument and effect from Phase 4 is editable.
       `test_generic_editor_covers_all_instruments` and `..._effects`: all 11
       instrument types the catalog lists that take parameters, and all 27 effect types,
@@ -573,6 +574,10 @@ for redo, with buttons; Ctrl+C / Ctrl+V to repeat part of a melody.
 
 `tests/python/panels/test_panel_editing_flow.py` covers each row.
 
-The human gate (§6 box 2) stays open: these sessions found usability problems, which is
-what the gate is for; it closes when a track is made start to finish and the user says
-the interface held up.
+A third session: copied notes that began mid-bar pasted a beat late (the clipboard
+text keeps notes' place in their bar, and the paste kept the offset). Fixed: the first
+copied note lands on the cursor (`test_the_first_copied_note_lands_on_the_cursor`). The
+user then finished the track and closed the gate (2026-10-21).
+
+The gate stayed open through these sessions on purpose: each found usability problems,
+which is what it is for. It closed when a track was finished and the user said so.
