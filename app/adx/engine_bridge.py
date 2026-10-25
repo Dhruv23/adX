@@ -1342,3 +1342,211 @@ def load_quick_plugin() -> None:
 def quick_plugin_qt_version() -> str:
     """The Qt version adx_quick was built against."""
     return bytes(_quick_library().adx_quick_qt_version()).decode()
+
+
+# --- the text-first layer (phase_7.md) -----------------------------------------------
+
+#: Live mode's write debounce and the watcher's quiet window (engine/sync/ReloadPolicy.h).
+LIVE_WRITE_DEBOUNCE_MS = 300
+WATCHER_DEBOUNCE_MS = 150
+
+
+class TextSync:
+    """The bidirectional coordinator (engine/sync/TextSync.h): one project and its file.
+
+    Every apply returns ``{status, commands, structural, diagnostics}``; status is one of
+    ``applied``, ``unchanged``, ``invalid``, ``conflict``, ``self-write``. Every method is
+    one engine call.
+    """
+
+    def __init__(self, project: Project, base_dir: str = "") -> None:
+        CALLS.count += 1
+        self.native = _native.sync.TextSync(project.native, base_dir)
+
+    @_ffi
+    def set_mode(self, mode: str) -> None:
+        """``off``, ``on-save`` or ``live``."""
+        self.native.set_mode(mode)
+
+    @_ffi
+    def mode(self) -> str:
+        """The current mode."""
+        return str(self.native.mode())
+
+    @_ffi
+    def mark_synced(self, text: str) -> None:
+        """The file and the model agree on ``text``."""
+        self.native.mark_synced(text)
+
+    @_ffi
+    def render_text(self) -> str:
+        """The model's canonical text, spelled as the file is."""
+        return str(self.native.render_text())
+
+    @_ffi
+    def apply_text(self, text: str) -> dict[str, Any]:
+        """The editor's buffer changed."""
+        return dict(self.native.apply_text(text))
+
+    @_ffi
+    def apply_external(self, text: str) -> dict[str, Any]:
+        """The file changed on disk."""
+        return dict(self.native.apply_external(text))
+
+    @_ffi
+    def apply_forced(self, text: str) -> dict[str, Any]:
+        """Take theirs: apply over unsynced model edits."""
+        return dict(self.native.apply_forced(text))
+
+    @_ffi
+    def note_write(self, text: str) -> None:
+        """adX wrote ``text``; the watcher event it causes is an echo."""
+        self.native.note_write(text)
+
+    @_ffi
+    def model_dirty(self) -> bool:
+        """The model has edits the file has not seen."""
+        return bool(self.native.model_dirty())
+
+    @_ffi
+    def synced_text(self) -> str:
+        """What the file held when the two last agreed."""
+        return str(self.native.synced_text())
+
+
+class FileWatcher:
+    """A file on disk (engine/sync/FileWatcher.h): :meth:`poll` is true once per save."""
+
+    def __init__(self, path: str, debounce_ms: int = WATCHER_DEBOUNCE_MS) -> None:
+        CALLS.count += 1
+        self.path = path
+        self.native = _native.sync.FileWatcher(path, debounce_ms)
+
+    @_ffi
+    def poll(self) -> bool:
+        """True once per burst of changes, after the debounce window."""
+        return bool(self.native.poll())
+
+    @_ffi
+    def watching(self) -> bool:
+        """False when the directory could not be watched."""
+        return bool(self.native.watching())
+
+
+class IncrementalParse:
+    """The editor's diagnostics, kept current keystroke by keystroke (phase_7.md 4.3)."""
+
+    def __init__(self) -> None:
+        CALLS.count += 1
+        self.native = _native.sync.IncrementalParse()
+
+    @_ffi
+    def reset(self, text: str) -> None:
+        """A full parse."""
+        self.native.reset(text)
+
+    @_ffi
+    def update(self, text: str) -> list[dict[str, Any]]:
+        """Re-diagnose ``text``; returns its diagnostics."""
+        self.native.update(text)
+        return list(self.native.diagnostics())
+
+    def last_ms(self) -> float:
+        """How long the last update took (no engine call: a read of a stored value)."""
+        return float(self.native.last_ms())
+
+    def last_incremental(self) -> bool:
+        """Whether the last update took the cheap path."""
+        return bool(self.native.last_incremental())
+
+
+@_ffi
+def semantic_tokens(text: str) -> npt.NDArray[np.int32]:
+    """Rows of (line 1-based, byte column, byte length, kind index) (Tokenize.h)."""
+    return cast(npt.NDArray[np.int32], _native.sync.semantic_tokens(text))
+
+
+@functools.cache
+def semantic_kinds() -> tuple[str, ...]:
+    """Token kind names, by index. Fixed for a build, so asked once."""
+    CALLS.count += 1
+    return tuple(str(name) for name in _native.sync.semantic_kinds())
+
+
+@_ffi
+def mini_compile(
+    text: str,
+    cycle_start: int = 0,
+    cycle_length: int = PPQ * 4,
+    cycle_index: int = 0,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """One cycle of mini-notation: ``{ok, notes, problems}`` (PatternCompiler.h)."""
+    return dict(_native.mini.compile(text, cycle_start, cycle_length, cycle_index, seed))
+
+
+@_ffi
+def mini_realize(
+    text: str, from_tick: int, to_tick: int, cycle_length: int
+) -> npt.NDArray[np.int64]:
+    """Rows of (start, length, pitch, velocity, span_start, span_length, cycle, index)."""
+    return cast(npt.NDArray[np.int64], _native.mini.realize(text, from_tick, to_tick, cycle_length))
+
+
+@_ffi
+def mini_cycle_length(project: Project) -> int:
+    """One cycle in ticks: a bar of the meter at tick 0."""
+    return int(_native.mini.cycle_length(project.native))
+
+
+@_ffi
+def mini_sources(project: Project) -> list[tuple[str, str, list[str]]]:
+    """Every MINI block as (pattern, channel, lines)."""
+    return [
+        (str(p), str(c), [str(x) for x in lines])
+        for p, c, lines in _native.mini.sources(project.native)
+    ]
+
+
+@_ffi
+def mini_join(lines: list[str]) -> str:
+    """The text a MINI block's lines compile as."""
+    return str(_native.mini.join_lines(lines))
+
+
+@_ffi
+def script_position(project: Project, text: str) -> int:
+    """Ticks of a position in the file's spelling (raises ValueError)."""
+    return int(_native.script.position(project.native, text))
+
+
+@_ffi
+def script_duration(project: Project, text: str) -> int:
+    """Ticks of a duration in the file's spelling (raises ValueError)."""
+    return int(_native.script.duration(project.native, text))
+
+
+@_ffi
+def script_mini_notes(text: str, length: int, cycle: int) -> npt.NDArray[np.int64]:
+    """Rows of (start, length, pitch, velocity) ``text`` plays over ``length`` ticks."""
+    return cast(npt.NDArray[np.int64], _native.script.mini_notes(text, length, cycle))
+
+
+@_ffi
+def script_add_mini_notes(project: Project, pattern: str, channel: str, text: str) -> int:
+    """Compile ``text`` into notes in (pattern, channel): one command."""
+    return int(_native.script.add_mini_notes(project.native, pattern, channel, text))
+
+
+@_ffi
+def script_set_mini(project: Project, pattern: str, channel: str, text: str) -> None:
+    """Set (or with empty text remove) a live MINI block: one command."""
+    _native.script.set_mini(project.native, pattern, channel, text)
+
+
+@_ffi
+def script_add_effect(
+    project: Project, insert: int, effect: str, params: dict[str, float], mix: float = 1.0
+) -> int:
+    """Add an effect with its parameters: one command. Returns the slot id."""
+    return int(_native.script.add_effect(project.native, insert, effect, params, mix))

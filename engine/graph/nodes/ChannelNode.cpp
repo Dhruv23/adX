@@ -1,6 +1,7 @@
 #include "engine/graph/nodes/ChannelNode.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 #include "engine/graph/nodes/Gain.h"
@@ -203,6 +204,14 @@ void ChannelNode::applyChannelStrip(const ProcessContext& context) noexcept {
 }
 
 void ChannelNode::process(ProcessContext& context) noexcept {
+    m_last.capture(context);
+    renderBlock(context);
+    if (m_handover.from != nullptr) {
+        ringOutOld(context);
+    }
+}
+
+void ChannelNode::renderBlock(ProcessContext& context) noexcept {
     const std::uint32_t frames = context.frames;
     const std::span<float> left = context.outputs[0];
     const std::span<float> right = context.outputs[1];
@@ -259,6 +268,76 @@ void ChannelNode::process(ProcessContext& context) noexcept {
 
     m_pool.advanceClock(frames);
     applyChannelStrip(context);
+}
+
+bool ChannelNode::renderDeparture(ProcessContext& context) noexcept {
+    if (!m_last.valid()) {
+        for (const std::span<float> output : context.outputs) {
+            std::ranges::fill(output, 0.0F);
+        }
+        return false;
+    }
+    if (!m_departing) {
+        for (Voice& voice : m_pool.voices()) {
+            VoicePool::release(voice);
+        }
+        m_departing = true;
+    }
+    ProcessContext own{.time = context.time,
+                       .outputs = context.outputs,
+                       .inputs = context.inputs,
+                       .frames = context.frames,
+                       .sampleRate = context.sampleRate,
+                       .events = {},
+                       .params = m_last.view(),
+                       .automation = {},
+                       .arena = context.arena,
+                       .tuningCents = context.tuningCents};
+    renderBlock(own);
+    return m_pool.soundingCount() > 0;
+}
+
+void ChannelNode::ringOutOld(ProcessContext& context) noexcept {
+    ChannelNode& old = *m_handover.from;
+    const std::uint32_t frames = context.frames;
+    const std::span<float> oldLeft = context.arena.allocate<float>(frames);
+    const std::span<float> oldRight = context.arena.allocate<float>(frames);
+    if (!old.m_last.valid() || oldLeft.size() != frames || oldRight.size() != frames) {
+        m_handover.finish();
+        return;
+    }
+    if (!m_handover.started) {
+        // Released, not cut: each voice runs its own release from here.
+        for (Voice& voice : old.m_pool.voices()) {
+            VoicePool::release(voice);
+        }
+        m_handover.started = true;
+    }
+    const std::array<std::span<float>, 2> outputs{oldLeft, oldRight};
+    ProcessContext oldContext{.time = context.time,
+                              .outputs = outputs,
+                              .inputs = context.inputs,
+                              .frames = frames,
+                              .sampleRate = context.sampleRate,
+                              .events = {},
+                              .params = old.m_last.view(),
+                              .automation = {},
+                              .arena = context.arena,
+                              .tuningCents = context.tuningCents};
+    // Its own block only: a node handing over does not continue a handover of its own,
+    // which keeps this from recursing down a chain of replacements. (A second
+    // instrument change within the first's release cuts the first's tail.)
+    old.renderBlock(oldContext);
+    const std::span<float> left = context.outputs[0];
+    const std::span<float> right = context.outputs[1];
+    for (std::uint32_t i = 0; i < frames; ++i) {
+        left[i] += oldLeft[i];
+        right[i] += oldRight[i];
+    }
+    m_handover.remaining -= std::min(frames, m_handover.remaining);
+    if (m_handover.remaining == 0 || old.m_pool.soundingCount() == 0) {
+        m_handover.finish();
+    }
 }
 
 bool SilentChannelNode::renderVoice(Voice& voice, std::span<float> left, std::span<float> right,

@@ -122,6 +122,10 @@ enum class CommandId : std::uint16_t {
     kSetInstrument,
     kSetSlotEffect,
     kSetSlotImpulse,
+
+    // Phase 7: what a reload from text needs (PatchCommands.h).
+    kSetNoteClip,
+    kReplaceProject,
 };
 
 class Command {

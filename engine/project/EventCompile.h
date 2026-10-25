@@ -44,6 +44,10 @@ void appendNoteExtras(std::vector<ScheduledEvent>& out, std::vector<std::string>
 /// a model NoteId on the same channel.
 inline constexpr std::uint32_t kArpNoteIdBit = 0x80000000U;
 
+/// Voice ids for mini-notation notes (phase_7.md §4.5) live above this bit: below the
+/// arpeggiator's, above any model NoteId a project will realistically allocate.
+inline constexpr std::uint32_t kMiniNoteIdBit = 0x40000000U;
+
 /// Replaces the note events in `events` (already sorted) with the arpeggiator's
 /// (phase_2.md §4.4's ARP line, which no phase before this one played). Each step on
 /// the `rate` grid - measured from tick 0, so a pattern placed anywhere stays on the

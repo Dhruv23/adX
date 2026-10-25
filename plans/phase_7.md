@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Not started |
+| **Status** | Built 2026-10-21: every automated §7 box observed locally on Debug, RelWithDebInfo and Release; the human gate (§7 box 3, P7-1) and CI (P7-0) are open - see plans/STATE.md |
 | **Governs** | bidirectional GUI↔text sync, filesystem hot reload, the editor panel, mini-notation, the Python scripting API |
 | **FINAL_PLAN refs** | §1 (the second half — *the reason the project exists*), §3.1 (PatternCompiler), §3.2 (hot reload, live-code editor), §5.8, §7 Phase 7 |
 | **Entry criteria** | [phase_6.md](phase_6.md) §6 complete |
@@ -369,18 +369,66 @@ that stops working fails CI.
 
 ## 7. Definition of done
 
-- [ ] `test_bidirectional` passes.
-- [ ] `reload_no_voice_cut` passes.
-- [ ] A human has kept adX and VS Code open on the same `.adx` file, edited in
-      both while it played, and reported no glitches. Recorded in the phase log —
-      this is the phase's actual claim and an automated test cannot fully make it.
-- [ ] Mini-notation is live: typing a pattern in the editor changes what is
-      playing at the next cycle boundary, with step highlighting following the
-      playhead.
-- [ ] `docs/mininotation.md` and `docs/scripting.md` exist and their examples are
-      executed by CI.
-- [ ] All FINAL_PLAN §5.8 items except `adx render` are complete.
-- [ ] FINAL_PLAN.md §10 Phase 7 row updated.
+Evidence recorded 2026-10-21 on the development machine (Windows 11, MSVC 18, Qt and
+PySide6 6.11.2). "Locally" is a different claim from "green in CI"; the CI half is P7-0
+in plans/STATE.md, and nothing here has been pushed yet.
+
+- [x] `test_bidirectional` passes (`tests/python/test_bidirectional.py`, ~13 s): the
+      whole application in Live sync with the transport playing; 200 operations
+      alternating GUI edits through the session and external saves (half
+      temp-and-rename, half in place); after every one the file's canonical text is
+      the project's. Ten deliberate collisions - a GUI edit adX has not written yet and
+      an external save - are each raised as a conflict, never guessed, and resolved
+      alternately "take theirs" and "keep mine"; no other conflict is raised. The
+      transport plays throughout, the slowest callback stays inside the block
+      deadline, and the final file round-trips. Passed five runs of five. It found two
+      data-loss bugs before it passed (§11, corrections 9 and 10).
+- [x] `reload_no_voice_cut` passes (`tests/cpp/sync/test_reload.cpp`) - more strictly
+      than stated: a sustained pad plays while its file is rewritten 100 times with
+      inaudible edits, narrow and structural (a channel, a pattern, a slot added and
+      removed; sections moved), and the output is **bit-identical** to the same render
+      with no reloads; zero allocator-hook violations in Debug and RelWithDebInfo.
+      Beside it: `reload_effect_swap_fades`, `reload_instrument_change_releases`,
+      `reload_channel_removed_releases`, `reload_preserves_equivalent_effects`,
+      `reload_tempo_change_no_glitch`.
+- [ ] **A human has kept adX and VS Code open on the same `.adx` file, edited in both
+      while it played, and reported no glitches.** Open: P7-1. An agent cannot close
+      it.
+- [x] Mini-notation is live, *automated half*: a MINI block plays through the
+      snapshot at the song's cycles (`mini_plays_through_the_snapshot`); text typed in
+      the editor panel is applied as commands as soon as it parses
+      (`test_typing_applies_as_one_undoable_edit`), and the snapshot is rebuilt from it
+      at the next block - which is no later than the next cycle boundary (§11,
+      correction 3); the lit step follows the playhead at every frame tested over
+      several cycles (`test_editor_step_highlight_tracks`). Whether it *feels* live is
+      the human gate's to say.
+- [x] `docs/mininotation.md` and `docs/scripting.md` exist and their examples run
+      in the test suite: every row of mininotation.md's tables is compiled and compared
+      (`test_mininotation_tables_are_true`, 29 rows), every Python block of
+      scripting.md runs in order (`test_scripting_doc_blocks_run`), and every script in
+      `app/adx/scripting/examples/` runs, asserts its documented result and undoes in
+      one step (`test_script_examples_run`, `test_script_is_undoable`). In CI once
+      pushed (P7-0).
+- [x] All FINAL_PLAN §5.8 items except `adx render`: bidirectional GUI-text sync
+      (this phase), filesystem-watch hot reload that patches (`Patch.h`, `FileWatcher.h`,
+      `TextSync.h`), the in-app editor with highlighting from engine tokens, inline
+      diagnostics and playhead-synced step highlighting (`panels/editor/`),
+      mini-notation (`engine/format/mininotation/`), the Python scripting API and console
+      (`app/adx/scripting/`), and `adx validate` / `fmt` / `diff` (Phase 2; `validate`
+      now reports invariant findings at their lines, P2-2).
+- [x] FINAL_PLAN.md §10 Phase 7 row updated.
+
+Everything else observed locally, 2026-10-21: C++ - 370 cases on each of Debug,
+RelWithDebInfo and Release (4-5 skipped: the local Teto tests, and one Release-only
+geometry case, as before); clang-tidy clean over all 251 files on all three compile
+databases (99 findings fixed in the new code); clang-format, headers, format-safety,
+positions, dsp-math and `rules` clean. Python - 200 tests green without the GPU tests,
+both GPU tests green; ruff, ruff format and mypy `--strict` (125 files) clean. The
+incremental budget in Release: worst keystroke 3.9 ms on a 10,000-line file (budget 5;
+a full parse is 10.4 ms). The patch fuzz: 10,000 pairs per run, plus 80,000 more over
+eight further seeds (`ADX_PATCH_SEED`), all green. Phase completion, locally in Debug:
+`ADX_FULL_EVIDENCE=1 ctest --preset windows-x64-debug -L slow` passed in 972.41 s.
+Launcher: `check_launcher: adX.cmd opened adX 0.1.0 - 13 panels, audio device open`.
 
 ---
 
@@ -418,3 +466,101 @@ Phase 8 inherits:
 | Conflict resolution UI is the kind of thing that gets deferred and then bites | It is in the gate (`sync_conflict_detected`) and in §6; conflicts are inevitable given the premise, so they are designed for rather than hoped against |
 | The ported compiler's 762 lines carry latent bugs into the new system | `mini_grammar_corpus` and `mini_euclid_table` are written against the documented grammar rather than against the implementation, so they can find existing bugs rather than enshrine them |
 | Live mini-notation recompiling mid-playback causes dropouts | Compilation is main-thread and produces a snapshot; the audio thread only ever swaps a pointer — the same mechanism as every other edit (Phase 3 §4.2) |
+
+---
+
+## 11. Corrections made while executing this plan
+
+What changed against the plan, and what the tests found:
+
+1. **Patch diffs projects, and applies as it goes.** §4.2 sketches a Document diff
+   returning a command list. `format::applyPatch` parses the new text into a project
+   of its own, remaps its ids into the open project's (channels, patterns and
+   controllers by name; inserts, slots, sends and tracks by the numbers the file
+   spells; notes by (start, pitch); items by what they place), emits the narrowest
+   existing command for each value that changed, and covers any remainder with one
+   `ReplaceProject`. The parser already knows the grammar; a second, document-level
+   interpretation of it would be the drift FINAL_PLAN §4 forbids. Executing as it goes
+   lets later commands find what earlier ones created; nothing needed the list. Two
+   commands are new (`PatchCommands.h`): `SetNoteClip` and `ReplaceProject`.
+2. **Orders.** Moving a section is zero commands (`patch_section_move_is_noop`), and the
+   next canonical write puts it back - which is what canonical means. Every *other*
+   order the writer preserves is content: the fuzz found a track's items and then the
+   mixer's routes compared sorted, leaving patched files that wrote differently (pairs
+   2404 and 4497 of 10,000 in the optimised builds; the Debug run of 1,000 never met
+   them). `sameContent` now ignores only section order and what the writer sorts.
+3. **Mini-notation takes effect at the next block, not the next cycle boundary.**
+   §7's wording reads as a quantised swap. The snapshot is rebuilt on the edit and
+   swapped at the next block, phase-aligned to the song's cycles - which is how Tidal
+   and Strudel behave, and is never later than the boundary. Holding the old pattern
+   until the boundary would need the snapshot to carry two versions of a clip and a
+   switch tick that survives loops; nothing asked for that. A cycle is one bar of the
+   meter at tick 0, counted from the start of the song, so an export plays the same
+   cycles as playback.
+4. **The archived Euclid formula was a rotation of Bjorklund's** - E(5,8) came out
+   `x.x.xx.x`, not `x.xx.xx.`. `mini_euclid_table` was written against the canonical
+   table (Tidal's algorithm, transcribed independently), as §10 hoped, and found it.
+   `?` is now seeded per cycle (FNV-1a of the text, mixed with the cycle number): the
+   archive's one seed per pattern dropped the same hits every bar. Unknown steps warn
+   (`ADX1007`); a syntax error is `ADX2015`, mapped to the file's line and column.
+5. **A section header starts at the margin.** The lexer took any line whose content
+   began with `[` as a header, indented or not - so `  [bd sn] hh`, the commonest
+   shape of a MINI line, became an unknown section. Recorded in
+   docs/adx-format-v2.md §4.1.
+6. **Duplicate numbered ids loaded silently.** `SLOT 1` on two inserts (natural to type
+   - the numbers look per-insert) gave two slots one id, and so one engine node. The
+   parser now reports `ADX2010` at the id; a track's id is per arrangement. Found by
+   `reload_no_voice_cut`.
+7. **Handovers.** §4.4's two rows a new node cannot avoid - a new effect type, a new
+   instrument - are `graph/Handover.h`: the new node runs the old one with the
+   parameters it last processed (every slot and channel now remembers them each block)
+   and crossfades (effects, 20 ms) or rings out its released voices (instruments, at
+   most 4 s). This needed `SlotNode::process` to be final, with effects implementing
+   `processSlot`. A removed channel is `DepartingNode`: its node keeps feeding the insert
+   it fed until its voices are silent. A node handing over renders only its own block,
+   so a second swap within the first's fade cuts the first's tail
+   (`misc-no-recursion`; recorded rather than chained).
+8. **Text with errors - or invariant errors - is never applied.** `TextSync` validates
+   as well as parses, so a routing cycle typed into the text is refused at its ROUTE
+   line rather than found by the engine after the model took it. With P2-2 closed, the
+   editor shows validation findings at their lines too.
+9. **A Live write could overwrite an external save** (found by `test_bidirectional`).
+   An edit that changed nothing (a value set to what it was) left the file matching the
+   project, so the external save landed while adX's Live write was still pending - and
+   was overwritten 16 ms later. Fixed twice over: the Live writer re-reads the file and
+   treats a change it has not seen as an external edit; and a conflict is decided on
+   content (`modelDiffers`), not on the revision counter.
+10. **A late watcher event raised a false conflict** (found by `test_bidirectional`).
+    The Live writer's re-read applies an external save before the watcher reports it;
+    if the user edits in between, the watcher's late report looked like a rival edit.
+    Text identical to what the file held when the two last agreed is now `Unchanged`.
+11. **`textChanged` fires on formatting.** The highlighter's deferred first pass marked
+    the editor's text as edited and started the apply timer, which wrote stale text
+    over an edit made in another panel. Found as a 1-in-5 flake in
+    `test_unapplied_text_is_never_overwritten`; the document's revision moves on
+    formatting too, so the panel compares the text itself
+    (`test_highlighting_is_not_an_edit`).
+12. **Step highlighting is computed in Python from the engine's compile**, not reported
+    by the audio thread. The notes each MINI placement plays, with their StepSpans,
+    come from `mini_realize` - the function the snapshot builder plays - when the text
+    or the project changes; per frame it is a numpy comparison, so the frame keeps its
+    one engine call (phase_5.md 4.9).
+13. **The editor applies as you type, whatever the file's sync mode** (which governs
+    the file, not the panel), and re-renders only after edits elsewhere settle (120 ms)
+    and only while shown: re-rendering a long file on every frame of a drag would make
+    the drag stutter.
+14. **Incremental reparse is per pattern body** (§4.3's scope, made concrete): an edit
+    inside one `[PATTERN]` re-parses it against the rest of the file with every other
+    pattern's body blanked; anything else is a full parse. 3.9 ms worst keystroke on
+    10,000 lines in Release.
+15. **`adx` the scripting module is `adx.scripting.api`** - `adx` is the application's
+    package. The console provides it as `adx`; the examples import it. Positions are the
+    file's spelling, from `0:0:0` (§4.7's `at="1:1:0"` was a 1-based sketch).
+    `add_mini` compiles into ordinary notes over the pattern's own bars; `pattern.mini`
+    writes a live MINI block.
+16. **Not in §2's manifest:** `app/adx/text_sync.py` (the Qt side of the file's sync),
+    `app/adx/text_layer.py` (the window's wiring), `panels/editor/code_editor.py` (the
+    text widget), `engine/project/SourceMap.h` (P2-2), `engine/graph/Handover.h` and
+    `nodes/DepartingNode.*`, `bindings` for the incremental parse and tokens, and the
+    Python tests `test_docs_examples.py`. The watcher tests are in `test_watcher.cpp`
+    as listed; the sync tests in `test_sync.cpp`.

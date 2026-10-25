@@ -3,8 +3,8 @@ stored in QSettings under ``preferences/``.
 
 Audio (sample rate and buffer size, applied the next time the engine starts), paths
 (samples, presets, projects, plugins), appearance (theme, meter scale), editing (default
-note length, snap, undo limit, autosave interval). MIDI is Phase 9's; its page is there
-and says so.
+note length, snap, undo limit, autosave interval, text sync mode). MIDI is Phase 9's; its
+page is there and says so.
 """
 
 from __future__ import annotations
@@ -34,6 +34,8 @@ class Preferences:
     snap_ticks: int = PPQ // 4
     undo_limit: int = 1000
     autosave_minutes: int = 5
+    #: How the project's file follows the project: on-save, live or off (phase_7.md).
+    sync_mode: str = "on-save"
 
     @classmethod
     def load(cls, settings: QSettings) -> Preferences:

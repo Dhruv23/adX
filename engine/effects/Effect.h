@@ -81,7 +81,7 @@ struct EffectContext {
 class Effect : public graph::SlotNode {
 public:
     void prepare(const graph::PrepareInfo& info) final;
-    void process(graph::ProcessContext& context) noexcept final;
+    void processSlot(graph::ProcessContext& context) noexcept final;
     void reset() noexcept final;
     [[nodiscard]] graph::PortSpec ports() const noexcept final;
     [[nodiscard]] std::uint32_t latencySamples() const noexcept final;
@@ -110,7 +110,7 @@ protected:
     virtual void prepareEffect(const graph::PrepareInfo& info) = 0;
     /// Clears DSP state: delay lines, envelopes, filter memories.
     virtual void resetEffect() noexcept = 0;
-    // SlotNode's overload is the one Effect::process replaces; this is the one an
+    // SlotNode's overload is the one Effect::processSlot replaces; this is the one an
     // effect implements.
     using graph::SlotNode::processWet;
     /// Writes the fully wet output for `in` into `out`. `out` never aliases `in`.

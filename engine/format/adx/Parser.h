@@ -22,6 +22,7 @@
 namespace adx::project {
 class Project;
 class CommandStack;
+class SourceMap;
 } // namespace adx::project
 
 namespace adx::format {
@@ -35,6 +36,10 @@ struct ParseOptions {
     /// file must not put 100k entries in the history panel, and one group is also
     /// what keeps the load under its half-second budget.
     bool groupAsOneStep{true};
+
+    /// When set, filled with where each entity was in the text, so validate() can
+    /// report against a line (P2-2). Null by default: most loads never ask.
+    project::SourceMap* sources{nullptr};
 };
 
 /// True when the document declares ADX_VERSION >= 2. Everything else goes through

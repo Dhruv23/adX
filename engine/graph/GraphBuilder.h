@@ -147,6 +147,29 @@ public:
         return m_created;
     }
 
+    /// Replaced nodes still sounding into their successors (Handover.h).
+    [[nodiscard]] std::size_t handovers() const noexcept {
+        return m_handovers.size();
+    }
+
+    /// One removed channel still ringing (DepartingNode.h), and the insert it fed.
+    struct Departure {
+        std::shared_ptr<Node> node;
+        core::InsertId output;
+        /// The removed channel's node, owned here: the departing node only points at it.
+        std::shared_ptr<Node> channel;
+    };
+
+    /// Channels the project no longer has whose nodes may still be sounding: each is
+    /// wrapped once in a DepartingNode, kept until it is silent, and given to every
+    /// build until then, so its voices release instead of stopping dead.
+    [[nodiscard]] std::vector<Departure> departures(const project::Project& project);
+
+    /// Removed channels still ringing.
+    [[nodiscard]] std::size_t departing() const noexcept {
+        return m_departing.size();
+    }
+
 private:
     enum class Kind : std::uint8_t { Channel, Fader, Meter, Slot, Send, Controller };
     using Key = std::pair<Kind, std::uint32_t>;
@@ -156,11 +179,23 @@ private:
         bool used{false};
     };
 
+    /// A node that was replaced, kept alive until its successor has finished with it.
+    struct Handover {
+        std::shared_ptr<Node> outgoing;
+        std::shared_ptr<Node> incoming;
+        std::function<bool()> done;
+    };
+
     template<class Make> std::shared_ptr<Node> getOrMake(Key key, Make make);
 
     PrepareInfo m_info;
     format::SamplePool* m_pool{nullptr};
     std::map<Key, Entry> m_nodes;
+    std::vector<Handover> m_handovers;
+    /// The insert each channel fed when its node was last handed out.
+    std::map<std::uint32_t, core::InsertId> m_channelOutputs;
+    /// Removed channels still ringing, by channel id.
+    std::map<std::uint32_t, Departure> m_departing;
     std::uint64_t m_created{0};
 };
 

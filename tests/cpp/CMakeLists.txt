@@ -36,6 +36,7 @@ adx_add_cpp_test(adx_tests
         project/test_tempomap.cpp
         project/test_curve.cpp
         project/test_commands.cpp
+        project/RandomCommands.cpp
         project/test_undo_random.cpp
         project/test_edit_notes.cpp
         project/test_validate.cpp
@@ -78,6 +79,12 @@ adx_add_cpp_test(adx_tests
         render/test_decode_async.cpp
         render/test_levels.cpp
         render/test_no_alloc_under_load.cpp
+        mini/test_compiler.cpp
+        sync/test_patch.cpp
+        sync/test_reload.cpp
+        sync/test_sync.cpp
+        sync/test_watcher.cpp
+        sync/test_incremental.cpp
         render/test_snapshot.cpp
         render/test_phase6_engine.cpp
 )

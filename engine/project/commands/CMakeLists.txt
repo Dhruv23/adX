@@ -6,6 +6,7 @@ target_sources(adx_engine_static PRIVATE
     EditNotes.cpp
     MixerCommands.cpp
     NoteCommands.cpp
+    PatchCommands.cpp
     PatternCommands.cpp
     PlaylistCommands.cpp
     ProjectCommands.cpp

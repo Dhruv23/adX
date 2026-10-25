@@ -119,12 +119,17 @@ private:
         bool seen{false};
     };
 
-    /// One placement of one note clip: which item, which pattern, which clip.
+    /// One placement of one note clip - or of one MINI source: which item, which
+    /// pattern, which clip (or source).
     struct Placement {
         const PlaylistItem* item{nullptr};
         const Pattern* pattern{nullptr};
         const NoteClip* clip{nullptr};
         std::uint64_t clipVersion{0};
+        /// Set instead of `clip` for mini-notation (phase_7.md §4.5).
+        const MiniNotationSource* mini{nullptr};
+        /// FNV-1a of the source's text: what its events are a function of.
+        std::uint32_t miniHash{0};
     };
     using PlacementsByChannel = std::map<std::uint32_t, std::vector<Placement>>;
 
@@ -134,9 +139,11 @@ private:
     /// own placements and not every placement in the project.
     [[nodiscard]] PlacementsByChannel collectPlacements(const Project& project) const;
     [[nodiscard]] static std::vector<std::int64_t>
-    signatureOf(const std::vector<Placement>& placements, const Channel* channel);
+    signatureOf(const std::vector<Placement>& placements, const Channel* channel,
+                core::Ticks miniCycle);
     [[nodiscard]] static std::shared_ptr<const ChannelEvents>
-    flatten(const std::vector<Placement>& placements, const Channel* channel);
+    flatten(const std::vector<Placement>& placements, const Channel* channel,
+            core::Ticks miniCycle);
 
     std::uint32_t m_sampleRate;
     graph::NodeStore m_nodes;

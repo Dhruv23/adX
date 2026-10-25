@@ -8,6 +8,7 @@
 
 #include "engine/core/Config.h"
 #include "engine/dsp/Math.h"
+#include "engine/format/mininotation/PatternCompiler.h"
 #include "engine/project/ControllerCompile.h"
 #include "engine/project/EventCompile.h"
 #include "engine/project/Project.h"
@@ -82,6 +83,43 @@ Window windowOf(const PlaylistItem& item, core::Ticks naturalLength) {
     return Window{.localStart = item.sourceOffset.value,
                   .localEnd = item.sourceOffset.value + std::max<std::int64_t>(length, 0),
                   .placedAt = item.start.value};
+}
+
+/// Appends one placement's mini-notation notes. The cycles are the song's, not the
+/// pattern's: they are realised over the arrangement range the placement covers, so a
+/// pattern placed at bar 9 plays cycle 8 - the same cycle in an export as in playback.
+/// Voice ids sit above kMiniNoteIdBit and are (cycle, index): stable across an edit
+/// that does not change this source, so such an edit never restarts its voices.
+void appendMiniEvents(std::vector<ScheduledEvent>& out, const MiniNotationSource& source,
+                      const Window& window, std::uint32_t instance, core::Ticks cycle) {
+    const std::int64_t from = window.placedAt;
+    const std::int64_t to = window.place(window.localEnd);
+    const std::string text = mini::joinLines(source.lines);
+    for (const mini::RealizedNote& realized :
+         mini::realize(text, core::Ticks{from}, core::Ticks{to}, cycle)) {
+        const std::int64_t on = realized.note.start.value;
+        const std::int64_t off = std::min(on + realized.note.length.value, to);
+        if (off <= on) {
+            continue;
+        }
+        const std::uint32_t noteId =
+            kMiniNoteIdBit | ((static_cast<std::uint32_t>(realized.cycle) & 0x3FFFU) << 16U) |
+            (realized.index & 0xFFFFU);
+        out.push_back(ScheduledEvent{.tick = on,
+                                     .endTick = off,
+                                     .noteId = noteId,
+                                     .instance = instance,
+                                     .kind = EventKind::NoteOn,
+                                     .pitch = realized.note.pitch,
+                                     .velocity = realized.note.velocity});
+        out.push_back(ScheduledEvent{.tick = off,
+                                     .endTick = off,
+                                     .noteId = noteId,
+                                     .instance = instance,
+                                     .kind = EventKind::NoteOff,
+                                     .pitch = realized.note.pitch,
+                                     .velocity = 0});
+    }
 }
 
 /// The project's A4 as a pitch offset from 440 Hz, in cents (P4-3). Exactly zero at
@@ -372,13 +410,21 @@ SnapshotBuilder::collectPlacements(const Project& project) const {
                 byChannel[clip.channel.value].push_back(Placement{
                     .item = &item, .pattern = pattern, .clip = &clip, .clipVersion = version});
             }
+            for (const MiniNotationSource& source : pattern->mini) {
+                byChannel[source.channel.value].push_back(
+                    Placement{.item = &item,
+                              .pattern = pattern,
+                              .mini = &source,
+                              .miniHash = mini::fnv1a(mini::joinLines(source.lines))});
+            }
         }
     }
     return byChannel;
 }
 
 std::vector<std::int64_t> SnapshotBuilder::signatureOf(const std::vector<Placement>& placements,
-                                                       const Channel* channel) {
+                                                       const Channel* channel,
+                                                       core::Ticks miniCycle) {
     std::vector<std::int64_t> signature;
     signature.reserve((placements.size() * 6) + 5);
     // The arpeggiator rewrites the events, so its settings are part of what they are a
@@ -396,16 +442,26 @@ std::vector<std::int64_t> SnapshotBuilder::signatureOf(const std::vector<Placeme
                                            item.start.value, item.length.value,
                                            item.sourceOffset.value, placement.pattern->length.value,
                                            static_cast<std::int64_t>(placement.clipVersion)});
+        if (placement.mini != nullptr) {
+            // Its notes depend on where the cycles fall, so on the cycle length too.
+            signature.insert(signature.end(),
+                             {static_cast<std::int64_t>(placement.miniHash), miniCycle.value});
+        }
     }
     return signature;
 }
 
 std::shared_ptr<const SnapshotBuilder::ChannelEvents>
-SnapshotBuilder::flatten(const std::vector<Placement>& placements, const Channel* channel) {
+SnapshotBuilder::flatten(const std::vector<Placement>& placements, const Channel* channel,
+                         core::Ticks miniCycle) {
     auto events = std::make_shared<ChannelEvents>();
     for (const Placement& placement : placements) {
         const PlaylistItem& item = *placement.item;
         const Window window = windowOf(item, placement.pattern->length);
+        if (placement.mini != nullptr) {
+            appendMiniEvents(events->events, *placement.mini, window, item.id.value, miniCycle);
+            continue;
+        }
         for (const Note& note : placement.clip->notes) {
             // A placement plays the notes that *start* inside its window, and cuts any
             // that run past its end - trimming a placement shortens its notes.
@@ -495,6 +551,7 @@ SnapshotBuildResult SnapshotBuilder::build(const Project& project, std::uint64_t
     if (eventsDirty) {
         refreshClipCache(project);
         const PlacementsByChannel placements = collectPlacements(project);
+        const core::Ticks miniCycle = mini::cycleLength(project.tempo);
         static const std::vector<Placement> kNone;
         for (auto& entry : m_channels) {
             entry.second.seen = false;
@@ -504,11 +561,11 @@ SnapshotBuildResult SnapshotBuilder::build(const Project& project, std::uint64_t
             const auto found = placements.find(channel.value);
             const std::vector<Placement>& mine = found != placements.end() ? found->second : kNone;
             const Channel* model = project.find(channel);
-            std::vector<std::int64_t> signature = signatureOf(mine, model);
+            std::vector<std::int64_t> signature = signatureOf(mine, model, miniCycle);
             if (entry.events && entry.signature == signature) {
                 ++m_stats.tracksReused;
             } else {
-                entry.events = flatten(mine, model);
+                entry.events = flatten(mine, model, miniCycle);
                 entry.signature = std::move(signature);
                 ++m_stats.tracksRebuilt;
             }

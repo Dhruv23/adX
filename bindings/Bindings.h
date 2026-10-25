@@ -54,6 +54,9 @@ void registerPresets(pybind11::module_& m);
 void registerPanelGeometry(pybind11::module_& m);
 /// Phase 6: audition, metronome and EQ spectrum on Engine (panels.cpp).
 void defineEngineExtras(pybind11::class_<EngineHandle>& engine);
+void registerSync(pybind11::module_& m);
+void registerMini(pybind11::module_& m);
+void registerScript(pybind11::module_& m);
 
 using LevelArray = pybind11::array_t<float, pybind11::array::c_style | pybind11::array::forcecast>;
 

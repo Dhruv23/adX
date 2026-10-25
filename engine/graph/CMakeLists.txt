@@ -11,6 +11,7 @@ target_sources(adx_engine_static PRIVATE
     TopoSort.cpp
     VoicePool.cpp
     nodes/ChannelNode.cpp
+    nodes/DepartingNode.cpp
     nodes/InsertNode.cpp
     nodes/MeterNode.cpp
     nodes/PeakControllerNode.cpp

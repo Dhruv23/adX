@@ -153,6 +153,10 @@ section-type = ident ;
 section-arg  = { any character except "]" and newline } ;
 ```
 
+A section header starts at the left margin. An indented line that begins with `[`
+is not a header but content of the block above it - a `MINI` line such as
+`  [bd sn] hh` (§7.3).
+
 The section argument is taken **verbatim**, trimmed of surrounding whitespace. It
 is the entity's name, so a name may contain spaces (`[CHANNEL Hardstyle Kick]`)
 but never `]` or `.` — see §5.
@@ -472,8 +476,12 @@ breakpoint  = position , hspace , number , [ hspace , curve ] ;
 - `mute=yes` keeps a note in the clip and the file but silences it (the piano roll's
   Mute tool, phase_5.md §4.7). Absent means `no`, and `no` is never written.
 - `MINI` carries mini-notation source, one or more indented lines, each stored
-  with its indentation and any trailing comment removed. Phase 2 stores the text;
-  nothing compiles it (Phase 4 owns the compiler).
+  with its indentation and any trailing comment removed. The lines are joined by
+  one space and compiled as one pattern ([mininotation.md](mininotation.md)); a
+  cycle is one bar of the meter at tick 0, counted from the start of the song, so
+  the notes a MINI plays depend on where its pattern is placed. A MINI that does not
+  parse is `ADX2015` and plays nothing; it is still kept, verbatim. Because `#`
+  begins a comment only after whitespace, `c#4` is a note, not a comment.
 - A channel name that is not a `bare-name` is quoted in `NOTES` and `MINI`:
   `NOTES "Hardstyle Kick"`. Only a section header takes a name unquoted, because
   there the name runs to the closing `]` and cannot be ambiguous.
@@ -669,6 +677,7 @@ a CI failure (`diagnostics_all_codes_documented`).
 | `ADX1004` | Warning | Unknown parameter name; the value is kept. |
 | `ADX1005` | Warning | Unknown curve name; `linear` is used. |
 | `ADX1006` | Warning | Unknown inline key on a positional line; kept as residue. |
+| `ADX1007` | Warning | Unknown mini-notation step (not a note, drum or scale degree); middle C is used. |
 
 ### 10.3 Semantic — `2xxx`
 
@@ -688,6 +697,7 @@ a CI failure (`diagnostics_all_codes_documented`).
 | `ADX2012` | Error | Entity name contains a character names may not contain. |
 | `ADX2013` | Error | More than one note clip for the same channel in one pattern. |
 | `ADX2014` | Error | An entity's id is zero, which is the null id. |
+| `ADX2015` | Error | Mini-notation does not parse; the message says where and why ([mininotation.md](mininotation.md)). |
 
 ### 10.4 Reference resolution — `3xxx`
 

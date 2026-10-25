@@ -5,6 +5,7 @@
 #include <charconv>
 #include <limits>
 #include <memory>
+#include <set>
 #include <span>
 #include <string>
 #include <unordered_map>
@@ -15,8 +16,10 @@
 #include "engine/format/adx/NoteName.h"
 #include "engine/format/adx/V1Shim.h"
 #include "engine/format/adx/Value.h"
+#include "engine/format/mininotation/PatternCompiler.h"
 #include "engine/project/ParamRegistry.h"
 #include "engine/project/Project.h"
+#include "engine/project/SourceMap.h"
 #include "engine/project/TypeCatalog.h"
 #include "engine/project/Validate.h"
 #include "engine/project/commands/ArrangeCommands.h"
@@ -154,6 +157,13 @@ private:
     [[nodiscard]] std::span<Line> lines() noexcept {
         return m_doc.lines();
     }
+    /// Where an entity was written, for validate() (P2-2). A no-op unless asked for.
+    void source(project::SourceKind kind, std::uint32_t id, Span span) const {
+        if (m_options.sources != nullptr) {
+            m_options.sources->record(kind, id, span);
+        }
+    }
+
     void execute(std::unique_ptr<project::Command> command) {
         m_stack.execute(std::move(command), m_project);
     }
@@ -197,6 +207,24 @@ private:
 
     std::vector<ChannelBinding> m_channels;
     std::vector<PatternBinding> m_patterns;
+
+    /// Every numbered id the file has used, by kind. Inserts, slots, sends and tracks
+    /// are spelled as numbers, and two of one kind with one number would be one entity
+    /// to every reference - and one node to the engine.
+    std::set<std::pair<std::string, std::int64_t>> m_usedIds;
+
+    /// False, with ADX2010 at the id, when `id` is already taken for `kind`.
+    [[nodiscard]] bool claimId(std::string kind, std::int64_t id, Span span,
+                               std::string_view what) {
+        if (m_usedIds.emplace(std::move(kind), id).second) {
+            return true;
+        }
+        m_diag.add(code::kDuplicateId, span,
+                   std::string(what) + " " + std::to_string(id) +
+                       " is already used; ids are unique across the file, not per insert",
+                   "use the next free number");
+        return false;
+    }
 };
 
 // --- helpers -----------------------------------------------------------------
@@ -415,7 +443,10 @@ void V2Parser::parseMarkers(Section& section) {
         if (!parsePosition(tokens[0].text, m_project.tempo, tokens[0].span, m_diag, at)) {
             continue;
         }
-        execute(std::make_unique<project::AddMarker>(at, tokens[1].text));
+        auto command = std::make_unique<project::AddMarker>(at, tokens[1].text);
+        const project::AddMarker* raw = command.get();
+        execute(std::move(command));
+        source(project::SourceKind::Marker, raw->created().value, line.contentSpan());
         line.claimed = true;
     }
 }
@@ -446,6 +477,9 @@ void V2Parser::parseMixer(Section& section) {
         std::int64_t id = 0;
         if (!parseInt64(tokens[1].text, tokens[1].span, m_diag, id) || id <= 0) {
             m_diag.add(code::kZeroId, tokens[1].span, "an insert id must be a positive integer");
+            continue;
+        }
+        if (!claimId("insert", id, tokens[1].span, "insert")) {
             continue;
         }
 
@@ -495,6 +529,7 @@ void V2Parser::parseMixer(Section& section) {
         const project::AddInsert* raw = command.get();
         execute(std::move(command));
         created.emplace_back(&node, raw->created());
+        source(project::SourceKind::Insert, raw->created().value, line.contentSpan());
         line.claimed = true;
     }
 
@@ -522,7 +557,10 @@ void V2Parser::parseMixer(Section& section) {
             !resolveInsert(tokens[3].text, tokens[3].span, to)) {
             continue;
         }
-        execute(std::make_unique<project::AddRoute>(from, to));
+        auto command = std::make_unique<project::AddRoute>(from, to);
+        const project::AddRoute* raw = command.get();
+        execute(std::move(command));
+        source(project::SourceKind::Route, raw->created().value, line.contentSpan());
         line.claimed = true;
     }
 
@@ -552,6 +590,9 @@ void V2Parser::parseInsertChildren(core::InsertId insert, const BlockNode& node)
             std::int64_t id = 0;
             if (!parseInt64(tokens[1].text, tokens[1].span, m_diag, id) || id <= 0) {
                 m_diag.add(code::kZeroId, tokens[1].span, "a slot id must be a positive integer");
+                continue;
+            }
+            if (!claimId("slot", id, tokens[1].span, "slot")) {
                 continue;
             }
             project::Slot slot;
@@ -602,6 +643,7 @@ void V2Parser::parseInsertChildren(core::InsertId insert, const BlockNode& node)
                     slot.params.push_back(project::SlotParam{.name = token.text, .value = number});
                 }
             }
+            source(project::SourceKind::Slot, slot.id.value, line.contentSpan());
             execute(std::make_unique<project::AddSlot>(insert, std::move(slot)));
             line.claimed = true;
             continue;
@@ -616,6 +658,9 @@ void V2Parser::parseInsertChildren(core::InsertId insert, const BlockNode& node)
             std::int64_t id = 0;
             if (!parseInt64(tokens[1].text, tokens[1].span, m_diag, id) || id <= 0) {
                 m_diag.add(code::kZeroId, tokens[1].span, "a send id must be a positive integer");
+                continue;
+            }
+            if (!claimId("send", id, tokens[1].span, "send")) {
                 continue;
             }
             core::InsertId target;
@@ -647,6 +692,7 @@ void V2Parser::parseInsertChildren(core::InsertId insert, const BlockNode& node)
             }
             execute(std::make_unique<project::AddSend>(
                 insert, target, level, preFader, core::SendId{static_cast<std::uint32_t>(id)}));
+            source(project::SourceKind::Send, static_cast<std::uint32_t>(id), line.contentSpan());
             line.claimed = true;
             continue;
         }
@@ -741,6 +787,7 @@ V2Parser::ChannelBinding V2Parser::parseChannelHeader(Section& section, std::siz
     execute(std::move(command));
     const core::ChannelId id = raw->created();
     binding.id = id;
+    source(project::SourceKind::Channel, id.value, section.span);
 
     parseChannelLines(id, nodes);
 
@@ -904,6 +951,7 @@ core::PatternId V2Parser::parsePatternHeader(Section& section) {
     auto command = std::make_unique<project::AddPattern>(std::move(pattern));
     const project::AddPattern* raw = command.get();
     execute(std::move(command));
+    source(project::SourceKind::Pattern, raw->created().value, section.span);
     return raw->created();
 }
 
@@ -935,13 +983,24 @@ void V2Parser::parsePatternBody(const PatternBinding& binding) {
                 continue;
             }
             std::vector<std::string> body;
+            std::vector<mini::SourceLine> where;
             for (const BlockNode& child : node.children) {
-                body.push_back(lines()[child.line].content);
-                lines()[child.line].claimed = true;
+                Line& source = lines()[child.line];
+                body.push_back(source.content);
+                where.push_back(mini::SourceLine{.line = source.number,
+                                                 .column = source.contentColumn,
+                                                 .byteOffset = source.contentSpan().byteOffset});
+                source.claimed = true;
             }
             if (body.empty()) {
                 m_diag.add(code::kEmptyBlock, line.contentSpan(),
                            "MINI has no indented body; mini-notation must be indented under it");
+            } else {
+                // One cycle is enough to find every problem: an atom that does not
+                // resolve is reported whichever cycle would select it.
+                const mini::CompileResult compiled = mini::compile(
+                    mini::joinLines(body), core::Ticks{0}, core::Ticks{core::kPpq * 4}, 0);
+                mini::toDiagnostics(compiled.problems, body, where, m_diag);
             }
             execute(
                 std::make_unique<project::SetMiniNotation>(binding.id, channel, std::move(body)));
@@ -985,6 +1044,7 @@ void V2Parser::parseNotesBlock(core::PatternId pattern, const BlockNode& node) {
 
     std::vector<project::Note> notes;
     std::vector<project::NoteExtrasAt> extras;
+    std::vector<Span> spans;
     notes.reserve(node.children.size());
     for (const BlockNode& child : node.children) {
         Line& line = lines()[child.line];
@@ -1069,11 +1129,17 @@ void V2Parser::parseNotesBlock(core::PatternId pattern, const BlockNode& node) {
                 project::NoteExtrasAt{.index = notes.size(), .extras = std::move(extra)});
         }
         notes.push_back(note);
+        spans.push_back(line.contentSpan());
         line.claimed = true;
     }
 
-    execute(
-        std::make_unique<project::AddNotes>(pattern, channel, std::move(notes), std::move(extras)));
+    auto command =
+        std::make_unique<project::AddNotes>(pattern, channel, std::move(notes), std::move(extras));
+    const project::AddNotes* raw = command.get();
+    execute(std::move(command));
+    for (std::size_t i = 0; i < raw->created().size() && i < spans.size(); ++i) {
+        source(project::SourceKind::Note, raw->created()[i].value, spans[i]);
+    }
     header.claimed = true;
 }
 
@@ -1141,7 +1207,10 @@ void V2Parser::parseAutomationBlock(core::PatternId pattern, const BlockNode& no
     }
     clip.points = parseBreakpoints(node);
 
-    execute(std::make_unique<project::AddAutomationClip>(pattern, std::move(clip)));
+    auto command = std::make_unique<project::AddAutomationClip>(pattern, std::move(clip));
+    const project::AddAutomationClip* raw = command.get();
+    execute(std::move(command));
+    source(project::SourceKind::AutomationClip, raw->created().value, header.contentSpan());
     header.claimed = true;
 }
 
@@ -1243,7 +1312,10 @@ void V2Parser::parseController(Section& section) {
             }
         }
     }
-    execute(std::make_unique<project::AddController>(std::move(controller)));
+    auto command = std::make_unique<project::AddController>(std::move(controller));
+    const project::AddController* raw = command.get();
+    execute(std::move(command));
+    source(project::SourceKind::Controller, raw->created().value, section.span);
     unknownKeys(keys, nodes);
 }
 
@@ -1280,6 +1352,10 @@ void V2Parser::parseTracks(std::span<const BlockNode> nodes, std::string_view wh
         std::int64_t id = 0;
         if (!parseInt64(tokens[1].text, tokens[1].span, m_diag, id) || id <= 0) {
             m_diag.add(code::kZeroId, tokens[1].span, "a track id must be a positive integer");
+            continue;
+        }
+        // Each arrangement numbers its own tracks.
+        if (!claimId("track " + std::string(where), id, tokens[1].span, "track")) {
             continue;
         }
         project::PlaylistTrack track;
@@ -1328,6 +1404,7 @@ void V2Parser::parseTracks(std::span<const BlockNode> nodes, std::string_view wh
         const project::AddPlaylistTrack* raw = command.get();
         execute(std::move(command));
         const core::PlaylistTrackId trackId = raw->created();
+        source(project::SourceKind::Track, trackId.value, line.contentSpan());
         line.claimed = true;
 
         for (const BlockNode& child : node.children) {
@@ -1387,6 +1464,7 @@ void V2Parser::parsePlaylistItem(core::PlaylistTrackId track, const BlockNode& n
             std::make_unique<project::AddAutomationClip>(core::PatternId{}, std::move(clip));
         const project::AddAutomationClip* raw = command.get();
         execute(std::move(command));
+        source(project::SourceKind::AutomationClip, raw->created().value, line.contentSpan());
         item.content = project::AutomationRef{.clip = raw->created()};
     } else {
         m_diag.add(code::kUnknownKey, line.contentSpan(),
@@ -1444,7 +1522,10 @@ void V2Parser::parsePlaylistItem(core::PlaylistTrackId track, const BlockNode& n
         }
     }
 
-    execute(std::make_unique<project::AddPlaylistItem>(track, item));
+    auto command = std::make_unique<project::AddPlaylistItem>(track, item);
+    const project::AddPlaylistItem* raw = command.get();
+    execute(std::move(command));
+    source(project::SourceKind::Item, raw->created().value, line.contentSpan());
     line.claimed = true;
 }
 

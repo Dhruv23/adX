@@ -1,4 +1,5 @@
-"""Editing: default note length, snap, undo limit, autosave interval."""
+"""Editing: default note length, snap, undo limit, autosave interval, and how the
+project's file follows the project (phase_7.md 4.1)."""
 
 from __future__ import annotations
 
@@ -6,6 +7,13 @@ from PySide6.QtWidgets import QComboBox, QFormLayout, QSpinBox, QWidget
 
 from adx.engine_bridge import PPQ
 from adx.preferences import Preferences
+
+#: Sync modes, as the engine spells them, with what they mean.
+SYNC_MODES = (
+    ("on-save", "On save: write when saved; reload when the file changes"),
+    ("live", "Live: write after every edit; reload when the file changes"),
+    ("off", "Off: write when saved; ignore changes to the file"),
+)
 
 LENGTHS = (
     ("1/32", PPQ // 8),
@@ -46,6 +54,11 @@ class EditingPage(QWidget):
         self.autosave.setSpecialValueText("off")
         self.autosave.setValue(prefs.autosave_minutes)
         form.addRow("Autosave every", self.autosave)
+        self.sync = QComboBox()
+        self.sync.addItems([label for _mode, label in SYNC_MODES])
+        modes = [mode for mode, _label in SYNC_MODES]
+        self.sync.setCurrentIndex(modes.index(prefs.sync_mode) if prefs.sync_mode in modes else 0)
+        form.addRow("Text sync", self.sync)
 
     def apply(self) -> None:
         """Write this page's fields."""
@@ -54,3 +67,4 @@ class EditingPage(QWidget):
         self.prefs.snap_ticks = ticks[self.snap.currentIndex()]
         self.prefs.undo_limit = self.undo.value()
         self.prefs.autosave_minutes = self.autosave.value()
+        self.prefs.sync_mode = SYNC_MODES[self.sync.currentIndex()][0]

@@ -37,15 +37,18 @@ from adx.panels.piano_roll.panel import PianoRollPanel
 from adx.panels.playlist.panel import PlaylistPanel
 from adx.panels.waveform.widget import WaveformPanel
 from adx.preferences import Preferences
+from adx.scripting import api as scripting_api
 from adx.selection import Context, Kind, Selection
 from adx.session import Session
 from adx.shortcuts import Keymap
+from adx.text_layer import TextLayer
 from adx.theme.tokens import THEMES, Theme, stylesheet
 from adx.transport_bar import TransportBar
 
 #: Bump when the dock layout changes shape, so an old saved layout is not restored
 #: into panels it does not describe. 2: Phase 6's panels. 3: the editors in the middle.
-LAYOUT_VERSION = 3
+#: 4: Phase 7's text editor and console.
+LAYOUT_VERSION = 4
 
 NEW_PROJECT = """[PROJECT]
 ADX_VERSION=2
@@ -107,6 +110,8 @@ class MainWindow(QMainWindow):
         self.clock = FrameClock(engine, parent=self)
         self.mixer.attach(self.clock)
         self.clock.frame.connect(self._on_frame)
+        scripting_api.follow_frames(self.clock.frame)
+        self.text.set_mode(self.prefs.sync_mode)
         self.autosave = Autosave(
             self.session,
             lambda: self.path,
@@ -136,6 +141,9 @@ class MainWindow(QMainWindow):
         self.history = HistoryPanel(s, self)
         self.inspector = InspectorPanel(s, sel, self)
         self.waveform = WaveformPanel(self)
+        self.text = TextLayer(self)
+        self.editor = self.text.editor
+        self.console = self.text.console
         self.panels: list[DockPanel] = [
             self.browser,
             self.channel_rack,
@@ -148,6 +156,8 @@ class MainWindow(QMainWindow):
             self.instrument,
             self.effect,
             self.inspector,
+            self.editor,
+            self.console,
         ]
 
     def _connect(self) -> None:
@@ -205,6 +215,8 @@ class MainWindow(QMainWindow):
         self.path = path
         self.saved_revision = project.revision()
         self.selection.clear()
+        # The file's sync first: the editor panel reads it when the session opens.
+        self.text.opened(project, path)
         self.session.open(project)
         self.piano_roll.set_project(project, on_edit=self.session.notify)
         self.transport.set_tempo(project.bpm_at(0))
@@ -257,6 +269,7 @@ class MainWindow(QMainWindow):
         if self.path is None:
             return self.save_as()
         self.project.save(self.path)
+        self.text.saved(self.path)
         self.saved_revision = self.project.revision()
         self._update_title()
         return True
@@ -318,6 +331,12 @@ class MainWindow(QMainWindow):
         self.session.notify()
 
     def _changed(self) -> None:
+        if self.project is not None:
+            # A reload, an undo or a script can change the tempo too, not only the box.
+            bpm = self.project.bpm_at(0)
+            if self.transport.tempo.value() != bpm:
+                self.transport.set_tempo(bpm)
+            self.transport.meter = self.project.meter_at(0)
         self.piano_roll.refresh()
         self.registry.update_enabled()
 
@@ -398,6 +417,7 @@ class MainWindow(QMainWindow):
         self.selection.select(
             Kind.NOTES, ids, Context(pattern=model.pattern, channel=model.channel)
         )
+        self.text.roll_selected(model.pattern, model.channel, ids)
 
     def _audition(self, channel: str, pitch: int, velocity: int) -> None:
         """A note through a channel's instrument, now: the engine's audition voice, no
@@ -466,6 +486,7 @@ class MainWindow(QMainWindow):
         self.piano_roll.frame(ticks, rolling)
         self.playlist.frame(ticks, rolling)
         self.mixer.frame(self.clock)
+        self.text.frame(ticks, rolling)
 
     # --- preferences, layout and theme ----------------------------------------------
 
@@ -484,6 +505,7 @@ class MainWindow(QMainWindow):
         prefs.save(self.settings)
         self.set_theme_name(prefs.theme)
         self.autosave.set_interval(prefs.autosave_minutes)
+        self.text.set_mode(prefs.sync_mode)
         self.browser.preset_dirs = [self.browser.preset_dirs[0], *prefs.preset_dirs]
         self.browser.refresh()
 
@@ -528,8 +550,10 @@ class MainWindow(QMainWindow):
         self.tabifyDockWidget(self.channel_rack, self.piano_roll)
         self.tabifyDockWidget(self.instrument, self.effect)
         self.tabifyDockWidget(self.effect, self.inspector)
+        self.tabifyDockWidget(self.inspector, self.editor)
         self.tabifyDockWidget(self.mixer, self.automation)
         self.tabifyDockWidget(self.automation, self.waveform)
+        self.tabifyDockWidget(self.waveform, self.console)
         self.browser.raise_()
         self.playlist.raise_()
         self.instrument.raise_()
@@ -613,6 +637,7 @@ class MainWindow(QMainWindow):
         self.waveform.waveform.apply_theme(theme)
         for panel in (self.playlist, self.channel_rack, self.mixer, self.automation, self.history):
             panel.apply_theme(theme)
+        self.editor.apply_theme(theme)
 
     def show_quickstart(self) -> None:
         """Help > Quick start: how to get around and make a first track."""

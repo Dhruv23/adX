@@ -87,6 +87,7 @@ inline constexpr std::uint16_t kDuplicateKey = 1003;
 inline constexpr std::uint16_t kUnknownParameter = 1004;
 inline constexpr std::uint16_t kUnknownCurve = 1005;
 inline constexpr std::uint16_t kUnknownInlineKey = 1006;
+inline constexpr std::uint16_t kMiniUnknownStep = 1007;
 
 // 2xxx - semantic.
 inline constexpr std::uint16_t kValueOutOfRange = 2001;
@@ -103,6 +104,7 @@ inline constexpr std::uint16_t kTempoOutOfRange = 2011;
 inline constexpr std::uint16_t kBadNameCharacter = 2012;
 inline constexpr std::uint16_t kDuplicateNoteClip = 2013;
 inline constexpr std::uint16_t kZeroId = 2014;
+inline constexpr std::uint16_t kMiniSyntax = 2015;
 
 // 3xxx - reference resolution.
 inline constexpr std::uint16_t kUnresolvedParamPath = 3001;

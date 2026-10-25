@@ -34,6 +34,7 @@ constexpr auto kCodes = std::to_array<DiagnosticCode>({
     {code::kUnknownParameter, Severity::Warning, "Unknown parameter name."},
     {code::kUnknownCurve, Severity::Warning, "Unknown curve name."},
     {code::kUnknownInlineKey, Severity::Warning, "Unknown inline key on a positional line."},
+    {code::kMiniUnknownStep, Severity::Warning, "Unknown mini-notation step; middle C is used."},
 
     {code::kValueOutOfRange, Severity::Warning, "Value out of range; clamped."},
     {code::kMissingRequiredKey, Severity::Error, "A required key is missing."},
@@ -49,6 +50,7 @@ constexpr auto kCodes = std::to_array<DiagnosticCode>({
     {code::kBadNameCharacter, Severity::Error, "Entity name contains a forbidden character."},
     {code::kDuplicateNoteClip, Severity::Error, "Two note clips for one channel in one pattern."},
     {code::kZeroId, Severity::Error, "Entity id is zero, which is the null id."},
+    {code::kMiniSyntax, Severity::Error, "Mini-notation does not parse."},
 
     {code::kUnresolvedParamPath, Severity::Error, "Parameter path does not resolve."},
     {code::kUnknownChannelRef, Severity::Error, "Reference to an unknown channel."},

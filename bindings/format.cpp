@@ -13,9 +13,13 @@
 #include "bindings/Bindings.h"
 #include "bindings/ProjectHandle.h"
 #include "engine/format/adx/Diagnostics.h"
+#include "engine/format/adx/Parser.h"
 #include "engine/format/adx/Writer.h"
 #include "engine/project/Diff.h"
+#include "engine/project/Project.h"
+#include "engine/project/SourceMap.h"
 #include "engine/project/Validate.h"
+#include "engine/project/commands/CommandStack.h"
 
 namespace py = pybind11;
 
@@ -74,14 +78,21 @@ void registerFormatBindings(py::module_& m) {
     m.def(
         "validate_text",
         [](const std::string& text, const std::string& baseDirectory, bool checkSampleFiles) {
-            adx::bindings::ProjectHandle handle;
+            adx::project::Project project;
+            adx::project::CommandStack stack;
+            adx::project::SourceMap sources;
             adx::format::DiagnosticList diagnostics;
             {
                 const py::gil_scoped_release released;
-                adx::bindings::loadInto(handle, text, baseDirectory, diagnostics);
+                adx::format::ParseOptions parse;
+                parse.baseDirectory = baseDirectory;
+                parse.sources = &sources;
+                adx::format::load(text, project, stack, diagnostics, parse);
                 adx::project::ValidationOptions options;
                 options.checkSampleFiles = checkSampleFiles;
-                (void)adx::project::validate(handle.project, diagnostics, options);
+                // Invariant findings at their lines, not at "line 0" (P2-2).
+                options.sources = &sources;
+                (void)adx::project::validate(project, diagnostics, options);
             }
             return toPython(diagnostics);
         },

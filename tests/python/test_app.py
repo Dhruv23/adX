@@ -55,6 +55,8 @@ def test_opens_plays_and_moves_the_playhead(window: object, repo_root: pathlib.P
         "instrument",
         "effect",
         "inspector",
+        "editor",
+        "console",
     }
 
     window.toggle_play()

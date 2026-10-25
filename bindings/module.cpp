@@ -26,6 +26,9 @@ PYBIND11_MODULE(adx_engine, m) {
     adx::bindings::registerEditCommands(m);
     adx::bindings::registerPresets(m);
     adx::bindings::registerPanelGeometry(m);
+    adx::bindings::registerSync(m);
+    adx::bindings::registerMini(m);
+    adx::bindings::registerScript(m);
 
     // GIL: trivial - a string constant
     m.def(

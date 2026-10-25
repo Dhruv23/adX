@@ -8,6 +8,7 @@
 #include "engine/dsp/Math.h"
 #include "engine/effects/Factory.h"
 #include "engine/graph/nodes/ChannelNode.h"
+#include "engine/graph/nodes/DepartingNode.h"
 #include "engine/graph/nodes/InsertNode.h"
 #include "engine/graph/nodes/PeakControllerNode.h"
 #include "engine/graph/nodes/SendNode.h"
@@ -24,6 +25,9 @@ namespace adx::graph {
 void NodeStore::setPrepareInfo(PrepareInfo info) {
     if (info.sampleRate != m_info.sampleRate || info.maxBlockFrames != m_info.maxBlockFrames) {
         m_nodes.clear();
+        m_handovers.clear();
+        m_departing.clear();
+        m_channelOutputs.clear();
     }
     m_info = info;
 }
@@ -51,14 +55,28 @@ std::shared_ptr<Node> NodeStore::channel(const project::Channel& channel,
     const instruments::InstrumentContext context{
         .resources = &resources, .pool = m_pool, .project = project};
     const auto found = m_nodes.find(key);
+    std::shared_ptr<Node> replaced;
     if (found != m_nodes.end() && found->second.node) {
         const auto* existing = static_cast<const ChannelNode*>(found->second.node.get());
         if (!instruments::configMatches(*existing, channel, context)) {
+            replaced = std::move(found->second.node);
             m_nodes.erase(found);
         }
     }
-    return getOrMake(
+    std::shared_ptr<Node> node = getOrMake(
         key, [&channel, &context] { return instruments::makeInstrument(channel, context); });
+    m_channelOutputs[channel.id.value] = channel.output;
+    if (replaced) {
+        // The old instrument's voices are released into the new node rather than cut
+        // (phase_7.md §4.4).
+        auto* incoming = static_cast<ChannelNode*>(node.get());
+        incoming->releaseFrom(static_cast<ChannelNode&>(*replaced),
+                              (m_info.sampleRate * kInstrumentReleaseCapMs) / 1000);
+        m_handovers.push_back(Handover{.outgoing = std::move(replaced),
+                                       .incoming = node,
+                                       .done = [incoming] { return incoming->handoverDone(); }});
+    }
+    return node;
 }
 
 std::shared_ptr<Node> NodeStore::fader(core::InsertId id) {
@@ -96,13 +114,28 @@ std::shared_ptr<Node> NodeStore::slot(const project::Slot& slot,
     // A slot whose effect type changed is a new node: the old effect's state means
     // nothing to the new one.
     const auto found = m_nodes.find(key);
+    std::shared_ptr<Node> replaced;
     if (found != m_nodes.end() && found->second.node) {
         const auto* existing = static_cast<const SlotNode*>(found->second.node.get());
         if (!effects::configMatches(*existing, slot, &resources)) {
+            replaced = std::move(found->second.node);
             m_nodes.erase(found);
         }
     }
-    return getOrMake(key, [&slot, &resources] { return effects::makeEffect(slot, &resources); });
+    std::shared_ptr<Node> node =
+        getOrMake(key, [&slot, &resources] { return effects::makeEffect(slot, &resources); });
+    if (replaced) {
+        // The old effect's tail fades out under the new one instead of being cut
+        // (phase_7.md §4.4).
+        auto* incoming = static_cast<SlotNode*>(node.get());
+        incoming->fadeFrom(
+            static_cast<SlotNode&>(*replaced),
+            std::max<std::uint32_t>(1, (m_info.sampleRate * kEffectSwapFadeMs) / 1000));
+        m_handovers.push_back(Handover{.outgoing = std::move(replaced),
+                                       .incoming = node,
+                                       .done = [incoming] { return incoming->handoverDone(); }});
+    }
+    return node;
 }
 
 std::shared_ptr<Node> NodeStore::send(core::SendId id) {
@@ -134,7 +167,50 @@ std::shared_ptr<const MeterNode> NodeStore::findMeter(core::InsertId id) const {
     return std::static_pointer_cast<const MeterNode>(found->second.node);
 }
 
+std::vector<NodeStore::Departure> NodeStore::departures(const project::Project& project) {
+    // Channels whose node was handed out last build and that the project no longer has.
+    for (auto entry = m_nodes.begin(); entry != m_nodes.end();) {
+        const auto [kind, id] = entry->first;
+        const bool removed = kind == Kind::Channel && entry->second.node &&
+                             project.find(core::ChannelId{id}) == nullptr;
+        if (!removed) {
+            ++entry;
+            continue;
+        }
+        std::shared_ptr<Node> channel = entry->second.node;
+        const auto output = m_channelOutputs.find(id);
+        auto departing =
+            std::make_shared<DepartingNode>(static_cast<ChannelNode&>(*channel),
+                                            (m_info.sampleRate * kInstrumentReleaseCapMs) / 1000);
+        departing->prepare(m_info);
+        m_departing[id] = Departure{.node = std::move(departing),
+                                    .output = output != m_channelOutputs.end() ? output->second
+                                                                               : core::InsertId{},
+                                    .channel = std::move(channel)};
+        m_channelOutputs.erase(id);
+        entry = m_nodes.erase(entry);
+    }
+    std::vector<Departure> out;
+    for (const auto& [id, departure] : m_departing) {
+        if (!static_cast<const DepartingNode&>(*departure.node).done()) {
+            out.push_back(departure);
+        }
+    }
+    return out;
+}
+
 void NodeStore::pruneUnused() {
+    // A departure ends when it is silent; the snapshot that still holds it frees it
+    // through the reaper, on this thread.
+    std::erase_if(m_departing, [](const auto& item) {
+        return static_cast<const DepartingNode&>(*item.second.node).done();
+    });
+    // A handover ends when the successor says so, or when nothing but this list holds
+    // the successor any more - no snapshot, live or retired, can then reach either node,
+    // so the audio thread cannot be in the middle of using them.
+    std::erase_if(m_handovers, [](const Handover& handover) {
+        return handover.done() || handover.incoming.use_count() == 1;
+    });
     std::erase_if(m_nodes, [](const auto& item) { return !item.second.used; });
     for (auto& item : m_nodes) {
         item.second.used = false;
@@ -606,6 +682,16 @@ GraphBuild buildGraph(const project::Project& project, NodeStore& nodes) {
     // event track and its voices - but has nowhere to go. Validate reports it.
     for (const std::size_t ordinal : orphans) {
         static_cast<void>(addChannel(ordinal));
+    }
+    // Removed channels still ringing out (phase_7.md §4.4), into the insert they fed -
+    // or the master, if that is gone too. No events, no parameters.
+    for (const NodeStore::Departure& departure : nodes.departures(project)) {
+        const NodeId id = graph.add(departure.node, "departing channel");
+        const core::InsertId target =
+            entries.contains(departure.output.value) ? departure.output : project.mixer.master;
+        if (entries.contains(target.value)) {
+            pendingOutputs.emplace_back(id, target);
+        }
     }
 
     for (const auto& [from, target] : pendingOutputs) {

@@ -10,8 +10,11 @@
 #include <string>
 
 #include "engine/format/adx/Diagnostics.h"
+#include "engine/format/adx/Parser.h"
 #include "engine/project/Project.h"
+#include "engine/project/SourceMap.h"
 #include "engine/project/Validate.h"
+#include "engine/project/commands/CommandStack.h"
 
 using namespace adx::project;
 using adx::core::Ticks;
@@ -260,4 +263,44 @@ TEST_CASE("entity names are checked and can be repaired", "[validate]") {
     CHECK(sanitizeEntityName("a.b", "x") == "a_b");
     CHECK(sanitizeEntityName("", "Fallback") == "Fallback");
     CHECK(sanitizeEntityName("  padded  ", "x") == "padded");
+}
+
+TEST_CASE("validate_reports_at_source_lines", "[validate][format]") {
+    // P2-2: a project loaded from text reports its invariant findings at the line of
+    // the entity concerned, so the editor can underline it. The routing cycle is
+    // reported at the ROUTE that closes it; a note outside its pattern at the note.
+    const std::string text = "[PROJECT]\nADX_VERSION=2\n\n"
+                             "[CHANNEL Lead]\nOUTPUT=insert.2\n\n"
+                             "[PATTERN Riff]\nLENGTH=1:0:0\nNOTES Lead\n  C4 0:0:0 0:1:0 100\n"
+                             "  E4 3:0:0 0:1:0 90\n\n"
+                             "[MIXER]\nINSERT 1 name=\"Master\"\nINSERT 2 name=\"A\"\nINSERT 3 "
+                             "name=\"B\"\nROUTE insert.2 -> insert.3\nROUTE insert.3 -> insert.2\n";
+    Project project;
+    CommandStack stack;
+    SourceMap sources;
+    DiagnosticList diagnostics;
+    adx::format::ParseOptions options;
+    options.sources = &sources;
+    adx::format::load(text, project, stack, diagnostics, options);
+    REQUIRE(sources.size() > 0);
+    ValidationOptions validation;
+    validation.sources = &sources;
+    DiagnosticList found;
+    CHECK_FALSE(validate(project, found, validation));
+    bool cycle = false;
+    for (const auto& d : found.all()) {
+        if (d.code == adx::format::code::kRoutingCycle) {
+            cycle = true;
+            CHECK(d.span.line == 18); // ROUTE insert.3 -> insert.2
+        }
+        if (d.code == adx::format::code::kNoteOutsidePattern) {
+            CHECK(d.span.line == 11);
+        }
+        CHECK(d.span.line > 0);
+    }
+    CHECK(cycle);
+    // Without a source map the same findings have no position, as before.
+    DiagnosticList unplaced;
+    CHECK_FALSE(validate(project, unplaced));
+    CHECK(std::ranges::all_of(unplaced.all(), [](const auto& d) { return d.span.line == 0; }));
 }

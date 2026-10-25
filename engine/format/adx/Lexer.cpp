@@ -68,7 +68,9 @@ void classify(Line& line, std::string_view content, std::size_t commentAt,
     const std::uint32_t number = line.number;
     if (content.empty()) {
         line.kind = commentAt == std::string_view::npos ? Line::Kind::Blank : Line::Kind::Comment;
-    } else if (content.front() == '[') {
+    } else if (content.front() == '[' && line.indent == 0) {
+        // Only at the margin: an indented line belongs to the block above it, and a
+        // mini-notation line may well begin with a group - `  [bd sn] hh` (phase_7.md §10).
         line.kind = Line::Kind::SectionHeader;
         if (content.back() != ']') {
             diagnostics.add(code::kUnclosedSectionHeader, line.contentSpan(),

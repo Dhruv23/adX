@@ -18,6 +18,7 @@
 #include <span>
 #include <string_view>
 
+#include "engine/graph/Handover.h"
 #include "engine/graph/Node.h"
 #include "engine/graph/VoicePool.h"
 #include "engine/project/VoiceStealMode.h"
@@ -95,6 +96,24 @@ public:
         return m_pool;
     }
 
+    /// Main thread, before this node is first published: it replaces `old` (the
+    /// channel's instrument changed). Its first block releases every voice `old` is
+    /// sounding, and `old` keeps rendering their release - into this node's output -
+    /// until they are silent or `capFrames` have passed (Handover.h). New notes play
+    /// here.
+    void releaseFrom(ChannelNode& old, std::uint32_t capFrames) noexcept {
+        m_handover.begin(old, capFrames);
+    }
+    /// True once the old node will not be touched again. Any thread.
+    [[nodiscard]] bool handoverDone() const noexcept {
+        return m_handover.done.load(std::memory_order_acquire);
+    }
+
+    /// Audio thread: this channel has been removed (DepartingNode.h). The first call
+    /// releases every voice; each renders their tails, with the parameters the channel
+    /// last had, into `context.outputs`. False once nothing is sounding.
+    [[nodiscard]] bool renderDeparture(ProcessContext& context) noexcept;
+
 protected:
     /// A voice has just been allocated for `event`. Initialise its state. `render`
     /// carries the parameters at the note's frame; its pitch span is empty.
@@ -127,6 +146,10 @@ private:
                        std::span<float> scratchRight, std::span<float> cents,
                        const ProcessContext& context, VoiceRender& render) noexcept;
     static void applyChannelStrip(const ProcessContext& context) noexcept;
+    void ringOutOld(ProcessContext& context) noexcept;
+    /// One block of this node's own: events, voices, strip. process() is this plus the
+    /// remembering and the handover.
+    void renderBlock(ProcessContext& context) noexcept;
 
     std::uint32_t m_channelId;
     std::uint16_t m_maxPolyphony;
@@ -138,6 +161,9 @@ private:
     /// previous note survives across blocks and is identical offline and realtime.
     std::uint8_t m_lastPitch{0};
     bool m_hasLastPitch{false};
+    RememberedParams m_last;
+    HandoverState<ChannelNode> m_handover;
+    bool m_departing{false};
 };
 
 /// The node for a channel whose instrument type this build does not know: it keeps

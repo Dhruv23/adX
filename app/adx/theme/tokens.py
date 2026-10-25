@@ -90,6 +90,9 @@ class Theme:
     danger: str
     roles: dict[str, str]
     metrics: Metrics = field(default_factory=Metrics)
+    #: The editor panel's colours, by engine token kind (engine/format/adx/Tokenize.h)
+    #: and for diagnostics and the playing step (phase_7.md 4.6).
+    syntax: dict[str, str] = field(default_factory=dict)
 
 
 DARK = Theme(
@@ -144,6 +147,35 @@ DARK = Theme(
         "meter_clip": "#ff5a50",
         "eq_curve": "#ffc45c",
     },
+    syntax={
+        "comment": "#6f7782",
+        "section-bracket": "#5fb2f0",
+        "section-type": "#5fb2f0",
+        "section-name": "#ffc45c",
+        "key": "#c792ea",
+        "operator": "#8e959f",
+        "number": "#f78c6c",
+        "position": "#78c896",
+        "note": "#82aaff",
+        "string": "#c3e88d",
+        "boolean": "#f78c6c",
+        "reference": "#89ddff",
+        "keyword": "#5fb2f0",
+        "identifier": "#e3e6ea",
+        "mini-step": "#ffcb6b",
+        "mini-rest": "#6f7782",
+        "mini-operator": "#89ddff",
+        "mini-number": "#f78c6c",
+        "mini-transform": "#c792ea",
+        "error": "#ff5a50",
+        "diag-error": "#ff5a50",
+        "diag-warning": "#e8c04a",
+        "diag-info": "#5fb2f0",
+        "step-active": "#ffc45c55",
+        "current-line": "#2a2e34",
+        "gutter": "#1e2024",
+        "gutter-text": "#5d636d",
+    },
 )
 
 LIGHT = Theme(
@@ -197,6 +229,35 @@ LIGHT = Theme(
         "meter_hot": "#d29e10",
         "meter_clip": "#d23c32",
         "eq_curve": "#e08a00",
+    },
+    syntax={
+        "comment": "#7a828d",
+        "section-bracket": "#1f78c8",
+        "section-type": "#1f78c8",
+        "section-name": "#a3570b",
+        "key": "#7a3e9d",
+        "operator": "#5d6470",
+        "number": "#b5470f",
+        "position": "#2f7a4a",
+        "note": "#2a4fb0",
+        "string": "#4a7a12",
+        "boolean": "#b5470f",
+        "reference": "#0e7490",
+        "keyword": "#1f78c8",
+        "identifier": "#1d2026",
+        "mini-step": "#9a6700",
+        "mini-rest": "#7a828d",
+        "mini-operator": "#0e7490",
+        "mini-number": "#b5470f",
+        "mini-transform": "#7a3e9d",
+        "error": "#d23c32",
+        "diag-error": "#d23c32",
+        "diag-warning": "#b98a00",
+        "diag-info": "#1f78c8",
+        "step-active": "#e08a0044",
+        "current-line": "#e8ecf2",
+        "gutter": "#eceef2",
+        "gutter-text": "#8a919c",
     },
 )
 

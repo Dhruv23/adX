@@ -63,7 +63,7 @@ std::uint32_t Effect::latencySamples() const noexcept {
     return m_latency;
 }
 
-void Effect::process(graph::ProcessContext& context) noexcept {
+void Effect::processSlot(graph::ProcessContext& context) noexcept {
     const std::uint32_t frames = context.frames;
     const std::span<const float> inLeft = context.inputs[0];
     const std::span<const float> inRight = context.inputs[1];

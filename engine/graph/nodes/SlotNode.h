@@ -11,6 +11,7 @@
 #include <span>
 #include <string_view>
 
+#include "engine/graph/Handover.h"
 #include "engine/graph/Node.h"
 
 namespace adx::graph {
@@ -29,7 +30,9 @@ inline constexpr std::uint32_t kSlotParamCount = static_cast<std::uint32_t>(Slot
 class SlotNode : public Node {
 public:
     void prepare(const PrepareInfo& info) override;
-    void process(ProcessContext& context) noexcept override;
+    /// Final: every slot remembers its parameters and finishes a handover here, whatever
+    /// its effect does. An effect implements processSlot (Effect does) or processWet.
+    void process(ProcessContext& context) noexcept final;
 
     /// The effect type this node implements, as the catalog names it; empty for the
     /// identity. What the node store compares when a slot's type changes.
@@ -39,6 +42,17 @@ public:
     void reset() noexcept override;
     [[nodiscard]] PortSpec ports() const noexcept override;
 
+    /// Main thread, before this node is first published: it replaces `old` (a slot
+    /// whose effect type changed), and crossfades from it over `frames` rather than
+    /// cutting its tail (Handover.h).
+    void fadeFrom(SlotNode& old, std::uint32_t frames) noexcept {
+        m_handover.begin(old, frames);
+    }
+    /// True once the old node will not be touched again. Any thread.
+    [[nodiscard]] bool handoverDone() const noexcept {
+        return m_handover.done.load(std::memory_order_acquire);
+    }
+
 protected:
     /// Writes the effect's fully wet output. Returns false for an effect that is the
     /// identity, which lets the slot skip the mix arithmetic and pass its input
@@ -46,6 +60,16 @@ protected:
     virtual bool processWet(std::span<const float> inLeft, std::span<const float> inRight,
                             std::span<float> outLeft, std::span<float> outRight,
                             std::span<const float> effectParams, ProcessContext& context) noexcept;
+
+    /// The slot's own block: the effect, its mix and its bypass. The default runs
+    /// processWet through the slot's mix and bypass.
+    virtual void processSlot(ProcessContext& context) noexcept;
+
+private:
+    void crossfadeFromOld(ProcessContext& context) noexcept;
+
+    RememberedParams m_last;
+    HandoverState<SlotNode> m_handover;
 };
 
 } // namespace adx::graph

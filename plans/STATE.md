@@ -102,7 +102,7 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 4 — Instruments & effects | XL | **Done** 2026-10-04 (CI green, run 37269752424; full check run 37273504347) |
 | 5 — Frontend foundation | L | **Done** 2026-10-06 (CI green, run 37509766570; full check run 37512932612) |
 | 6 — The DAW proper | XL | **Done** 2026-10-21 (CI green, run 39422153732; full check run 39430247203; human gate P6-1 closed by the user) |
-| 7 — Text-first layer | M | Not started |
+| 7 — Text-first layer | M | **Built** 2026-10-21 - every automated §7 box observed locally; human gate (P7-1) and CI (P7-0) open |
 | 8 — Audio & export | M | Not started |
 | 9 — Plugins & MIDI | L | Not started |
 | 10 — Analysis, visualization, polish | L | Not started |
@@ -787,15 +787,100 @@ The rest re-carried below with reasons.
 | **Plan** | [phase_7.md](phase_7.md) |
 | **Entry** | Phase 6 §6 complete |
 | **Done when** | [phase_7.md](phase_7.md) §7 |
-| **Status** | Not started |
+| **Status** | In progress: built 2026-10-21. Every automated [phase_7.md](phase_7.md) §7 box observed locally on Debug, RelWithDebInfo and Release. **Not done:** the human gate (P7-1) and CI (P7-0) are open, so the checkbox above stays empty and Phase 8's entry is not met |
 | **Completed** | — |
 
 > The half no other DAW has (FINAL_PLAN §1). Deferred scope here costs more than
 > deferred scope anywhere else — be specific in the open issues.
 
+**What exists.** A project can be edited in the GUI, in the in-app editor and in an
+external editor at once. A re-parsed file becomes the narrowest commands
+(`engine/format/adx/Patch.h`: ids remapped by name and number, notes by (start, pitch),
+one `ReplaceProject` for any structural remainder), executed as one undo step; a
+`ReadDirectoryChangesW` watcher (150 ms debounce, any event naming the file) feeds it;
+`TextSync` keeps adX from hearing its own writes, refuses text with parse or validation
+errors, and raises a conflict - keep mine, take theirs, show the diff - rather than
+guess. Live mode writes 300 ms after the last edit. A reload never cuts a voice: surviving
+entities keep their ids and so their nodes; a new effect type crossfades from the old
+over 20 ms, a new instrument rings out the old one's released voices, a removed channel
+rings out into the insert it fed (`graph/Handover.h`, `nodes/DepartingNode`). Mini-notation
+is ported (Bjorklund fixed, ticks, spans, song cycles) and plays; the editor panel
+highlights from engine tokens, underlines diagnostics (parse and validation, at their
+lines) as you type within 5 ms on 10,000 lines, completes from the type catalog, lights
+the sounding mini-notation step, and links its cursor with the piano roll. `adx` the
+scripting module issues the GUI's commands, with a REPL console, `on_bar` callbacks on the
+main thread, documented examples that are tests. Sixteen corrections to the plan:
+[phase_7.md](phase_7.md) §11.
+
+**The gates.** `test_bidirectional`: 200 interleaved GUI and external edits while
+playing, Live sync, both sides converging after every one, ten deliberate collisions each
+raised as a conflict, the file round-tripping - it found two data-loss bugs first (§11,
+9-10). `reload_no_voice_cut`: 100 rewrites while a pad plays, output **bit-identical** to
+no reloads, zero allocator-hook violations.
+
+Observed locally (2026-10-21): C++ - 370 cases on each of Debug, RelWithDebInfo and
+Release; clang-tidy clean over all 251 files on all three compile databases (99 findings
+fixed); clang-format, headers, format-safety, positions, dsp-math and `rules` clean.
+Python - 200 tests green without the GPU tests, both GPU tests green; ruff, ruff format,
+mypy `--strict` clean. Patch fuzz 10,000 pairs per run plus 80,000 more over eight
+seeds. Phase completion, locally in Debug: `ADX_FULL_EVIDENCE=1 ctest --preset
+windows-x64-debug -L slow` passed in 972.41 s.
+
+Launcher (2026-10-21, after the last build): `check_launcher: adX.cmd opened adX 0.1.0 -
+13 panels, audio device open`.
+
+Inherited issues: **P2-2** fixed (validate reports at source lines via `SourceMap`;
+`adx validate`, the editor and reloads use it); **P2-5** fixed (mini-notation compiles
+and plays); **P6-1**, **P6-0** were closed in Phase 6. The rest re-carried below.
+
 **Open issues for Phase 8:**
 
-- _to be filled in by the agent that completes this phase_
+- **P7-0** · **BLOCKER for marking Phase 7 done** · Nothing of this phase has been
+  committed or pushed, so per-push CI and the full check have not run. Fixed when: the
+  phase is pushed, CI is green on all three jobs, and the full check is green on a
+  `phase-7` tag; record both run ids here.
+- **P7-1** · **BLOCKER - the human gate** ([phase_7.md](phase_7.md) §7 box 3): a person
+  keeps adX and VS Code open on the same `.adx` file, edits in both while it plays, and
+  reports no glitches - and, for box 4, that typing a MINI pattern in the editor changes
+  what plays with the step lit. Use Preferences > Editing > Text sync = Live (or the
+  default On save, saving in adX). An agent cannot close it. Fixed when: the user says so
+  in their own words, recorded here.
+- **P7-2** · A node handing over renders only its own block, so a second effect-type
+  change within the first's 20 ms, or a second instrument change within the first's
+  release, cuts the first one's tail (`misc-no-recursion`; phase_7.md §11, 7). Fixed
+  when: a chain of handovers is walked iteratively, or someone hears it matter.
+- **P7-3** · Incremental diagnostics are cheap only for edits inside a `[PATTERN]` body;
+  an edit to a channel, the mixer or a header is a full parse - 10.4 ms on a
+  10,000-line file in Release, over the 5 ms budget. Pattern bodies are nearly all of a
+  big file, so the common keystroke is inside budget (3.9 ms). Fixed when: the other
+  section kinds get the same treatment, or a profile shows it is felt.
+- **P7-4** · The cursor link with the piano roll covers note lines only; a MINI step or
+  an automation breakpoint under the cursor selects nothing. Fixed when: the roll can
+  show compiled MINI notes (Phase 11's launchable mini clips may want the same).
+- **P7-5** · Conflict resolution is whole-file (keep mine / take theirs / diff); there is
+  no three-way merge of non-overlapping edits. By design (§4.4: "do not guess"), but a
+  per-section merge would turn most real conflicts into no conflict. Fixed when:
+  decided.
+- **P7-6** · `FileWatcher`'s non-Windows fallback (a 50 ms size/time poll) is compiled
+  only off Windows and has never run. Fixed when: a non-Windows build exists.
+- **P6-2** · `CARRIED`, grown · Panels over §3 rule 1's ~400 lines:
+  `piano_roll/panel.py` (840), `playlist/panel.py` (494), and now `editor/panel.py`
+  (410). Fixed when: each is split into sub-widgets under ~400 lines.
+- **P6-3** · `CARRIED` · The wavetable overview is a 2-D frame strip, not §4.4's 3-D
+  view.
+- **P5-6** · `CARRIED` · Both GPU measurements are one machine.
+- **P4-10** · `CARRIED` · `suffocation.adx` is the wrong recreation.
+- **P4-4**, **P4-5**, **P4-7**, **P4-8** · `CARRIED` · Unchanged; Phase 7 touched none of
+  master gain order, SubBass, WORLD caching or per-frame Voice automation.
+- **P4-6** · `CARRIED` · Voice preroll latency in realtime. Phase 11's decision.
+- **P4-9** · `CARRIED`, **now due** · PitchShifter is the phase vocoder only; RubberBand
+  arrives with Phase 8's offline stretch.
+- **P1-1** · `CARRIED` · `_CrtSetAllocHook` is not installed. Phase 7 added handover
+  rendering on the callback path (fixed-size remembered parameters, arena scratch, no
+  allocation by construction); `reload_no_voice_cut` runs 100 reloads under the guard
+  with zero violations, but its edits are inaudible and trigger no handover, and the
+  handover tests do not count violations. Fixed when: as stated under Phase 1, and the
+  handover and departure tests run under the guard.
 
 ---
 

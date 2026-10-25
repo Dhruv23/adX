@@ -13,6 +13,7 @@
 #include <string>
 
 #include "engine/format/adx/Diagnostics.h"
+#include "engine/project/SourceMap.h"
 
 namespace adx::project {
 
@@ -24,6 +25,11 @@ struct ValidationOptions {
     /// being edited on a machine without its audio files is a warning, not a reason
     /// for the model layer to do I/O on every check.
     bool checkSampleFiles{false};
+
+    /// Where each entity was in the text the project was loaded from, when it was
+    /// (ParseOptions::sources). With it, a finding is reported at its entity's line;
+    /// without it, at no position - a project need not have come from text (P2-2).
+    const SourceMap* sources{nullptr};
 };
 
 /// A span meaning "this diagnostic has no position in any file".
