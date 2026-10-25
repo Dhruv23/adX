@@ -53,6 +53,10 @@ def open_file(studio: MainWindow, tmp_path: pathlib.Path, text: str = TEXT) -> p
     path = tmp_path / "song.adx"
     path.write_text(text, encoding="utf-8", newline="")
     studio.text.file_sync.debounce_ms = 40
+    # Throw away whatever is open, or opening asks to save it - a modal box that
+    # nobody answers.
+    if studio.project is not None:
+        studio.saved_revision = studio.project.revision()
     assert studio.open_project(str(path))
     return path
 

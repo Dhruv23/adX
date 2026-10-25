@@ -426,8 +426,10 @@ class Playlist:
         ids = [int(t["id"]) for t in tracks]
         while number not in ids:
             self._host.execute(engine_bridge.commands.build("AddPlaylistTrackNew", ""))
+            before = len(ids)
             ids = [int(t["id"]) for t in self._host.project.playlist_info()["tracks"]]
-            if len(ids) > number + 64:
+            # A refused command adds nothing, and would loop here forever.
+            if len(ids) <= before or len(ids) > number + 64:
                 raise ScriptError(f"could not create track {number}")
         return Track(self._host, number)
 

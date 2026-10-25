@@ -36,17 +36,6 @@ namespace {
            (rest.size() == 7 || isHorizontalSpace(rest[7]) || rest[7] == ']');
 }
 
-/// The terminator alone: a blank line that keeps the numbering of every line after it.
-[[nodiscard]] std::string_view terminatorOf(const std::string& line) noexcept {
-    if (line.ends_with("\r\n")) {
-        return "\r\n";
-    }
-    if (line.ends_with('\n') || line.ends_with('\r')) {
-        return std::string_view(line).substr(line.size() - 1);
-    }
-    return {};
-}
-
 /// The parser's diagnostics and validate()'s, both at their lines (P2-2): what the
 /// editor shows, and what a reload is refused on.
 DiagnosticList parsed(const std::string& text) {
@@ -214,19 +203,19 @@ void IncrementalParse::update(std::string_view text) {
         static_cast<std::size_t>(static_cast<std::ptrdiff_t>(before.end) + delta);
     const SectionRange& edited = m_sections[index];
 
-    // The rest of the file with every other pattern's body blanked: what the edited
-    // pattern is checked against.
+    // The rest of the file with every other pattern's body left out: what the edited
+    // pattern is checked against. Leaving the lines out rather than blanking them keeps
+    // this parse proportional to the pattern instead of the file; `fileLine` maps each
+    // reduced line back to its line here.
     std::string reduced;
-    reduced.reserve(m_lines.size() * 2);
+    std::vector<std::uint32_t> fileLine;
     for (std::size_t s = 0; s < m_sections.size(); ++s) {
         const SectionRange& section = m_sections[s];
         const bool keep = s == index || !section.pattern;
-        for (std::size_t i = section.header; i < section.end; ++i) {
-            if (keep || i == section.header) {
-                reduced += m_lines[i];
-            } else {
-                reduced += terminatorOf(m_lines[i]);
-            }
+        const std::size_t last = keep ? section.end : std::min(section.header + 1, section.end);
+        for (std::size_t i = section.header; i < last; ++i) {
+            reduced += m_lines[i];
+            fileLine.push_back(static_cast<std::uint32_t>(i + 1));
         }
     }
     const DiagnosticList fresh = parsed(reduced);
@@ -248,9 +237,13 @@ void IncrementalParse::update(std::string_view text) {
         }
     }
     for (const Diagnostic& d : fresh.all()) {
-        const std::size_t line = d.span.line;
-        if (line >= 1 && line - 1 >= edited.header && line - 1 < edited.end) {
-            merged.add(d.code, d.span, d.message, d.hint);
+        if (d.span.line < 1 || d.span.line > fileLine.size()) {
+            continue;
+        }
+        Span span = d.span;
+        span.line = fileLine[d.span.line - 1];
+        if (span.line - 1 >= edited.header && span.line - 1 < edited.end) {
+            merged.add(d.code, span, d.message, d.hint);
         }
     }
     merged.sortByPosition();

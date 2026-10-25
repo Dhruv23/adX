@@ -102,7 +102,7 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 4 — Instruments & effects | XL | **Done** 2026-10-04 (CI green, run 37269752424; full check run 37273504347) |
 | 5 — Frontend foundation | L | **Done** 2026-10-06 (CI green, run 37509766570; full check run 37512932612) |
 | 6 — The DAW proper | XL | **Done** 2026-10-21 (CI green, run 39422153732; full check run 39430247203; human gate P6-1 closed by the user) |
-| 7 — Text-first layer | M | **Built** 2026-10-21 - every automated §7 box observed locally; human gate (P7-1) and CI (P7-0) open |
+| 7 — Text-first layer | M | **Built** 2026-10-21 - every automated §7 box observed locally; human gate (P7-1) closed 2026-10-25; CI (P7-0) open, first push failed and fixed |
 | 8 — Audio & export | M | Not started |
 | 9 — Plugins & MIDI | L | Not started |
 | 10 — Analysis, visualization, polish | L | Not started |
@@ -787,7 +787,7 @@ The rest re-carried below with reasons.
 | **Plan** | [phase_7.md](phase_7.md) |
 | **Entry** | Phase 6 §6 complete |
 | **Done when** | [phase_7.md](phase_7.md) §7 |
-| **Status** | In progress: built 2026-10-21. Every automated [phase_7.md](phase_7.md) §7 box observed locally on Debug, RelWithDebInfo and Release. **Not done:** the human gate (P7-1) and CI (P7-0) are open, so the checkbox above stays empty and Phase 8's entry is not met |
+| **Status** | In progress: built 2026-10-21. Every automated [phase_7.md](phase_7.md) §7 box observed locally on Debug, RelWithDebInfo and Release; the human gate (P7-1) closed 2026-10-25. **Not done:** CI (P7-0) is open, so the checkbox above stays empty and Phase 8's entry is not met |
 | **Completed** | — |
 
 > The half no other DAW has (FINAL_PLAN §1). Deferred scope here costs more than
@@ -829,22 +829,29 @@ windows-x64-debug -L slow` passed in 972.41 s.
 Launcher (2026-10-21, after the last build): `check_launcher: adX.cmd opened adX 0.1.0 -
 13 panels, audio device open`.
 
+After the CI fixes, observed locally (2026-10-25): ctest 100% on Debug (371, `-LE slow`),
+RelWithDebInfo and Release (372 each); pytest 201 passed with `CI=1` in 3:55;
+clang-tidy clean on the changed units against all three databases; clang-format,
+headers, format-safety, positions, dsp-math, `rules`, ruff, ruff format and mypy
+`--strict` clean. Launcher: `check_launcher: adX.cmd opened adX 0.1.0 - 13 panels, audio
+device open`.
+
 Inherited issues: **P2-2** fixed (validate reports at source lines via `SourceMap`;
 `adx validate`, the editor and reloads use it); **P2-5** fixed (mini-notation compiles
 and plays); **P6-1**, **P6-0** were closed in Phase 6. The rest re-carried below.
 
 **Open issues for Phase 8:**
 
-- **P7-0** · **BLOCKER for marking Phase 7 done** · Nothing of this phase has been
-  committed or pushed, so per-push CI and the full check have not run. Fixed when: the
-  phase is pushed, CI is green on all three jobs, and the full check is green on a
-  `phase-7` tag; record both run ids here.
-- **P7-1** · **BLOCKER - the human gate** ([phase_7.md](phase_7.md) §7 box 3): a person
-  keeps adX and VS Code open on the same `.adx` file, edits in both while it plays, and
-  reports no glitches - and, for box 4, that typing a MINI pattern in the editor changes
-  what plays with the step lit. Use Preferences > Editing > Text sync = Live (or the
-  default On save, saving in adX). An agent cannot close it. Fixed when: the user says so
-  in their own words, recorded here.
+- **P7-0** · **BLOCKER for marking Phase 7 done** · The first push (7083e72, CI run
+  40174263448) failed. `incremental_budget` measured 6.1-6.6 ms against its 5 ms budget
+  on the optimised runners. pytest hung on all three jobs until the six-hour limit, in a
+  modal "Save changes?" box opened by `test_external_tempo_edit_shows_in_the_transport`.
+  Both are fixed and a hang now fails fast with its stack
+  ([phase_7.md](phase_7.md) §11, 17-19). Fixed when: CI is green on all three jobs
+  after the fix, and the full check is green on a `phase-7` tag; record both run ids
+  here.
+- **P7-1** · **Closed 2026-10-25** · the human gate ([phase_7.md](phase_7.md) §7
+  box 3). The user, in their words: "i personally checked the live edit barrier."
 - **P7-2** · A node handing over renders only its own block, so a second effect-type
   change within the first's 20 ms, or a second instrument change within the first's
   release, cuts the first one's tail (`misc-no-recursion`; phase_7.md §11, 7). Fixed
@@ -852,7 +859,7 @@ and plays); **P6-1**, **P6-0** were closed in Phase 6. The rest re-carried below
 - **P7-3** · Incremental diagnostics are cheap only for edits inside a `[PATTERN]` body;
   an edit to a channel, the mixer or a header is a full parse - 10.4 ms on a
   10,000-line file in Release, over the 5 ms budget. Pattern bodies are nearly all of a
-  big file, so the common keystroke is inside budget (3.9 ms). Fixed when: the other
+  big file, so the common keystroke is inside budget (1.2 ms since §11, 17). Fixed when: the other
   section kinds get the same treatment, or a profile shows it is felt.
 - **P7-4** · The cursor link with the piano roll covers note lines only; a MINI step or
   an automation breakpoint under the cursor selects nothing. Fixed when: the roll can

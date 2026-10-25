@@ -65,6 +65,9 @@ minversion = "8.0"
 testpaths = ["tests/python"]
 addopts = ["-q", "--strict-markers", "--strict-config"]
 xfail_strict = true
+# A test still running after this many seconds has every thread's stack dumped; the
+# watchdog in tests/python/conftest.py ends the run a minute later.
+faulthandler_timeout = 240
 markers = [
     # phase_5.md 4.9: needs a real GPU and display. Non-blocking: CI runs `-m "not gpu"`.
     "gpu: measures real frame times on a GPU; deselected in CI",

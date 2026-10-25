@@ -145,6 +145,78 @@ def studio(quick: None, tmp_path: pathlib.Path) -> Iterator[object]:
     dispose(main)
 
 
+#: Seconds one test may take before the watchdog ends the run. The slowest test takes
+#: well under a minute; ADX_TEST_TIMEOUT overrides it (0 turns the watchdog off).
+#: pytest's own faulthandler_timeout (pyproject.toml) dumps every thread's stack first.
+_TEST_TIMEOUT = float(os.environ.get("ADX_TEST_TIMEOUT", "300"))
+
+_config: list[pytest.Config] = []
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    _config.append(config)
+
+
+def _hung(nodeid: str) -> None:
+    """The watchdog fired: say which test hung and where, then end the process. A hang
+    otherwise prints nothing at all until the CI job's own limit kills it."""
+    import sys
+    import threading
+    import traceback
+
+    # Output is being captured into a file that os._exit would throw away.
+    capture = _config[0].pluginmanager.getplugin("capturemanager") if _config else None
+    if capture is not None:
+        capture.suspend_global_capture(in_=False)
+    main = sys._current_frames().get(threading.main_thread().ident or 0)
+    frames = traceback.extract_stack(main)[-8:] if main is not None else []
+    where = " <- ".join(
+        f"{pathlib.Path(f.filename).name}:{f.lineno} {f.name}" for f in reversed(frames)
+    )
+    message = f"{nodeid} hung for {_TEST_TIMEOUT:.0f} s at: {where or 'unknown'}"
+    if os.environ.get("GITHUB_ACTIONS"):
+        message = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        print(f"\n::error title=pytest watchdog::{message}", flush=True)
+    else:
+        print(f"\n{message}", file=sys.stderr, flush=True)
+    os._exit(1)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_protocol(item: pytest.Item, nextitem: pytest.Item | None) -> Iterator[None]:
+    """Run each test (setup, call and teardown) under the watchdog."""
+    if _TEST_TIMEOUT <= 0:
+        yield
+        return
+    import threading
+
+    timer = threading.Timer(_TEST_TIMEOUT, _hung, args=(item.nodeid,))
+    timer.daemon = True
+    timer.start()
+    try:
+        yield
+    finally:
+        timer.cancel()
+
+
+@pytest.fixture(autouse=True)
+def no_modal_dialogs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A modal dialog in a test waits for a click that never comes, and the run hangs
+    (Phase 7's first push sat for six hours on one). Make opening one fail instead."""
+    from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
+
+    def refuse(*args: object, **_kwargs: object) -> None:
+        text = " / ".join(str(a) for a in args if isinstance(a, str))
+        raise RuntimeError(f"a modal dialog opened during a test: {text or args[:1]}")
+
+    for name in ("question", "warning", "critical", "information"):
+        monkeypatch.setattr(QMessageBox, name, staticmethod(refuse))
+    for name in ("getOpenFileName", "getSaveFileName", "getExistingDirectory"):
+        monkeypatch.setattr(QFileDialog, name, staticmethod(refuse))
+    monkeypatch.setattr(QMessageBox, "exec", refuse)
+    monkeypatch.setattr(QDialog, "exec", refuse)
+
+
 def pytest_runtest_logreport(report: pytest.TestReport) -> None:
     """On GitHub Actions, each failure is also an ``::error`` annotation: it shows on the
     run's summary page, and the public API returns it, so a failure can be read without

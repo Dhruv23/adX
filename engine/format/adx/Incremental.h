@@ -14,11 +14,12 @@
 //     suffix of lines; the caller passes the whole new text).
 //   - An edit that stays inside one [PATTERN]'s body - no section header touched,
 //     before or after - re-parses that pattern against the rest of the file with every
-//     *other* pattern's body blanked. A pattern's body can only produce diagnostics
-//     about itself (its notes, its MINI, its automation, against channels and its own
-//     LENGTH), and nothing else in the file depends on what is in it, so the result
-//     for its lines is the full parse's result. Every other line keeps the diagnostics
-//     it had, moved by the number of lines the edit added or removed.
+//     *other* pattern's body left out (its lines mapped back afterwards). A pattern's
+//     body can only produce diagnostics about itself (its notes, its MINI, its
+//     automation, against channels and its own LENGTH), and nothing else in the file
+//     depends on what is in it, so the result for its lines is the full parse's
+//     result. Every other line keeps the diagnostics it had, moved by the number of
+//     lines the edit added or removed.
 //   - Anything else - a header, a channel, the mixer, an edit spanning sections - is a
 //     full parse. Correct by construction; `incremental_matches_full` checks it.
 //

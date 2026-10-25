@@ -35,6 +35,9 @@ jobs:
   windows-x64:
     name: windows-x64 ${{ matrix.build_type }}
     runs-on: windows-latest
+    # About an hour when green (clang-tidy is most of it). Without a limit a hang runs
+    # into GitHub's six hours, as Phase 7's first push did.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -144,8 +147,11 @@ jobs:
       # The GPU frame-rate test cannot run here - no usable GPU on the runners - and is
       # run locally at phase completion (phase_5.md 4.9). Everything else Qt runs on the
       # offscreen platform (tests/python/conftest.py).
+      # A green run takes 3-6 minutes. A hung test is also caught sooner, with its stack,
+      # by the watchdog in tests/python/conftest.py; this limit is the backstop.
       - name: pytest
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        timeout-minutes: 20
         run: pytest -m "not gpu"
 
       # Steps 7-14 are the lint gates, and they all carry `if: !cancelled()`.

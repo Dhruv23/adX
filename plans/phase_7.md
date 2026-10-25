@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Built 2026-10-21: every automated §7 box observed locally on Debug, RelWithDebInfo and Release; the human gate (§7 box 3, P7-1) and CI (P7-0) are open - see plans/STATE.md |
+| **Status** | Built 2026-10-21: every automated §7 box observed locally on Debug, RelWithDebInfo and Release; the human gate (§7 box 3, P7-1) closed 2026-10-25. CI (P7-0) is open: the first push failed and was fixed (§11, 17-19) - see plans/STATE.md |
 | **Governs** | bidirectional GUI↔text sync, filesystem hot reload, the editor panel, mini-notation, the Python scripting API |
 | **FINAL_PLAN refs** | §1 (the second half — *the reason the project exists*), §3.1 (PatternCompiler), §3.2 (hot reload, live-code editor), §5.8, §7 Phase 7 |
 | **Entry criteria** | [phase_6.md](phase_6.md) §6 complete |
@@ -391,9 +391,9 @@ in plans/STATE.md, and nothing here has been pushed yet.
       Beside it: `reload_effect_swap_fades`, `reload_instrument_change_releases`,
       `reload_channel_removed_releases`, `reload_preserves_equivalent_effects`,
       `reload_tempo_change_no_glitch`.
-- [ ] **A human has kept adX and VS Code open on the same `.adx` file, edited in both
-      while it played, and reported no glitches.** Open: P7-1. An agent cannot close
-      it.
+- [x] **A human has kept adX and VS Code open on the same `.adx` file, edited in both
+      while it played, and reported no glitches.** Closed 2026-10-25 by the user, in
+      their words: "i personally checked the live edit barrier." (P7-1)
 - [x] Mini-notation is live, *automated half*: a MINI block plays through the
       snapshot at the song's cycles (`mini_plays_through_the_snapshot`); text typed in
       the editor panel is applied as commands as soon as it parses
@@ -551,8 +551,8 @@ What changed against the plan, and what the tests found:
     the drag stutter.
 14. **Incremental reparse is per pattern body** (§4.3's scope, made concrete): an edit
     inside one `[PATTERN]` re-parses it against the rest of the file with every other
-    pattern's body blanked; anything else is a full parse. 3.9 ms worst keystroke on
-    10,000 lines in Release.
+    pattern's body left out; anything else is a full parse. 1.2 ms worst keystroke on
+    10,000 lines in Release (correction 17).
 15. **`adx` the scripting module is `adx.scripting.api`** - `adx` is the application's
     package. The console provides it as `adx`; the examples import it. Positions are the
     file's spelling, from `0:0:0` (§4.7's `at="1:1:0"` was a 1-based sketch).
@@ -564,3 +564,26 @@ What changed against the plan, and what the tests found:
     `nodes/DepartingNode.*`, `bindings` for the incremental parse and tokens, and the
     Python tests `test_docs_examples.py`. The watcher tests are in `test_watcher.cpp`
     as listed; the sync tests in `test_sync.cpp`.
+
+The first push (CI run 40174263448, 2026-10-25) failed, and its Python step hung until
+GitHub's six-hour limit. Three fixes followed:
+
+17. **The keystroke budget had no headroom.** `incremental_budget` measured 6.1 and
+    6.6 ms on the Release and RelWithDebInfo runners (3.9 ms here). The other patterns'
+    bodies were blanked to empty lines to keep line numbers, so the "cheap" parse still
+    walked all 10,000 lines - about 3 ms of the 3.9. They are now left out, and a table
+    maps each reduced line back to its line in the file: 1.2 ms worst keystroke locally.
+    `incremental_matches_full` (10,000 random edits against a full parse) still agrees.
+18. **`test_external_tempo_edit_shows_in_the_transport` opened a modal dialog.** Its
+    first pass ends by undoing a reload, which leaves the project unsaved (correctly).
+    The second pass's `open_project` then asked "Save changes?" in a message box that
+    nothing answers offscreen, so it waited forever. It hangs the same way here
+    (reproduced 2026-10-25); why the 2026-10-21 local run did not is not known. The test
+    now discards the open project first, as the `studio` fixture's teardown does.
+19. **A hang can no longer be silent.** Every test now runs with modal dialogs
+    replaced by an error naming the dialog (`no_modal_dialogs` in `conftest.py`). A
+    watchdog ends the run after 300 s on one test, printing the test and its stack as
+    an `::error` annotation (the public API returns these). pytest's
+    `faulthandler_timeout` dumps all threads at 240 s. The pytest step has a 20-minute
+    limit and the job 120. Also: `adx.Playlist.track` looped forever when the engine
+    refused to add a track. It now raises `ScriptError`.
