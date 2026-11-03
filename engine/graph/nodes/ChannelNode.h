@@ -80,6 +80,9 @@ public:
     /// The instrument type this node implements, as the catalog names it. What the
     /// node store compares to decide whether a changed channel can keep its node.
     [[nodiscard]] virtual std::string_view typeName() const noexcept = 0;
+    [[nodiscard]] std::string_view profileName() const noexcept override {
+        return typeName();
+    }
 
     [[nodiscard]] std::uint32_t channelId() const noexcept {
         return m_channelId;
@@ -126,6 +129,24 @@ protected:
     virtual bool renderVoice(Voice& voice, std::span<float> left, std::span<float> right,
                              const VoiceRender& render) noexcept = 0;
 
+    /// An instrument that renders the whole block itself instead of voice by voice: a
+    /// hosted plugin, which has voices of its own (phase_9.md §4.5). It writes `left`
+    /// and `right` (already cleared) from `context.events` and returns true; the
+    /// channel's strip still applies. `releaseAll` asks it to release everything first -
+    /// the channel is departing or being replaced. The default is false: the pool.
+    virtual bool renderWhole(const ProcessContext& context, std::span<float> left,
+                             std::span<float> right, bool releaseAll) noexcept {
+        static_cast<void>(context);
+        static_cast<void>(left);
+        static_cast<void>(right);
+        static_cast<void>(releaseAll);
+        return false;
+    }
+    /// For a whole-block instrument: still sounding after a release-all (its tail).
+    [[nodiscard]] virtual bool wholeSounding() const noexcept {
+        return false;
+    }
+
     /// Channel-level portamento time, from the instrument's parameters. Zero (the
     /// default) is off. Applies only when a note starts while another is sounding -
     /// a legato line - and an explicit slide on the note overrides it.
@@ -164,6 +185,8 @@ private:
     RememberedParams m_last;
     HandoverState<ChannelNode> m_handover;
     bool m_departing{false};
+    /// The next renderWhole() call releases everything first.
+    bool m_releaseWhole{false};
 };
 
 /// The node for a channel whose instrument type this build does not know: it keeps

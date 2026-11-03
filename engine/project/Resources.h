@@ -28,6 +28,11 @@ struct SampleRef {
 struct Resources {
     std::vector<SampleRef> samples;
 
+    /// Folders searched for a sample that is not where its path says, relative to the
+    /// project (absolute if they must be): `SAMPLE_PATHS` in [PROJECT] (phase_8.md
+    /// §3.7). The project's own `samples/` folder is always searched and is not listed.
+    std::vector<std::string> searchPaths;
+
     /// The directory the project was loaded from, used to resolve the relative
     /// paths above. Not serialised - it is a fact about where the file is, not
     /// about what the project is, and writing it would make a project
@@ -43,7 +48,7 @@ struct Resources {
         // baseDirectory is deliberately excluded: two projects loaded from
         // different directories with identical content are equal, and the undo gate
         // depends on that being true.
-        return lhs.samples == rhs.samples;
+        return lhs.samples == rhs.samples && lhs.searchPaths == rhs.searchPaths;
     }
 };
 

@@ -129,7 +129,9 @@ TEST_CASE("playlist_slip_and_stretch", "[commands][phase6]") {
     CHECK(afterSlip.content == original.content);
 
     PlaylistItem audio = original;
-    audio.content = AudioClipRef{.sample = SampleId{1}, .stretch = 2.0F};
+    AudioClipRef twice = adx::project::audioClipOf(SampleId{1});
+    twice.stretch = 2.0F;
+    audio.content = twice;
     audio.length = Ticks{kPpq * 8};
     scene.run(std::make_unique<SetPlaylistItem>(lead.id, original.id, audio, lead.id));
     const PlaylistItem& stretched = scene.project.playlist.tracks.front().items.front();

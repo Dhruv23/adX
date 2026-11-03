@@ -1,6 +1,7 @@
-# The project format, and audio decode beside it (Phase 4). Phase 8 adds encoders,
-# which is why this level exists rather than engine/ reaching straight into adx/.
+# The project format, and audio decode beside it (Phase 4), and MIDI files (Phase 8).
+# The Phase 8 encoders went to engine/render/, beside the export job that drives them.
 add_subdirectory(adx)
 add_subdirectory(mininotation)
 add_subdirectory(audio)
 add_subdirectory(text)
+add_subdirectory(midi)

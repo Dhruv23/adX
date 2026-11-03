@@ -28,8 +28,10 @@ inline constexpr int kMaxCurvePieces = 32;
 /// The start knot is the caller's (it is the previous segment's end); every knot
 /// after it, up to and including (t1, v1), is appended. Step and Hold become a flat
 /// run plus a jump - two knots at one tick. `tolerance` is absolute, in the value's
-/// own unit.
+/// own unit. `maxPieces` caps the subdivision; automation keeps the default, and a clip
+/// fade, whose whole length is one segment, asks for more (ClipEdit.h).
 void appendCurveSegment(std::vector<Knot>& out, std::int64_t t0, float v0, std::int64_t t1,
-                        float v1, const core::Curve& curve, float tolerance);
+                        float v1, const core::Curve& curve, float tolerance,
+                        int maxPieces = kMaxCurvePieces);
 
 } // namespace adx::project

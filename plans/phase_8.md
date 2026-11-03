@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Not started |
+| **Status** | Built 2026-10-29. Every automated §6 box observed locally on Debug, RelWithDebInfo and Release; the latency gate half checked on a virtual cable (P8-1, hardware half in the final review). **Not done:** CI (P8-0) - see §10. Done (hardware deferred) once CI is green |
 | **Governs** | recording, clip editing, time-stretch/warp, the full export matrix, stems, bundling, MIDI I/O, `adx render` |
 | **FINAL_PLAN refs** | §3.1 (ExportRenderer, MidiImporter, AudioClipProcessor, BpmDetector), §5.5, §5.7, §5.6 MIDI file I/O, §7 Phase 8, §9 golden hashes |
 | **Entry criteria** | [phase_7.md](phase_7.md) §7 complete |
@@ -308,17 +308,21 @@ dependencies. FINAL_PLAN §8's table gains a row when this phase starts.
 
 ## 6. Definition of done
 
-- [ ] `golden_all_formats` passes.
-- [ ] `three_clean_builds_identical` passes.
-- [ ] `stems_sum_to_master` passes, including on a fixture with sidechains.
-- [ ] `record_latency_alignment` passes on real hardware at 3 buffer sizes, with
-      the measured offsets recorded in the phase log.
-- [ ] `freeze_is_transparent` passes bit-identically.
-- [ ] `adx render` works headless in CI with no Qt import.
-- [ ] The `docs/examples/` corpus is self-contained — no sample reference
-      resolves into `_archive/`.
-- [ ] libvorbis justified in FINAL_PLAN §8 before it is added.
-- [ ] FINAL_PLAN.md §10 Phase 8 row updated.
+- [x] `golden_all_formats` passes. Locally, all three configurations (§10).
+- [ ] `three_clean_builds_identical` passes. The job exists (`full-check.yml`, `three-builds`, §11 19) and has not run: it runs on the `phase-8` tag (P8-0).
+- [x] `stems_sum_to_master` passes, including on a fixture with sidechains (`sidechain_duck.adx`; waveshapers bypassed, §11 3).
+- [~] `record_latency_alignment` passes on real hardware at 3 buffer sizes, with
+      the measured offsets recorded in the phase log. **Half checked (P8-1):** the
+      emulated half passes on the simulated loopback and on VB-Audio Virtual Cable at 64,
+      256 and 1024 (§10); it does not cover converters or an interface's reported latency.
+      The physical loopback (`py -3.12 tools/measure_latency.py`, §11 20) is deferred to
+      the final review (FINAL_PLAN §9; STATE.md "Final review").
+- [x] `freeze_is_transparent` passes bit-identically.
+- [x] `adx render` works headless with no Qt import (`render_cli` asserts no PySide6 module is loaded). In CI once P8-0 runs.
+- [x] The `docs/examples/` corpus is self-contained — no sample reference
+      resolves into `_archive/` (`docs/examples/samples/`).
+- [x] libvorbis justified in FINAL_PLAN §8 before it is added.
+- [x] FINAL_PLAN.md §10 Phase 8 row updated.
 
 ---
 
@@ -358,3 +362,159 @@ Phase 9 inherits:
 | RubberBand offline stretching is slow enough to block the UI on long clips | `ExportJob`-style background job with progress; the clip plays unstretched until ready |
 | Disk writer falls behind on slow media and silently gaps a take | Overrun counter surfaced in the UI and recorded in the take's metadata |
 | The example corpus keeps depending on archived samples | Explicit done-criterion; the corpus is bundled in this phase |
+
+---
+
+## 10. Evidence
+
+Observed locally, 2026-10-29, on the final tree unless said otherwise:
+
+- **ctest:** 100% on Debug (427 cases, `-LE slow`), RelWithDebInfo (428) and Release
+  (428), the `[.slow]` suite included in the optimised two. The four Teto voicebank
+  tests skip as before (the voicebank is not on this machine).
+- **Phase completion, Debug:** `ADX_FULL_EVIDENCE=1 ctest --preset windows-x64-debug -L
+  slow` passed in 1374.74 s. *Run before the clang-tidy clean-up pass*, which changed no
+  behaviour (initialisers, casts, const, splitting binding registration functions).
+- **pytest:** 237 passed with `CI=1`, GPU tests deselected; two failures in the first full
+  run were fixed - an outdated panel list in `test_app`, and §11 21.
+- **Lint:** clang-format, headers, format-safety, positions, dsp-math and `rules` clean;
+  ruff, ruff format and mypy `--strict` clean. clang-tidy clean over all 292 files on
+  Debug, RelWithDebInfo and Release (§11 22).
+- **Launcher:** `check_launcher: adX.cmd opened adX 0.1.0 - 14 panels, audio device open`.
+- **Simulated hardware gate:** `tools/measure_latency.py --simulate 549`: take offset 0
+  samples at 64, 256 and 1024 frames.
+- **Virtual-cable gate, 2026-10-30** (VB-Audio Virtual Cable 4.5, WASAPI shared, both
+  ends 48 kHz, set as the default devices). Not the hardware gate: no converters, and
+  the cable's ~4000-sample round trip says nothing about an interface's reported
+  latency. Plain `tools/measure_latency.py`, three runs: one PASS at 64 and eight FAILs,
+  every take late (+104 to +1048 samples) and different each run. Calibrating ten times
+  in one session showed why: the cable's round trip steps up by odd amounts (4064 →
+  4168 → 4606 at 256; 4968 → 5909 at 1024) for the first ~3.5 s, then holds, so a
+  calibration taken straight after start is stale by the time the take runs. With 5 s
+  of settling before calibrating, two rounds:
+
+  ```
+  PASS  block    64: reported   128 samples, measured  3795, take offset +0 samples (+0.000 ms)
+  PASS  block   256: reported   512 samples, measured  4015, take offset +0 samples (+0.000 ms)
+  PASS  block  1024: reported  2048 samples, measured  5984, take offset +0 samples (+0.000 ms)
+  PASS  block    64: reported   128 samples, measured  3547, take offset +0 samples (+0.000 ms)
+  PASS  block   256: reported   512 samples, measured  4764, take offset +0 samples (+0.000 ms)
+  PASS  block  1024: reported  2048 samples, measured  6290, take offset +0 samples (+0.000 ms)
+  ```
+
+  The alignment is exact against a real device clock once the path is stable. Open
+  question for the app: calibration runs whenever the user asks, possibly right after
+  the stream opens; the engine does not expose RtAudio's xrun count to Python, so a
+  shift after calibration goes unnoticed.
+- **Not observed:** CI (P8-0), and the latency gate's hardware half (P8-1), which is
+  deferred to the final review.
+
+---
+
+## 11. Corrections made while executing this plan
+
+What changed against the plan, and what the tests found:
+
+1. **Fades are within 1.5 × 1e-4 of the curve, not exact.** `clip_fade_uses_engine_curve`
+   said "exactly". A fade compiles to a line chain within `kClipGainTolerance` (1e-4) of
+   `Curve::evaluate`, by the subdivision automation already uses (phase_4.md §4.0), and
+   the error is measured at each piece's quarter points, so between them it strays up
+   to half as far again. `clip_fade_equals_gain_envelope` *is* exact: a fade and a drawn
+   gain envelope compile through the same code.
+2. **Warped transients land within 10 ms, not on the sample.** That is the tolerance
+   the warp tests hold RubberBand's offline stretcher to. RubberBand also ignores key
+   frames unless it is fed in 256-frame blocks; fed whole, the warp map is silently
+   dropped. `Stretch.cpp` feeds 256 at a time.
+3. **Stems sum to the master only with waveshapers bypassed.** `stems_sum_to_master`
+   holds within 1e-6 for every fixture in all three stem modes, sidechains and sends
+   included, but a waveshaper on a bus is nonlinear: shaper(a) + shaper(b) is not
+   shaper(a + b), and no rendering strategy fixes that. The test bypasses waveshaping
+   slots and says how many it bypassed. Compressors, limiters and gates in a stem follow
+   the full mix's gain (a second copy of the mixer shares parameter slots and keys its
+   sidechains from the full mix), so dynamics *do* sum; the stem limiter does not clip.
+4. **Lossy formats are compared above a floor.** `golden_all_formats` compares MP3's
+   spectrum within a 30 dB window at 2 dB, and OGG's within 40 dB at 1 dB. shine runs
+   +1.02 dB hot and is compensated by 8/9 in `Mp3Encoder`.
+5. **No VBR MP3.** shine (FINAL_PLAN §8) is CBR only, so §3.5's "MP3 (CBR/VBR,
+   bitrate)" is CBR at a chosen bitrate. VBR would need a different encoder.
+6. **Automation is not exported as CC.** §3.8's "CC from automation lanes where a lane
+   maps to a CC": no lane maps to a CC until MIDI learn exists (Phase 9). The exporter
+   writes notes, tempo, meter and markers, at 3840 PPQ - the engine's own - so the round
+   trip is exact (`midi_import_roundtrip`, 20 synthetic files).
+7. **Loop recording is not done.** Punch, count-in, takes on lanes and comping are; a
+   take per loop pass is not. Phase 11's performance recording reuses this machinery
+   and is the natural owner.
+8. **Comp offsets are exact only at constant tempo.** Across a tempo change a comp
+   range's source offset is approximate.
+9. **A stop cuts audio clips.** Instruments release on stop; audio regions end on the
+   next block. A short fade on stop is follow-up work.
+10. **Bundling rewrites text, not through `Patch`.** §3.7 routes path rewriting through
+    Phase 7's `Patch`. Patch diffs models, and a path is one token in the text: the
+    bundle finds each path where the format puts one (AUDIO, v1 CLIP, ZONE, VOICEBANK,
+    FROZEN, `ir=`), replaces that span, and leaves every other byte alone - which is
+    `bundle_preserves_formatting` by construction rather than by diffing.
+11. **Freeze taps the channel, not the insert.** "Render a channel's output": the render
+    is the channel's own node - instrument, volume, pan and their automation - before
+    any insert, so the inserts it feeds stay live and editable. That is what makes
+    `freeze_is_transparent` bit-identical: one region at unit rate from sample 0 is a
+    straight copy.
+12. **New format keys** (docs/adx-format-v2.md §7.1, §7.2, §7.4, §7.4.1): `SAMPLE_PATHS`,
+    `FROZEN`, a track's `out=insert.N`, and on audio items `fadein`, `fadeincurve`,
+    `fadeout`, `fadeoutcurve`, `crossfade=linear`, `edit=`, `lane=` and `WARP` lines.
+    The project's own `samples/` folder is always searched.
+13. **`BpmDetector` gained a double-time check** on top of the port; with it,
+    `bpm_detector_corpus` is within 1 % on its 20 files.
+14. **The capture drain split frames.** Found by `capture_no_alloc` under `ctest -j 8`:
+    the writer popped samples one at a time and could catch the audio thread between a
+    frame's left and right, after which every later drain was a sample out - left and
+    right swapped for the rest of the take, and its last half-frame lost. `drain` now
+    takes whole frames only.
+15. **Audio clips play a stand-in until decoded.** A clip whose file is still decoding
+    (or whose stretch is still rendering) plays silence until a later `commit` swaps the
+    real buffer in. The app commits at 60 Hz and never notices; an offline render of a
+    whole take can outrun the decoder. `record_latency_alignment` and
+    `record_punch_region` passed in Debug and failed in RelWithDebInfo and Release for
+    exactly that reason. `RenderEngine::audioPending()` (and `Engine.audio_pending`) now
+    says when a stand-in is playing, and every harness waits for it.
+16. **Slicing kept almost nothing.** The playlist's slice tool (Phase 6) rebuilt the
+    right half from the sample path: envelopes, fades, edits, warps, pitch and reverse
+    were dropped, and a stretched clip's right half started at the wrong place in the
+    audio (its offset advanced tick for tick, not through the stretch).
+    `clip::splitItem` cuts in the engine and keeps every property; envelopes are cut with
+    a breakpoint either side holding the value at the cut
+    (`clip_envelope_split_is_continuous`, `clip_split_stretched_continues_the_source`).
+    A cut *inside a fade* is not continuous - a fade cannot start part-way - and keeps
+    the fade on its own side, shortened.
+17. **`adx render` imports no Qt because the bridge no longer does.** `engine_bridge`
+    imported PySide6 for its frame clock and error signal; those moved to
+    `adx/frame_clock.py`. The CLI and the export dialog both build an
+    `adx.export_settings.ExportSettings`, so `render_cli` holds by construction and is
+    tested as byte equality. `--normalize -14LUFS` needed gluing before argparse, which
+    reads a leading dash as another option.
+18. **Punch is the selected clips' span.** The playlist has no loop region of its own
+    yet (the transport loops the whole content), so the record toolbar punches over the
+    selected clips and records on their track - or the last track when none is
+    selected. The recording input is a preference (Audio page), off by default and
+    applied at the next start, so adX opens an input only when someone asked for one.
+19. **`three_clean_builds_identical` is a full-check job.** Three clean Release builds
+    take most of an hour, so it runs with the phase tag (`.github/workflows/
+    full-check.yml`, `three-builds`), not per push. Each build regenerates every golden
+    file and must reproduce the committed ones (`git diff --exit-code tests/golden`), so
+    the three agree with each other and with the reference.
+20. **The hardware gate has a tool.** `tools/measure_latency.py` runs the calibration
+    and a click take at 64, 256 and 1024 frames on the default devices and prints one
+    line per buffer size; `--simulate N` runs the same path on an offline engine with an
+    N-frame cable, which is how the tool itself was checked (offset 0 at all three).
+21. **The playlist never drew an unpinned clip's waveform.** The drawing reads the
+    clip's rendered buffer from `ClipRenderCache`, which holds entries weakly, and a
+    worker skips a render whose entry has expired. The engine pins what it plays; the
+    geometry let go of its entry the moment it drew, so a clip the engine was not
+    playing was requested, dropped before it rendered, and requested again on every
+    rebuild - `test_playlist_audio_clip_draws_its_waveform` timed out, deterministically.
+    `PlaylistGeometry` now pins the renders it draws until the next build has its own
+    (`playlist_audio_peaks_arrive_unpinned`).
+22. **clang-tidy had never run over Phase 8.** The full pass found about 200 findings in
+    35 files - missing designated initialisers, widening multiplications, nested
+    conditionals, unchecked optionals in tests, binding registration functions over the
+    size limit (split), two destructors that could throw (now guarded). All fixed;
+    `project::audioClipOf` replaces five partial `AudioClipRef{...}` initialisers.

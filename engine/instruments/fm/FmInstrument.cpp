@@ -76,7 +76,7 @@ constexpr std::array<FmAlgorithm, kFmAlgorithms> kAlgorithms{
 
 [[nodiscard]] int algorithmNumber(const graph::VoiceRender& render) noexcept {
     return static_cast<int>(
-        std::floor(render.param(static_cast<std::uint32_t>(FmParam::Algorithm)) + 0.5F));
+        dsp::floorExact(render.param(static_cast<std::uint32_t>(FmParam::Algorithm)) + 0.5F));
 }
 
 } // namespace
@@ -155,6 +155,7 @@ bool FmInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
 
     bool alive = true;
     float carrierEnv = 0.0F;
+    dsp::MidiHz noteHzOf; // the pitch's Hz, again only when it moves
     for (std::uint32_t i = 0; i < left.size(); ++i) {
         if (!alive) {
             left[i] = 0.0F;
@@ -162,7 +163,7 @@ bool FmInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
             continue;
         }
         const float cents = i < render.pitchCents.size() ? render.pitchCents[i] : 0.0F;
-        const float noteHz = dsp::midiToHz(pitch + (cents * 0.01F));
+        const float noteHz = noteHzOf(pitch + (cents * 0.01F));
         float out = 0.0F;
         bool sounding = false;
         carrierEnv = 0.0F;
@@ -182,10 +183,10 @@ bool FmInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
             const float env = state.env[k].next(state.shape[k]);
             const float hz = fixedHz[k] > 0.0F ? fixedHz[k] : noteHz * ratio[k];
             float phase = state.phase[k] + modulation;
-            phase -= std::floor(phase);
+            phase -= dsp::floorExact(phase);
             state.output[k] = dsp::sinTurnsF(phase) * env * state.level[k];
             state.phase[k] += hz * inverseRate;
-            state.phase[k] -= std::floor(state.phase[k]);
+            state.phase[k] -= dsp::floorExact(state.phase[k]);
             if (((algo.carriers >> k) & 1U) != 0) {
                 out += state.output[k];
                 carrierEnv = std::max(carrierEnv, env);

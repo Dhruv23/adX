@@ -145,3 +145,57 @@ TEST_CASE("overwrite_ring_concurrent", "[rt][.slow]") {
     CHECK(overtaken * 10 <= reads);
     CHECK(lastSeen > 0);
 }
+
+TEST_CASE("overwrite_ring_read_from_is_gap_free", "[rt]") {
+    // A reader that drains by absolute position sees every frame exactly once while a
+    // writer runs, and is told how many it lost when it falls a whole ring behind.
+    using Ring = adx::rt::OverwriteRing<std::uint64_t, 1024>;
+    Ring ring;
+    std::uint64_t lost = 0;
+    std::array<std::uint64_t, 64> out{};
+    CHECK(ring.readFrom(0, out.data(), out.size(), lost) == 0);
+    for (std::uint64_t i = 0; i < 10; ++i) {
+        ring.write(i);
+    }
+    CHECK(ring.readFrom(4, out.data(), out.size(), lost) == 6);
+    CHECK(out[0] == 4);
+    CHECK(lost == 0);
+    for (std::uint64_t i = 10; i < 3000; ++i) {
+        ring.write(i);
+    }
+    // 0..1976 are gone (1976's slot is the next to be written); asking from 1970 loses
+    // 7 and starts at 1977.
+    CHECK(ring.readFrom(1900, out.data(), out.size(), lost) == 0);
+    CHECK(lost == 64); // all 64 asked for were already overwritten
+    CHECK(ring.readFrom(1970, out.data(), out.size(), lost) == 57);
+    CHECK(lost == 7);
+    CHECK(out[0] == 1977);
+
+    std::atomic<bool> stop{false};
+    std::thread writer([&] {
+        std::uint64_t n = 3000;
+        while (!stop.load()) {
+            for (int i = 0; i < 64; ++i) {
+                ring.write(n++);
+            }
+            std::this_thread::yield();
+        }
+    });
+    std::uint64_t cursor = ring.framesWritten();
+    std::uint64_t totalLost = 0;
+    std::uint64_t seen = 0;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(300);
+    while (std::chrono::steady_clock::now() < deadline) {
+        const std::size_t got = ring.readFrom(cursor, out.data(), out.size(), lost);
+        for (std::size_t i = 0; i < got; ++i) {
+            CHECK(out[i] == cursor + lost + i);
+        }
+        totalLost += lost;
+        cursor += lost + got;
+        seen += got;
+    }
+    stop.store(true);
+    writer.join();
+    CHECK(seen > 1000);
+    INFO("lost " << totalLost << " of " << seen + totalLost);
+}

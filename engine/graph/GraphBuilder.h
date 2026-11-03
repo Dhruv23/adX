@@ -120,16 +120,30 @@ public:
     [[nodiscard]] format::SamplePool* samplePool() const noexcept {
         return m_pool;
     }
+    /// The playlist track armed with software monitoring: it gets an audio node even
+    /// with no clips on it yet, so its input has somewhere to play (phase_8.md §3.1).
+    void setMonitorTrack(core::PlaylistTrackId track) noexcept {
+        m_monitor = track;
+    }
+    [[nodiscard]] core::PlaylistTrackId monitorTrack() const noexcept {
+        return m_monitor;
+    }
     [[nodiscard]] std::shared_ptr<Node> fader(core::InsertId id);
     [[nodiscard]] std::shared_ptr<Node> meter(core::InsertId id, bool master);
     [[nodiscard]] std::shared_ptr<Node> slot(const project::Slot& slot,
                                              const project::Resources& resources);
     [[nodiscard]] std::shared_ptr<Node> send(core::SendId id);
+    /// The node that plays a playlist track's audio clips (AudioTrackNode.h).
+    [[nodiscard]] std::shared_ptr<Node> audioTrack(core::PlaylistTrackId id);
+    /// The node a frozen channel plays through instead of its instrument.
+    [[nodiscard]] std::shared_ptr<Node> frozenChannel(core::ChannelId id);
     /// A peak controller's node (PeakControllerNode.h), remade when its config changes.
     [[nodiscard]] std::shared_ptr<Node> controller(core::ControllerId id, const PeakConfig& config);
 
     /// The node of a slot, for the UI (an EQ's spectrum tap). Null when there is none.
     [[nodiscard]] std::shared_ptr<const Node> findSlot(core::SlotId id) const;
+    /// A channel's instrument node (a hosted plugin's, for its editor). Null for none.
+    [[nodiscard]] std::shared_ptr<const Node> findChannel(core::ChannelId id) const;
     /// The meter for an insert, for the UI. Null when there is none.
     [[nodiscard]] std::shared_ptr<const MeterNode> findMeter(core::InsertId id) const;
     /// Every insert's meter, in insert-id order: what one UI frame reads (P3-7).
@@ -171,7 +185,16 @@ public:
     }
 
 private:
-    enum class Kind : std::uint8_t { Channel, Fader, Meter, Slot, Send, Controller };
+    enum class Kind : std::uint8_t {
+        Channel,
+        Fader,
+        Meter,
+        Slot,
+        Send,
+        Controller,
+        AudioTrack,
+        FrozenChannel,
+    };
     using Key = std::pair<Kind, std::uint32_t>;
 
     struct Entry {
@@ -190,6 +213,7 @@ private:
 
     PrepareInfo m_info;
     format::SamplePool* m_pool{nullptr};
+    core::PlaylistTrackId m_monitor;
     std::map<Key, Entry> m_nodes;
     std::vector<Handover> m_handovers;
     /// The insert each channel fed when its node was last handed out.
@@ -197,6 +221,34 @@ private:
     /// Removed channels still ringing, by channel id.
     std::map<std::uint32_t, Departure> m_departing;
     std::uint64_t m_created{0};
+};
+
+/// What one entry of Snapshot::audioTracks plays: a playlist track's audio clips, or a
+/// frozen channel's render (phase_8.md §3.4). Exactly one is valid.
+struct AudioSource {
+    core::PlaylistTrackId track;
+    core::ChannelId frozen;
+
+    [[nodiscard]] friend bool operator==(const AudioSource&, const AudioSource&) noexcept = default;
+};
+
+/// One stem (phase_8.md §3.5): the sources whose sound reaches the output.
+///
+/// Stems must sum to the master, and soloing a subgraph does not give that - sends,
+/// sidechains and bus processing make a soloed subgraph a different signal. So the
+/// whole graph is built as usual, and every sidechain key and peak controller hears the
+/// full mix; beside it a second copy of the mixer, sharing every parameter slot (so
+/// automation and controllers move both alike), carries only these sources to the
+/// output. Summing the stems of a partition of the sources then sums the master,
+/// wherever the processing is linear in the signal.
+struct StemSpec {
+    std::vector<core::ChannelId> channels;
+    std::vector<core::PlaylistTrackId> audioTracks;
+    /// When valid, the stem's channels play only this pattern's notes.
+    core::PatternId pattern;
+    /// When valid, no stem copy: the output is this channel's own node, before its
+    /// insert - what freezing a channel records (Freeze.h).
+    core::ChannelId tap;
 };
 
 struct GraphBuild {
@@ -209,6 +261,11 @@ struct GraphBuild {
     ParamLayout params;
     /// Event track i belongs to this channel.
     std::vector<core::ChannelId> trackChannels;
+    /// And plays only this pattern's notes, when valid: a pattern stem's copy of a
+    /// channel (StemSpec). Same length as trackChannels.
+    std::vector<core::PatternId> trackPatterns;
+    /// What audio track i plays (Snapshot::audioTracks).
+    std::vector<AudioSource> audioSources;
 
     /// True when `other` would compile to the same render graph: the same nodes,
     /// wired the same way, with the same parameter slices and latencies. When it
@@ -216,6 +273,9 @@ struct GraphBuild {
     [[nodiscard]] bool sameStructure(const GraphBuild& other) const noexcept;
 };
 
-[[nodiscard]] GraphBuild buildGraph(const project::Project& project, NodeStore& nodes);
+/// `stem`, when given, adds the stem copy, its nodes from `stemNodes`, and makes it the
+/// output.
+[[nodiscard]] GraphBuild buildGraph(const project::Project& project, NodeStore& nodes,
+                                    const StemSpec* stem = nullptr, NodeStore* stemNodes = nullptr);
 
 } // namespace adx::graph

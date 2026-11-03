@@ -29,7 +29,9 @@ target_compile_definitions(adx_engine_static PUBLIC
     # because CMake defines NDEBUG in RelWithDebInfo, which is exactly the config
     # where assertions must stay.
     $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:ADX_ASSERTIONS_ENABLED=1>
-    $<$<BOOL:${ADX_ENABLE_RT_GUARD}>:ADX_ENABLE_RT_GUARD=1>
+    # The guard's own option defaults ON under a multi-config generator (the wheel's
+    # Visual Studio build), so the config decides here: never in Release.
+    $<$<AND:$<BOOL:${ADX_ENABLE_RT_GUARD}>,$<NOT:$<CONFIG:Release,MinSizeRel>>>:ADX_ENABLE_RT_GUARD=1>
     $<$<BOOL:${ADX_ENABLE_ONNX}>:ADX_ENABLE_ONNX=1>
 )
 
@@ -51,3 +53,9 @@ add_subdirectory(preset)
 add_subdirectory(geometry)
 add_subdirectory(sync)
 add_subdirectory(script)
+add_subdirectory(clip)
+add_subdirectory(analysis)
+add_subdirectory(generate)
+add_subdirectory(record)
+add_subdirectory(midi)
+add_subdirectory(plugin)

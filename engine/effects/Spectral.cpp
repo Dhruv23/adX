@@ -103,15 +103,21 @@ void PitchShifter::shift(std::span<dsp::Complex> spectrum, std::size_t channel) 
         m_lastPhase[channel][k] = phase;
         // Less the advance a bin-centred sinusoid would make in a hop, folded to +-1/2.
         delta -= static_cast<double>(k) / kOversample;
-        delta -= std::floor(delta + 0.5);
+        delta -= dsp::floorExact(delta + 0.5);
         m_magnitude[k] = magnitudeOf(x);
         m_frequency[k] = static_cast<float>(static_cast<double>(k) + (delta * kOversample));
     }
     // Move each bin to its new place.
     m_synthMagnitude.fill(0.0F);
     m_synthFrequency.fill(0.0F);
+    if (ratio != m_targetsFor) {
+        for (std::size_t k = 0; k < kBins; ++k) {
+            m_targets[k] = static_cast<std::size_t>(std::lround(static_cast<float>(k) * ratio));
+        }
+        m_targetsFor = ratio;
+    }
     for (std::size_t k = 0; k < kBins; ++k) {
-        const auto target = static_cast<std::size_t>(std::lround(static_cast<float>(k) * ratio));
+        const std::size_t target = m_targets[k];
         if (target < kBins) {
             m_synthMagnitude[target] += m_magnitude[k];
             m_synthFrequency[target] = m_frequency[k] * ratio;
@@ -121,7 +127,7 @@ void PitchShifter::shift(std::span<dsp::Complex> spectrum, std::size_t channel) 
     for (std::size_t k = 0; k < kBins; ++k) {
         double& sum = m_sumPhase[channel][k];
         sum += static_cast<double>(m_synthFrequency[k]) / kOversample;
-        sum -= std::floor(sum);
+        sum -= dsp::floorExact(sum);
         const float magnitude = m_synthMagnitude[k];
         spectrum[k] = dsp::Complex{magnitude * static_cast<float>(dsp::cosTurns(sum)),
                                    magnitude * static_cast<float>(dsp::sinTurns(sum))};

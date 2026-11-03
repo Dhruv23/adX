@@ -16,6 +16,7 @@
 // library in tests/cpp/dsp/test_math.cpp.
 #pragma once
 
+#include <bit>
 #include <cmath>
 #include <cstdint>
 
@@ -27,11 +28,44 @@ inline constexpr double kLn2 = 0.69314718055994530942;
 inline constexpr double kLog2E = 1.44269504088896340736;
 inline constexpr double kLog2Of10 = 3.32192809488736234787;
 
+// --- exact replacements for library calls on the hot path ---------------------
+//
+// MSVC compiles std::floor and std::ldexp to calls into the C runtime, and every
+// oscillator, gain and waveshaper below goes through them per sample (phase_10.md 4.5,
+// the optimization pass). These give the same bits: floor by an integer cast for the
+// magnitudes that have a fraction at all, and a power of two built from its exponent
+// bits, by which a multiply is exact (it rounds where ldexp would, at the same place).
+
+/// std::floor, bit for bit (zeros keep their sign; integers and NaN pass through).
+[[nodiscard]] inline double floorExact(double v) noexcept {
+    if (v == 0.0 || !(v > -4503599627370496.0 && v < 4503599627370496.0)) {
+        return v; // a zero, |v| >= 2^52 (already whole), or NaN
+    }
+    const auto t = static_cast<double>(static_cast<std::int64_t>(v));
+    return t > v ? t - 1.0 : t;
+}
+
+[[nodiscard]] inline float floorExact(float v) noexcept {
+    if (v == 0.0F || !(v > -8388608.0F && v < 8388608.0F)) {
+        return v; // a zero, |v| >= 2^23, or NaN
+    }
+    const auto t = static_cast<float>(static_cast<std::int32_t>(v));
+    return t > v ? t - 1.0F : t;
+}
+
+/// 2^n for a normal exponent, from its bits.
+[[nodiscard]] inline double pow2(int n) noexcept {
+    return std::bit_cast<double>(static_cast<std::uint64_t>(n + 1023) << 52U);
+}
+[[nodiscard]] inline float pow2F(int n) noexcept {
+    return std::bit_cast<float>(static_cast<std::uint32_t>(n + 127) << 23U);
+}
+
 // --- trigonometry, in turns (1 turn = 2 pi) ---------------------------------
 
 /// sin(2 pi turns). Error below 1e-13. For coefficients.
 [[nodiscard]] inline double sinTurns(double turns) noexcept {
-    double x = turns - std::floor(turns);
+    double x = turns - floorExact(turns);
     double sign = 1.0;
     if (x >= 0.5) {
         x -= 0.5;
@@ -69,7 +103,7 @@ inline constexpr double kLog2Of10 = 3.32192809488736234787;
 /// sin(2 pi turns) in float, for per-sample oscillators. Quarter-wave reduction and an
 /// odd polynomial to z^11: error below 1e-6, under the 24-bit noise floor.
 [[nodiscard]] inline float sinTurnsF(float turns) noexcept {
-    float x = turns - std::floor(turns);
+    float x = turns - floorExact(turns);
     float sign = 1.0F;
     if (x >= 0.5F) {
         x -= 0.5F;
@@ -101,7 +135,7 @@ inline constexpr double kLog2Of10 = 3.32192809488736234787;
     } else if (x < -1000.0) {
         return 0.0;
     }
-    const double whole = std::floor(x + 0.5);
+    const double whole = floorExact(x + 0.5);
     const double y = (x - whole) * kLn2; // |y| <= ln2 / 2
     // e^y, Taylor to y^12: the first omitted term is below 3e-17.
     double poly = 1.0 / 479001600.0;
@@ -117,7 +151,7 @@ inline constexpr double kLog2Of10 = 3.32192809488736234787;
     poly = (poly * y) + 0.5;
     poly = (poly * y) + 1.0;
     poly = (poly * y) + 1.0;
-    return std::ldexp(poly, static_cast<int>(whole));
+    return poly * pow2(static_cast<int>(whole)); // whole is in [-1000, 1000]: normal
 }
 
 /// log2(x) for x > 0. Absolute error below 1e-15. Returns -1100 for x <= 0, which
@@ -221,7 +255,7 @@ inline constexpr double kLog2Of10 = 3.32192809488736234787;
     } else if (x < -126.0F) {
         return 0.0F;
     }
-    const float whole = std::floor(x + 0.5F);
+    const float whole = floorExact(x + 0.5F);
     const float y = (x - whole) * 0.69314718055994530942F;
     // e^y, Taylor to y^6 on |y| <= 0.347: first omitted term below 4e-8.
     float poly = 1.0F / 720.0F;
@@ -231,7 +265,10 @@ inline constexpr double kLog2Of10 = 3.32192809488736234787;
     poly = (poly * y) + 0.5F;
     poly = (poly * y) + 1.0F;
     poly = (poly * y) + 1.0F;
-    return std::ldexp(poly, static_cast<int>(whole));
+    const int n = static_cast<int>(whole);
+    // At 2^-126 the result can be subnormal, where flush-to-zero would make a multiply
+    // differ from ldexp: that one exponent keeps the call.
+    return n > -126 ? poly * pow2F(n) : std::ldexp(poly, n);
 }
 
 /// tanh(x) in float. Absolute error below 3e-7.
@@ -273,5 +310,43 @@ inline constexpr double kLog2Of10 = 3.32192809488736234787;
 [[nodiscard]] inline float dbToGainF(float db) noexcept {
     return exp2F(db * (3.32192809488736234787F / 20.0F));
 }
+
+/// midiToHz for a pitch read every sample, which mostly does not move: the same
+/// function on the same input, worked out again only when the pitch changes.
+class MidiHz {
+public:
+    [[nodiscard]] float operator()(float pitch) noexcept {
+        if (!m_valid || pitch != m_pitch) {
+            m_pitch = pitch;
+            m_hz = midiToHz(pitch);
+            m_valid = true;
+        }
+        return m_hz;
+    }
+
+private:
+    float m_pitch{0.0F};
+    float m_hz{0.0F};
+    bool m_valid{false};
+};
+
+/// dbToGainF for a parameter read every sample: worked out again only when the value
+/// moves. The same function on the same input, so the same float as calling it each time.
+class DbGain {
+public:
+    [[nodiscard]] float operator()(float db) noexcept {
+        if (!m_valid || db != m_db) {
+            m_db = db;
+            m_gain = dbToGainF(db);
+            m_valid = true;
+        }
+        return m_gain;
+    }
+
+private:
+    float m_db{0.0F};
+    float m_gain{1.0F};
+    bool m_valid{false};
+};
 
 } // namespace adx::dsp

@@ -21,7 +21,8 @@ from PySide6.QtWidgets import (
 from adx import engine_bridge
 from adx.panels.base import DockPanel
 from adx.panels.effect.editors import editor_for
-from adx.panels.effect.generic_editor import slot_info
+from adx.panels.effect.generic_editor import generic_for_slot, slot_info
+from adx.panels.plugins.window import PluginWindow
 from adx.selection import Kind, Selection
 from adx.session import Session
 from adx.theme.tokens import Theme
@@ -69,6 +70,15 @@ class EffectPanel(DockPanel):
             lambda on: self.session.build_and_execute("SetSlotBypass", self.slot, on)
         )
         bar.addWidget(self.bypass)
+        self.plugin_button = QPushButton("Plugin window")
+        self.plugin_button.setObjectName("effect.plugin_window")
+        self.plugin_button.setToolTip("Open the hosted plugin's own editor")
+        self.plugin_button.clicked.connect(self.open_plugin_window)
+        # Shown and hidden through its toolbar action: a widget hidden before addWidget
+        # stays disabled for good (Qt's QToolBar documents the action as the switch).
+        self.plugin_action = bar.addWidget(self.plugin_button)
+        self.plugin_action.setVisible(False)
+        self.plugin_windows: dict[int, PluginWindow] = {}
         preset = QPushButton("Load preset…")
         preset.clicked.connect(self.load_preset_dialog)
         bar.addWidget(preset)
@@ -102,7 +112,10 @@ class EffectPanel(DockPanel):
             self._shown = (0, "")
             return
         effect = str(info["type"])
-        self.name.setText(f"  insert {self.insert} · slot {self.slot}  ")
+        plugin = info.get("plugin")
+        hosted = f" · {plugin['name']}" if plugin else ""
+        self.name.setText(f"  insert {self.insert} · slot {self.slot}{hosted}  ")
+        self.plugin_action.setVisible(plugin is not None)
         self.type_box.setCurrentText(effect)
         self.mix.set_value(float(info["mix"]))
         self.bypass.set_checked(bool(info["bypass"]))
@@ -117,6 +130,29 @@ class EffectPanel(DockPanel):
             refresh = getattr(self.editor, "refresh", None)
             if refresh is not None:
                 refresh()
+
+    def open_plugin_window(self) -> PluginWindow | None:
+        """The slot's plugin in a window of its own: its editor if it has one, the
+        generic editor always (phase_9.md 4.6)."""
+        info = slot_info(self.session, self.insert, self.slot)
+        if info is None or info.get("plugin") is None:
+            return None
+        plugin = info["plugin"]
+        existing = self.plugin_windows.get(self.slot)
+        if existing is not None and existing.isVisible():
+            existing.raise_()
+            return existing
+        instance = self.session.engine.plugin_instance_of_slot(self.slot)
+        insert, slot, effect = self.insert, self.slot, str(info["type"])
+        window = PluginWindow(
+            instance,
+            str(plugin["name"]),
+            lambda: generic_for_slot(self.session, insert, slot, effect),
+            parent=self,
+        )
+        self.plugin_windows[self.slot] = window
+        window.show()
+        return window
 
     def _type_chosen(self, _index: int) -> None:
         if self.slot:

@@ -10,6 +10,10 @@ It starts adX.cmd exactly as a double-click does, with ADX_SMOKE set: the applic
 opens its window, writes a short report once it has run for a moment, and quits
 (adx/application.py). Exit status 0 means the whole application came up - every panel,
 the engine, the Qt Quick plugin - from the launcher.
+
+Then it launches adX.cmd again with the control channel (ADX_CONTROL=1) and drives it as
+an agent would (phase_10.5.md 4.3): open a project, play, capture a second of the master,
+and quit through the channel, waiting for the process to end.
 """
 
 from __future__ import annotations
@@ -58,6 +62,41 @@ def main() -> int:
     print(
         f"check_launcher: adX.cmd opened adX {facts['version']} - "
         f"{len(facts['panels'])} panels, {facts['status']}"
+    )
+    return drive()
+
+
+def drive() -> int:
+    """The launcher, driven: open, play, capture, quit."""
+    sys.path.insert(0, str(ROOT / "app"))
+    from adx.testing.driver import Driver, DriverError, _alive
+    from adx.testing.wav import read_wav
+
+    project = ROOT / "tests" / "golden" / "single_tone.adx"
+    capture = Path(tempfile.mkdtemp()) / "take.wav"
+    try:
+        app = Driver.launch(project, via="adX.cmd", null_audio=True, timeout=TIMEOUT_S)
+        with app:
+            app.wait_for("project.open", timeout=30)
+            app.trigger("transport.play")
+            app.wait_for("transport.playing", timeout=10)
+            app.capture(1.0, capture)
+            xruns = int(app.state()["audio"]["xruns"])
+        pid = app.pid
+    except DriverError as error:
+        print(f"check_launcher: driving adX.cmd failed: {error}", file=sys.stderr)
+        return 1
+    if _alive(pid):
+        print("check_launcher: the driven app did not quit", file=sys.stderr)
+        return 1
+    audio, _ = read_wav(capture)
+    peak = float(abs(audio).max()) if len(audio) else 0.0
+    if peak <= 0.0:
+        print("check_launcher: the driven capture was silent", file=sys.stderr)
+        return 1
+    print(
+        f"check_launcher: drove adX.cmd - played {project.name}, captured {len(audio)} frames "
+        f"(peak {peak:.3f}), {xruns} xrun(s), quit cleanly"
     )
     return 0
 

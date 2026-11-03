@@ -23,6 +23,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <vector>
 
@@ -65,6 +66,8 @@ struct PlaylistBuildOptions {
     std::span<const core::ItemId> selected;
     /// Where the waveforms come from; null draws audio clips as plain rectangles.
     ClipPeakCache* peaks{nullptr};
+    /// The engine's rate: what the clips' rendered buffers are at (ClipRenderCache).
+    std::uint32_t renderRate{48000};
 };
 
 /// One track's place in world space.
@@ -172,6 +175,11 @@ private:
     std::vector<VisibleClip> m_visible;
     bool m_pending{false};
     std::size_t m_detailed{0};
+    std::uint32_t m_renderRate{48000};
+    /// The rendered clips the drawing reads, kept alive between builds: the render cache
+    /// holds entries weakly, and an unpinned render is dropped before it runs.
+    std::vector<std::shared_ptr<const void>> m_renderPins;
+    std::vector<std::shared_ptr<const void>> m_nextPins;
 };
 
 } // namespace adx::geometry

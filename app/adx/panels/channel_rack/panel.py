@@ -121,6 +121,7 @@ class ChannelRackPanel(DockPanel):
         self.pattern_box.activated.connect(lambda _i: self.refresh())
         bar.addWidget(self.pattern_box)
         add_pattern = bar.addAction("+ Pattern")
+        bar.widgetForAction(add_pattern).setObjectName("channel_rack.add_pattern")
         add_pattern.triggered.connect(self.add_pattern)
         bar.addSeparator()
         self.steps_box = QComboBox()
@@ -144,6 +145,7 @@ class ChannelRackPanel(DockPanel):
         self.instrument_box.setToolTip("Instrument for a new channel")
         bar.addWidget(self.instrument_box)
         add = bar.addAction("+ Channel")
+        bar.widgetForAction(add).setObjectName("channel_rack.add_channel")
         add.triggered.connect(self.add_channel)
         return bar
 

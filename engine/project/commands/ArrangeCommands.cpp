@@ -177,6 +177,7 @@ void SetPlaylistTrack::apply(Project& project) {
                        ? m_value.group
                        : core::PlaylistTrackId{};
     track->collapsed = m_value.collapsed;
+    track->output = m_value.output;
 }
 
 void SetPlaylistTrack::revert(Project& project) {

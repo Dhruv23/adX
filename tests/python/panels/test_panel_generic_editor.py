@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QWidget
 
 from adx import engine_bridge
 from adx.mainwindow import MainWindow
-from adx.panels.params import format_value, make_control, widget_kind
+from adx.panels.params import GenericEditor, format_value, make_control, widget_kind
 from adx.widgets.combo import ParamCombo
 from adx.widgets.fader import ValueFader
 from adx.widgets.knob import Knob
@@ -30,11 +30,9 @@ def value_params(entry: dict[str, Any]) -> set[str]:
 
 
 def shown(panel: QWidget) -> set[str]:
-    return {
-        w.objectName().removeprefix("param:")
-        for w in panel.findChildren(QWidget)
-        if w.objectName().startswith("param:")
-    }
+    """The parameter names the panel's editors show (each control is named after its full
+    path, ``param:insert.1.slot.2.feedback``, for the control channel)."""
+    return {name for editor in panel.findChildren(GenericEditor) for name in editor.controls}
 
 
 def test_generic_editor_covers_all_instruments(studio: MainWindow) -> None:
@@ -69,9 +67,9 @@ def test_a_control_turns_its_parameter(studio: MainWindow) -> None:
     slot = int(studio.project.mixer_info()["inserts"][0]["slots"][-1]["id"])
     studio.effect.show_slot(master, slot)
     controls = {w.objectName(): w for w in studio.effect.findChildren(QWidget) if w.objectName()}
-    feedback = controls["param:feedback"]
-    path = str(feedback.property("paramPath"))
-    assert path == f"insert.{master}.slot.{slot}.feedback"
+    path = f"insert.{master}.slot.{slot}.feedback"
+    feedback = controls[f"param:{path}"]
+    assert str(feedback.property("paramPath")) == path
     depth = studio.project.undo_depth()
     user_press(studio)  # the press on the control
     for value in (0.2, 0.3, 0.4):
@@ -123,3 +121,33 @@ def test_generic_editor_units(
         assert isinstance(widget, ParamCombo)
         assert widget.currentText() == text
     widget.deleteLater()
+
+
+def test_knob_holds_an_out_of_range_value(qapp: object) -> None:
+    # Airwindows Consolidated reports defaults like 3e32 for its unused slots; drawing
+    # that arc raised OverflowError in paintEvent and stopped the app on its dialog.
+    knob = Knob(0.0, 1.0, value=3.1e32)
+    assert knob.value == 1.0
+    assert knob.fraction() == 1.0
+    knob.resize(48, 56)
+    knob.grab()
+    knob.deleteLater()
+
+
+def test_plugin_descriptor_defaults_stay_in_range(monkeypatch: pytest.MonkeyPatch) -> None:
+    from adx.panels.effect import generic_editor
+
+    params = [
+        {"key": k, "name": k, "min": 0.0, "max": 1.0, "default": d, "steps": 0, "hidden": False}
+        for k, d in (("big", 3.1e32), ("low", -2.0), ("nan", float("nan")), ("ok", 0.25))
+    ]
+    monkeypatch.setattr(
+        engine_bridge.Plugins, "describe", staticmethod(lambda *_: {"params": params})
+    )
+    got = generic_editor.plugin_descriptors({"uid": "u", "path": "p"}, "clap")
+    assert {d["name"]: d["default"] for d in got} == {
+        "big": 1.0,
+        "low": 0.0,
+        "nan": 0.0,
+        "ok": 0.25,
+    }

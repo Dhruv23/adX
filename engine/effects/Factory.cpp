@@ -15,6 +15,8 @@
 #include "engine/effects/Ported.h"
 #include "engine/effects/Spectral.h"
 #include "engine/effects/Vocal.h"
+#include "engine/plugin/PluginNode.h"
+#include "engine/project/PluginRef.h"
 #include "engine/project/TypeCatalog.h"
 
 namespace adx::effects {
@@ -127,6 +129,9 @@ std::shared_ptr<graph::SlotNode> makeEffect(std::string_view type) {
 
 std::shared_ptr<graph::SlotNode> makeEffect(const project::Slot& slot,
                                             const project::Resources* resources) {
+    if (project::isPluginType(slot.type)) {
+        return std::make_shared<plugin::PluginEffect>(slot.type, slot.plugin);
+    }
     if (slot.type == "Convolution") {
         auto node = std::make_shared<Convolution>();
         configureConvolution(*node, slot, resources);
@@ -144,6 +149,11 @@ bool configMatches(const graph::SlotNode& node, const project::Slot& slot,
     if (node.typeName() != canonicalType(slot.type)) {
         return false;
     }
+    if (const auto* hosted = dynamic_cast<const plugin::PluginEffect*>(&node)) {
+        // The same plugin, hosted the same way. Its state is the live instance's own and
+        // not a reason to reload it.
+        return hosted->core().matches(slot.type, slot.plugin);
+    }
     if (const auto* lookahead = dynamic_cast<const LookaheadEffect*>(&node)) {
         return lookahead->lookaheadMs() == lookaheadOf(slot);
     }
@@ -154,6 +164,12 @@ bool configMatches(const graph::SlotNode& node, const project::Slot& slot,
 }
 
 std::shared_ptr<graph::SlotNode> clone(const graph::SlotNode& effect) {
+    if (const auto* hosted = dynamic_cast<const plugin::PluginEffect*>(&effect)) {
+        auto fresh =
+            std::make_shared<plugin::PluginEffect>(hosted->typeName(), project::PluginRef{});
+        hosted->core().copyConfigTo(fresh->core());
+        return fresh;
+    }
     std::shared_ptr<graph::SlotNode> fresh = makeEffect(effect.typeName());
     if (const auto* source = dynamic_cast<const Effect*>(&effect)) {
         if (auto* target = dynamic_cast<Effect*>(fresh.get())) {
@@ -169,6 +185,12 @@ std::shared_ptr<graph::SlotNode> clone(const graph::SlotNode& effect) {
 }
 
 std::string_view canonicalType(std::string_view type) noexcept {
+    if (type == "clap") {
+        return "clap";
+    }
+    if (type == "vst3") {
+        return "vst3";
+    }
     const project::TypeInfo* info = project::findEffectType(type);
     return info != nullptr ? info->name : std::string_view{};
 }

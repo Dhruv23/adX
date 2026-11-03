@@ -1,0 +1,10 @@
+adX
+
+The licence for adX's own source has not been chosen yet. Until it is, no licence is
+granted beyond what the licences of the components below require.
+
+This build links the Rubber Band Library, which is licensed under the GNU General Public
+License, version 2 or later. A binary that includes it, as this one does, may only be
+distributed under the GPL (version 2 or later), with its source available on the same
+terms. The other components and their licences are listed in THIRD-PARTY.md, installed
+beside this file.

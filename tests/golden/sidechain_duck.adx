@@ -1,0 +1,63 @@
+[PROJECT]
+ADX_VERSION=2
+TITLE="Golden: sidechain ducking, sends, master dynamics"
+
+[TEMPO]
+0:0:0 124
+
+[CHANNEL Kick]
+INSTRUMENT=drumsynth
+OUTPUT=insert.2
+
+[CHANNEL Pad]
+OUTPUT=insert.3
+VOLUME=0.8
+
+[CHANNEL Bass]
+OUTPUT=insert.3
+
+[PATTERN Beat]
+LENGTH=1:0:0
+NOTES Kick
+  C2 0:0:0 0:0:960 120
+  C2 0:1:0 0:0:960 120
+  C2 0:2:0 0:0:960 120
+  C2 0:3:0 0:0:960 120
+
+[PATTERN Chords]
+LENGTH=2:0:0
+NOTES Pad
+  C4 0:0:0 1:0:0 90
+  E4 0:0:0 1:0:0 90
+  G4 0:0:0 1:0:0 90
+  A3 1:0:0 1:0:0 90
+  C4 1:0:0 1:0:0 90
+  E4 1:0:0 1:0:0 90
+NOTES Bass
+  C2 0:0:0 0:2:0 100
+  A1 1:0:0 0:2:0 100
+
+[PLAYLIST]
+TRACK 1 name="Drums"
+  PATTERN Beat 0:0:0
+  PATTERN Beat 1:0:0
+  PATTERN Beat 2:0:0
+  PATTERN Beat 3:0:0
+TRACK 2 name="Music"
+  PATTERN Chords 0:0:0
+  PATTERN Chords 2:0:0
+
+[MIXER]
+INSERT 1 name="Master"
+  SLOT 1 Compressor threshold=-12 ratio=3 attack=2 release=80
+  SLOT 2 Limiter ceiling=-1
+INSERT 2 name="Kick"
+  SEND 1 insert.4 level=0.15
+INSERT 3 name="Music"
+  SLOT 3 Compressor threshold=-30 ratio=8 attack=1 release=120 keyInput=1 sidechain=insert.2
+  SEND 2 insert.4 level=0.4
+INSERT 4 name="Verb"
+  SLOT 4 Reverb mix=1 room=0.7
+ROUTE insert.2 -> insert.1
+ROUTE insert.3 -> insert.1
+ROUTE insert.4 -> insert.1

@@ -197,6 +197,9 @@ public:
     [[nodiscard]] std::string_view typeName() const noexcept override {
         return "Compressor";
     }
+    [[nodiscard]] bool canFollowKey() const noexcept override {
+        return true;
+    }
 
 protected:
     void prepareEffect(const graph::PrepareInfo& info) override;
@@ -254,6 +257,9 @@ public:
     [[nodiscard]] std::string_view typeName() const noexcept override {
         return "Limiter";
     }
+    [[nodiscard]] bool canFollowKey() const noexcept override {
+        return true;
+    }
 
 protected:
     void prepareEffect(const graph::PrepareInfo& info) override;
@@ -290,6 +296,9 @@ class Gate final : public LookaheadEffect {
 public:
     [[nodiscard]] std::string_view typeName() const noexcept override {
         return "Gate";
+    }
+    [[nodiscard]] bool canFollowKey() const noexcept override {
+        return true;
     }
 
 protected:

@@ -96,6 +96,24 @@ void appendIfChanged(std::string& out, std::string_view key, bool value, bool fa
     out += formatBool(value);
 }
 
+/// `fadein=<duration>` and, when it is not a straight line, `fadeincurve=<curve>`.
+void appendFade(std::string& out, std::string_view key, const project::ClipFade& fade,
+                const core::TempoMap& tempo) {
+    if (fade.length.value <= 0) {
+        return;
+    }
+    out += ' ';
+    out += key;
+    out += '=';
+    out += formatDuration(fade.length, tempo);
+    if (!(fade.curve == core::Curve{})) {
+        out += ' ';
+        out += key;
+        out += "curve=";
+        out += formatCurve(fade.curve);
+    }
+}
+
 /// Residue belonging to one section, re-emitted verbatim at the end of it.
 void emitResidue(Emitter& emitter, const project::Project& project, std::string_view type,
                  std::string_view name) {
@@ -124,6 +142,14 @@ void writeProjectSection(Emitter& emitter, const Project& project) {
     }
     if (!project.meta.created.empty()) {
         emitter.line(keyValue("CREATED", quoteAlways(project.meta.created)));
+    }
+    if (!project.resources.searchPaths.empty()) {
+        std::string joined;
+        for (const std::string& path : project.resources.searchPaths) {
+            joined += joined.empty() ? "" : ";";
+            joined += path;
+        }
+        emitter.line(keyValue("SAMPLE_PATHS", quoteAlways(joined)));
     }
     emitter.line(keyValue("TUNING", formatDouble(project.meta.tuning)));
     if (project.meta.loopEnabled) {
@@ -168,10 +194,25 @@ std::string formatZone(const Project& project, const project::SampleZone& zone) 
 void writeChannel(Emitter& emitter, const Project& project, const project::Channel& channel) {
     emitter.section("[CHANNEL " + channel.name + "]");
     emitter.line(keyValue("INSTRUMENT", channel.instrument.type));
+    if (const project::PluginRef& plugin = channel.instrument.plugin; !plugin.empty()) {
+        emitter.line(keyValue("PLUGIN", quoteAlways(plugin.uid)));
+        if (!plugin.name.empty()) {
+            emitter.line(keyValue("PLUGIN_NAME", quoteAlways(plugin.name)));
+        }
+        if (!plugin.path.empty()) {
+            emitter.line(keyValue("PLUGIN_PATH", quoteAlways(plugin.path)));
+        }
+        if (plugin.isolated) {
+            emitter.line(keyValue("PLUGIN_ISOLATED", formatBool(true)));
+        }
+    }
     if (!channel.instrument.voicebank.empty()) {
         emitter.line(keyValue("VOICEBANK", quoteAlways(channel.instrument.voicebank)));
     }
     emitter.line(keyValue("OUTPUT", "insert." + std::to_string(channel.output.value)));
+    if (!channel.frozen.empty()) {
+        emitter.line(keyValue("FROZEN", quoteAlways(channel.frozen)));
+    }
     emitter.line(keyValue("POLYPHONY", std::to_string(channel.maxPolyphony)));
     if (channel.stealMode != project::VoiceStealMode::OldestReleased) {
         emitter.line(keyValue("STEAL", project::toString(channel.stealMode)));
@@ -214,6 +255,12 @@ void writeChannel(Emitter& emitter, const Project& project, const project::Chann
         text += " gate=";
         text += formatFloat(channel.arp.gate);
         emitter.line(text);
+    }
+
+    // Last, on a line of its own: the opaque remainder never sits between lines a
+    // reader diffs (phase_9.md §4.7).
+    if (!channel.instrument.plugin.state.empty()) {
+        emitter.line(keyValue("STATE", quoteAlways("base64:" + channel.instrument.plugin.state)));
     }
 
     emitResidue(emitter, project, "CHANNEL", channel.name);
@@ -381,17 +428,47 @@ void writePlaylistItem(Emitter& emitter, const Project& project,
         text += " offset=";
         text += formatDuration(item.sourceOffset, project.tempo);
     }
-    if (const auto* audio = std::get_if<project::AudioClipRef>(&item.content)) {
+    const auto* audio = std::get_if<project::AudioClipRef>(&item.content);
+    if (audio != nullptr) {
         appendIfChanged(text, "stretch", audio->stretch, 1.0F);
         appendIfChanged(text, "pitch", audio->pitchSemitones, 0.0F);
         appendIfChanged(text, "reverse", audio->reverse, false);
+        appendFade(text, "fadein", audio->fadeIn, project.tempo);
+        appendFade(text, "fadeout", audio->fadeOut, project.tempo);
+        if (audio->crossfade == project::CrossfadeKind::Linear) {
+            text += " crossfade=linear";
+        }
+        if (!audio->edits.empty()) {
+            text += " edit=";
+            for (const project::ClipEdit& edit : audio->edits) {
+                if (&edit != audio->edits.data()) {
+                    text += ',';
+                }
+                text += project::toString(edit.kind);
+                if (edit.kind != project::EditKind::Reverse &&
+                    edit.kind != project::EditKind::RemoveDc) {
+                    text += ':';
+                    text += formatFloat(edit.amount);
+                }
+            }
+        }
     }
     appendIfChanged(text, "mute", item.muted, false);
+    if (item.lane != 0) {
+        text += " lane=";
+        text += std::to_string(item.lane);
+    }
     emitter.indented(1, text);
 
     if (lane != nullptr) {
         writeBreakpoints(emitter, project, lane->points, 2);
         return;
+    }
+    if (audio != nullptr) {
+        for (const project::WarpMarker& marker : audio->warps) {
+            emitter.indented(2, "WARP " + formatDouble(marker.source) + ' ' +
+                                    formatDuration(marker.at, project.tempo));
+        }
     }
     for (const project::ClipEnvelope& envelope : item.envelopes) {
         std::string target;
@@ -430,6 +507,10 @@ void writeTracks(Emitter& emitter, const Project& project,
             text += std::to_string(track.group.value);
         }
         appendIfChanged(text, "collapsed", track.collapsed, false);
+        if (track.output.valid() && track.output != project.mixer.master) {
+            text += " out=insert.";
+            text += std::to_string(track.output.value);
+        }
         if (!(track.color == project::kDefaultColor)) {
             text += " color=";
             text += formatColor(track.color);
@@ -539,6 +620,18 @@ void writeMixer(Emitter& emitter, const Project& project) {
             if (const project::SampleRef* impulse = project.resources.find(slot.impulse)) {
                 body += " ir=" + quoteAlways(impulse->path);
             }
+            if (!slot.plugin.empty()) {
+                body += " plugin=" + quoteAlways(slot.plugin.uid);
+                if (!slot.plugin.name.empty()) {
+                    body += " name=" + quoteAlways(slot.plugin.name);
+                }
+                if (!slot.plugin.path.empty()) {
+                    body += " path=" + quoteAlways(slot.plugin.path);
+                }
+                if (slot.plugin.isolated) {
+                    body += " isolated=yes";
+                }
+            }
             for (const project::SlotParam& param : slot.params) {
                 body += ' ';
                 body += param.name;
@@ -546,6 +639,10 @@ void writeMixer(Emitter& emitter, const Project& project) {
                 body += formatDouble(param.value);
             }
             emitter.indented(1, body);
+            if (!slot.plugin.state.empty()) {
+                // Quoted: base64's '=' padding would otherwise read as a key=value.
+                emitter.indented(2, "STATE " + quoteAlways("base64:" + slot.plugin.state));
+            }
         }
         for (const project::Send& send : insert.sends) {
             std::string body = "SEND " + std::to_string(send.id.value) + " insert." +
@@ -560,6 +657,83 @@ void writeMixer(Emitter& emitter, const Project& project) {
                      std::to_string(route.to.value));
     }
     emitResidue(emitter, project, "MIXER", "");
+}
+
+/// "1,2,10" for a channel mask; empty when every channel passes.
+std::string formatChannels(std::uint16_t mask) {
+    if (mask == 0xFFFF) {
+        return {};
+    }
+    std::string out;
+    for (unsigned c = 0; c < 16; ++c) {
+        if ((mask & (1U << c)) != 0) {
+            out += (out.empty() ? "" : ",") + std::to_string(c + 1);
+        }
+    }
+    return out;
+}
+
+void writeMidi(Emitter& emitter, const Project& project) {
+    if (project.midi.empty()) {
+        return;
+    }
+    emitter.section("[MIDI]");
+    for (const project::MidiRouteSetting& route : project.midi.routes) {
+        const project::Channel* channel = project.find(route.target);
+        if (channel == nullptr) {
+            continue; // the channel is gone, and so is its route
+        }
+        std::string text = "ROUTE " + quoteIfNeeded(channel->name);
+        if (!route.device.empty()) {
+            text += " device=" + quoteAlways(route.device);
+        }
+        if (const std::string channels = formatChannels(route.channels); !channels.empty()) {
+            text += " channels=" + channels;
+        }
+        if (route.keyLow != 0 || route.keyHigh != 127) {
+            text += " keys=" + std::to_string(route.keyLow) + ".." + std::to_string(route.keyHigh);
+        }
+        if (route.velocityLow != 1 || route.velocityHigh != 127) {
+            text += " vel=" + std::to_string(route.velocityLow) + ".." +
+                    std::to_string(route.velocityHigh);
+        }
+        if (route.transpose != 0) {
+            text += " transpose=" + std::to_string(route.transpose);
+        }
+        if (route.curve != 0.0F) {
+            text += " curve=" + formatFloat(route.curve);
+        }
+        emitter.line(text);
+    }
+    for (const project::MidiBinding& binding : project.midi.bindings) {
+        // Through the ref, so a renamed channel's binding is written with its new name;
+        // the spelling the file had when the target no longer exists.
+        std::string path = binding.target.valid()
+                               ? project::ParamRegistry::pathOf(binding.target, project)
+                               : std::string{};
+        if (path.empty()) {
+            path = binding.targetPath;
+        }
+        std::string text = std::string("LEARN ") + project::toString(binding.kind) + " " +
+                           std::to_string(binding.number) + " " + path;
+        if (binding.channel != project::kAnyMidiChannel) {
+            text += " channel=" + std::to_string(binding.channel + 1);
+        }
+        if (!binding.device.empty()) {
+            text += " device=" + quoteAlways(binding.device);
+        }
+        if (binding.minimum != 0.0F) {
+            text += " min=" + formatFloat(binding.minimum);
+        }
+        if (binding.maximum != 1.0F) {
+            text += " max=" + formatFloat(binding.maximum);
+        }
+        if (binding.toggle) {
+            text += " toggle=yes";
+        }
+        emitter.line(text);
+    }
+    emitResidue(emitter, project, "MIDI", "");
 }
 
 void writeMarkers(Emitter& emitter, const Project& project) {
@@ -617,6 +791,7 @@ std::string write(const Project& project, const WriteOptions& options) {
     for (const project::Controller& controller : project.controllers) {
         writeController(emitter, project, controller);
     }
+    writeMidi(emitter, project);
     writeMarkers(emitter, project);
     writeUnknownSections(emitter, project);
 

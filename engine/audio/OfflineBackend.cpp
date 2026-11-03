@@ -94,6 +94,9 @@ std::span<const float> OfflineBackend::renderFrames(std::uint64_t frames) {
     const auto totalSamples =
         static_cast<std::size_t>(frames) * static_cast<std::size_t>(m_config.outputChannels);
     m_rendered.assign(totalSamples, 0.0F);
+    if (m_loopback) {
+        m_history.reserve(m_history.size() + totalSamples);
+    }
 
     // The calling thread *is* the audio thread for the duration of a render.
     rt::registerAudioThread();
@@ -110,6 +113,21 @@ std::span<const float> OfflineBackend::renderFrames(std::uint64_t frames) {
         time.streamSeconds =
             static_cast<double>(time.streamFrames) / static_cast<double>(m_config.sampleRate);
 
+        if (m_loopback && !m_input.empty()) {
+            // Output frame (now - delay) arrives at the input now.
+            const std::uint32_t inChannels = m_config.inputChannels;
+            const std::uint32_t outChannels = m_config.outputChannels;
+            for (std::uint32_t f = 0; f < thisBlock; ++f) {
+                const auto now = static_cast<std::int64_t>(m_framesRendered + done + f);
+                const std::int64_t from = now - m_loopbackDelay;
+                for (std::uint32_t c = 0; c < inChannels; ++c) {
+                    const std::size_t source = (static_cast<std::size_t>(from) * outChannels) +
+                                               std::min(c, outChannels - 1);
+                    m_input[(static_cast<std::size_t>(f) * inChannels) + c] =
+                        from >= 0 && source < m_history.size() ? m_history[source] : 0.0F;
+                }
+            }
+        }
         const float* input = m_input.empty() ? nullptr : m_input.data();
         m_callback(m_user, m_block.data(), input, thisBlock, time);
         m_callbackCount.fetch_add(1, std::memory_order_relaxed);
@@ -118,6 +136,10 @@ std::span<const float> OfflineBackend::renderFrames(std::uint64_t frames) {
             static_cast<std::size_t>(thisBlock) * static_cast<std::size_t>(m_config.outputChannels);
         std::copy_n(m_block.begin(), produced,
                     m_rendered.begin() + static_cast<std::ptrdiff_t>(writeOffset));
+        if (m_loopback) {
+            m_history.insert(m_history.end(), m_block.begin(),
+                             m_block.begin() + static_cast<std::ptrdiff_t>(produced));
+        }
         writeOffset += produced;
         done += thisBlock;
     }
@@ -125,6 +147,11 @@ std::span<const float> OfflineBackend::renderFrames(std::uint64_t frames) {
     rt::unregisterAudioThread();
     m_framesRendered += frames;
     return m_rendered;
+}
+
+void OfflineBackend::setLoopback(std::uint32_t delayFrames) {
+    m_loopback = true;
+    m_loopbackDelay = delayFrames;
 }
 
 StreamInfo OfflineBackend::info() const noexcept {

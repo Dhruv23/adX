@@ -15,6 +15,8 @@
 #include "engine/instruments/va/VaInstrument.h"
 #include "engine/instruments/voice/VoiceSetup.h"
 #include "engine/instruments/wavetable/WavetableSetup.h"
+#include "engine/plugin/PluginInstrument.h"
+#include "engine/project/PluginRef.h"
 #include "engine/project/TypeCatalog.h"
 
 namespace adx::instruments {
@@ -60,6 +62,10 @@ std::shared_ptr<graph::ChannelNode> makeInstrument(std::string_view type, std::u
 
 std::shared_ptr<graph::ChannelNode> makeInstrument(const project::Channel& channel,
                                                    const InstrumentContext& context) {
+    if (project::isPluginType(channel.instrument.type)) {
+        return std::make_shared<plugin::PluginInstrument>(channel.id.value, channel.instrument.type,
+                                                          channel.instrument.plugin);
+    }
     std::shared_ptr<graph::ChannelNode> node = makeInstrument(
         channel.instrument.type, channel.id.value, channel.maxPolyphony, channel.stealMode);
     if (auto* sampler = dynamic_cast<ZoneSet*>(node.get())) {
@@ -76,6 +82,10 @@ std::shared_ptr<graph::ChannelNode> makeInstrument(const project::Channel& chann
 
 bool configMatches(const graph::ChannelNode& node, const project::Channel& channel,
                    const InstrumentContext& context) {
+    if (const auto* hosted = dynamic_cast<const plugin::PluginInstrument*>(&node)) {
+        // The plugin keeps its own voices: polyphony and stealing are not its node's.
+        return hosted->core().matches(channel.instrument.type, channel.instrument.plugin);
+    }
     if (node.maxPolyphony() != std::max<std::uint16_t>(channel.maxPolyphony, 1) ||
         node.stealMode() != channel.stealMode ||
         node.typeName() != canonicalType(channel.instrument.type)) {
@@ -94,6 +104,12 @@ bool configMatches(const graph::ChannelNode& node, const project::Channel& chann
 }
 
 std::string_view canonicalType(std::string_view type) noexcept {
+    if (type == "clap") {
+        return "clap";
+    }
+    if (type == "vst3") {
+        return "vst3";
+    }
     const project::TypeInfo* info = project::findInstrumentType(type);
     return info != nullptr ? info->name : std::string_view{};
 }

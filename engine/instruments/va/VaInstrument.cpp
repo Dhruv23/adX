@@ -15,7 +15,7 @@ using P = VaParam;
 }
 
 [[nodiscard]] int stepped(const graph::VoiceRender& render, P param, std::uint32_t frame) noexcept {
-    return static_cast<int>(std::floor(render.paramAt(idx(param), frame) + 0.5F));
+    return static_cast<int>(dsp::floorExact(render.paramAt(idx(param), frame) + 0.5F));
 }
 
 [[nodiscard]] dsp::OscShape waveOf(int wave) noexcept {
@@ -115,8 +115,8 @@ void VaInstrument::startVoice(graph::Voice& voice, const graph::BlockEvent& /*ev
     // step; a fixed spread, so the same note sounds the same every time.
     for (std::uint32_t u = 0; u < kVaMaxUnison; ++u) {
         const float phase = static_cast<float>(u) * 0.618034F;
-        state.osc1[u].reset(phase - std::floor(phase));
-        state.osc2[u].reset((phase * 0.5F) - std::floor(phase * 0.5F));
+        state.osc1[u].reset(phase - dsp::floorExact(phase));
+        state.osc2[u].reset((phase * 0.5F) - dsp::floorExact(phase * 0.5F));
     }
     state.sub.reset(0.0F);
     state.noise.reseed(voiceSeed(voice));
@@ -140,7 +140,7 @@ void VaInstrument::startVoice(graph::Voice& voice, const graph::BlockEvent& /*ev
             state.lfo[l].reset(0.0F);
         } else {
             const double cycles = seconds * static_cast<double>(render.param(idx(rateParam)));
-            state.lfo[l].reset(static_cast<float>(cycles - std::floor(cycles)));
+            state.lfo[l].reset(static_cast<float>(cycles - dsp::floorExact(cycles)));
         }
     }
     state.ampEnv.reset();
@@ -184,6 +184,8 @@ bool VaInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
 
     bool alive = true;
     float env = state.ampEnv.level();
+    dsp::MidiHz hz1Of; // the pitch's Hz, again only when it moves
+    dsp::MidiHz hz2Of; // the pitch's Hz, again only when it moves
     for (std::uint32_t i = 0; i < left.size(); ++i) {
         if (!alive) {
             left[i] = 0.0F;
@@ -227,8 +229,8 @@ bool VaInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
         // --- sources --------------------------------------------------------------
         const float cents = i < render.pitchCents.size() ? render.pitchCents[i] : 0.0F;
         const float note = pitch + (cents * 0.01F) + pitchMod;
-        const float base1 = dsp::midiToHz(note + offset1) * inverseRate;
-        const float base2 = dsp::midiToHz(note + offset2) * inverseRate;
+        const float base1 = hz1Of(note + offset1) * inverseRate;
+        const float base2 = hz2Of(note + offset2) * inverseRate;
         const float level1 = render.paramAt(idx(P::Osc1Level), i);
         const float level2 = render.paramAt(idx(P::Osc2Level), i);
         const float width1 =

@@ -62,7 +62,7 @@ void Resampler::prepare(double inputRate, double outputRate) {
 }
 
 std::size_t Resampler::outputLength(std::size_t inputLength) const noexcept {
-    return static_cast<std::size_t>(std::floor((static_cast<double>(inputLength) * m_ratio) + 0.5));
+    return static_cast<std::size_t>(floorExact((static_cast<double>(inputLength) * m_ratio) + 0.5));
 }
 
 void Resampler::process(std::span<const float> in, std::span<float> out) const noexcept {
@@ -70,7 +70,7 @@ void Resampler::process(std::span<const float> in, std::span<float> out) const n
     const auto inputLength = static_cast<std::ptrdiff_t>(in.size());
     for (std::size_t n = 0; n < out.size(); ++n) {
         const double position = static_cast<double>(n) / m_ratio;
-        const double whole = std::floor(position);
+        const double whole = floorExact(position);
         const double fraction = position - whole;
         const double phasePosition = fraction * static_cast<double>(kPhases);
         const auto phase = static_cast<std::size_t>(phasePosition);

@@ -62,7 +62,7 @@ class Knob(QWidget):
         self.formatter = formatter
         #: Drawn with a ring in this colour when the parameter is automated.
         self.automation_color: str | None = None
-        self._value = value
+        self._value = max(minimum, min(maximum, value))
         self._drag_y: float | None = None
         self._theme: Theme = DARK
         self.setMinimumSize(36, 44)
@@ -89,8 +89,10 @@ class Knob(QWidget):
         if self.maximum <= self.minimum:
             return 0.0
         if self.logarithmic:
-            return math.log(self._value / self.minimum) / math.log(self.maximum / self.minimum)
-        return (self._value - self.minimum) / (self.maximum - self.minimum)
+            f = math.log(self._value / self.minimum) / math.log(self.maximum / self.minimum)
+        else:
+            f = (self._value - self.minimum) / (self.maximum - self.minimum)
+        return max(0.0, min(1.0, f))
 
     def value_at(self, fraction: float) -> float:
         """The value at an arc position."""

@@ -21,6 +21,7 @@ from adx import engine_bridge
 from adx.engine_bridge import PPQ, IdArray, Native, NoteArray, Project
 from adx.panels.piano_roll import scales
 from adx.panels.piano_roll.view_state import ViewState
+from adx.patterns import fitted_length, pattern_id
 
 #: Lane kinds, in engine/geometry/PianoRollGeometry.h's LaneKind order.
 LANES: tuple[str, ...] = ("Velocity", "Pan", "Cutoff", "Resonance", "Fine pitch", "Release")
@@ -251,7 +252,9 @@ class RollModel:
         update: NoteArray | None = None,
         add: NoteArray | None = None,
     ) -> None:
-        """One EditNotes command: the shape of most gestures."""
+        """One EditNotes command: the shape of most gestures. A note drawn or moved past
+        the pattern's end lengthens the pattern to the next bar line, in the same undo
+        step, so a long part can be written in the piano roll at all."""
         empty_ids = np.zeros(0, dtype=np.uint32)
         command = engine_bridge.commands.edit_notes(
             self.pattern,
@@ -261,7 +264,26 @@ class RollModel:
             engine_bridge.empty_notes() if add is None else add,
             label,
         )
-        self.commit(command)
+        needed = fitted_length(
+            self.project, self.pattern, [a for a in (update, add) if a is not None]
+        )
+        if needed is None:
+            self.commit(command)
+            return
+        self.project.begin_group(label)
+        try:
+            self.project.execute(command)
+            self.project.execute(
+                engine_bridge.commands.build(
+                    "SetPatternLength", pattern_id(self.project, self.pattern), needed
+                )
+            )
+        finally:
+            self.project.end_group()
+        self.commands += 1
+        self.invalidate()
+        if self.on_commit is not None:
+            self.on_commit()
 
     def new_notes(
         self, starts: list[int], lengths: list[int], pitches: list[int], velocity: int = 100

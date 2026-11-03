@@ -22,7 +22,11 @@ class PreferencesDialog(QDialog):
     """Edits a copy; :attr:`result_preferences` is it after OK."""
 
     def __init__(
-        self, prefs: Preferences, latency_ms: float, parent: QWidget | None = None
+        self,
+        prefs: Preferences,
+        latency_ms: float,
+        parent: QWidget | None = None,
+        midi_inputs: list[str] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Preferences")
@@ -32,7 +36,7 @@ class PreferencesDialog(QDialog):
         self.tabs = QTabWidget()
         self.pages: list[Page] = [
             AudioPage(self.prefs, latency_ms),
-            MidiPage(self.prefs),
+            MidiPage(self.prefs, midi_inputs),
             PathsPage(self.prefs),
             AppearancePage(self.prefs),
             EditingPage(self.prefs),

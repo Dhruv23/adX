@@ -39,6 +39,10 @@ public:
     [[nodiscard]] virtual std::string_view typeName() const noexcept {
         return {};
     }
+    [[nodiscard]] std::string_view profileName() const noexcept override {
+        const std::string_view name = typeName();
+        return name.empty() ? std::string_view{"slot"} : name;
+    }
     void reset() noexcept override;
     [[nodiscard]] PortSpec ports() const noexcept override;
 
@@ -51,6 +55,21 @@ public:
     /// True once the old node will not be touched again. Any thread.
     [[nodiscard]] bool handoverDone() const noexcept {
         return m_handover.done.load(std::memory_order_acquire);
+    }
+
+    /// A dynamics effect - its output its input times a gain computed from a key - that
+    /// can take the key from its sidechain port instead of its own input. What a stem's
+    /// copy of the mixer uses so its compressors and limiters apply the *full mix's* gain
+    /// to the stem, which is what makes stems sum through them (GraphBuilder.h).
+    [[nodiscard]] virtual bool canFollowKey() const noexcept {
+        return false;
+    }
+    /// Main thread, before the node is first published.
+    void setFollowKey(bool follow) noexcept {
+        m_followKey = follow;
+    }
+    [[nodiscard]] bool followsKey() const noexcept {
+        return m_followKey;
     }
 
 protected:
@@ -70,6 +89,7 @@ private:
 
     RememberedParams m_last;
     HandoverState<SlotNode> m_handover;
+    bool m_followKey{false};
 };
 
 } // namespace adx::graph

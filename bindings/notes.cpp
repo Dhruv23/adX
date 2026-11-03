@@ -299,7 +299,13 @@ void defineNoteAccess(py::class_<ProjectHandle>& project) {
             [](const ProjectHandle& handle, std::int64_t ticks) {
                 return handle.project.tempo.secondsAt(core::Ticks{ticks});
             }, // GIL: trivial
-            py::arg("ticks"));
+            py::arg("ticks"))
+        .def(
+            "ticks_at_seconds",
+            [](const ProjectHandle& handle, double seconds) {
+                return handle.project.tempo.ticksAtSeconds(seconds).value;
+            }, // GIL: trivial
+            py::arg("seconds"), "seconds_at's inverse: the tick that sounds `seconds` in.");
 }
 
 // NOLINTBEGIN(bugprone-exception-escape) - a builder throws std::invalid_argument for an

@@ -54,7 +54,8 @@ void Effect::reset() noexcept {
 }
 
 graph::PortSpec Effect::ports() const noexcept {
-    return graph::PortSpec{.inputs = static_cast<std::uint8_t>(usesSidechain() ? 2 : 1),
+    return graph::PortSpec{.inputs =
+                               static_cast<std::uint8_t>(usesSidechain() || followsKey() ? 2 : 1),
                            .outputs = 1,
                            .acceptsEvents = false};
 }
@@ -104,6 +105,7 @@ void Effect::processSlot(graph::ProcessContext& context) noexcept {
             .arena = &context.arena,
             .sideLeft = hasSide ? context.inputs[2] : silence,
             .sideRight = hasSide ? context.inputs[3] : silence,
+            .followKey = followsKey(),
             .clock = m_clock,
         };
         processWet(inLeft, inRight, outLeft, outRight, effect);

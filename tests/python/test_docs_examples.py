@@ -79,3 +79,63 @@ def test_scripting_doc_blocks_run(repo_root: pathlib.Path) -> None:
             exec(compile(block, f"docs/scripting.md block {number}", "exec"), namespace)
         except Exception as error:
             pytest.fail(f"docs/scripting.md block {number} failed: {error!r}\n{block}")
+
+
+@pytest.mark.usefixtures("qapp")
+def test_user_guide_python_blocks_run(repo_root: pathlib.Path) -> None:
+    """docs/user-guide.md's scripts, in order, on a fresh project (phase_10.md 4.7)."""
+    from adx.scripting import api
+
+    blocks = python_blocks(repo_root / "docs" / "user-guide.md")
+    assert len(blocks) >= 2
+    api.new()
+    namespace: dict[str, object] = {"adx": api}
+    for number, block in enumerate(blocks, start=1):
+        try:
+            exec(compile(block, f"docs/user-guide.md block {number}", "exec"), namespace)
+        except Exception as error:
+            pytest.fail(f"docs/user-guide.md block {number} failed: {error!r}\n{block}")
+
+
+def test_user_guide_commands_run(repo_root: pathlib.Path) -> None:
+    """Every ``$ adx`` line in the guide runs from the repository root and exits as the
+    guide says: 0, except ``diff`` of two different projects, which is 1."""
+    import shlex
+    import subprocess
+    import sys
+
+    text = (repo_root / "docs" / "user-guide.md").read_text(encoding="utf-8")
+    commands = [
+        line[2:]
+        for block in re.findall(r"```console\n(.*?)```", text, flags=re.S)
+        for line in block.splitlines()
+        if line.startswith("$ adx ")
+    ]
+    assert len(commands) >= 6
+    (repo_root / "build" / "guide").mkdir(parents=True, exist_ok=True)
+    for command in commands:
+        words = shlex.split(command)[1:]
+        run = subprocess.run(
+            [sys.executable, "-m", "adx", *words],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=300,
+        )
+        expected = 1 if words[0] == "diff" else 0
+        assert run.returncode == expected, f"{command}: {run.stderr}"
+
+
+def test_keyboard_page_is_current(repo_root: pathlib.Path) -> None:
+    import subprocess
+    import sys
+
+    run = subprocess.run(
+        [sys.executable, str(repo_root / "tools" / "gen_keyboard.py"), "--check"],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert run.returncode == 0, run.stderr

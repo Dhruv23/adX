@@ -225,6 +225,7 @@ void registerProjectBindings(py::module_& m) {
     adx::bindings::defineNoteAccess(project);
     adx::bindings::defineStructureAccess(project);
     adx::bindings::defineSession(project);
+    defineMidiSettings(project);
 }
 
 namespace {

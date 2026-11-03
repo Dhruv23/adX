@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -20,6 +21,7 @@
 #include "bindings/Bindings.h"
 #include "bindings/PendingCommand.h"
 #include "bindings/ProjectHandle.h"
+#include "engine/clip/ClipEdit.h"
 #include "engine/preset/Preset.h"
 #include "engine/preset/PresetLibrary.h"
 #include "engine/project/TypeCatalog.h"
@@ -380,9 +382,49 @@ void defineDuplication(py::class_<ProjectHandle>& project) {
             "Replace a slot's effect with a fresh one of `type`, keeping its place.");
 }
 
+/// Slice: one placement into two, keeping every property (clip::splitItem).
+void defineSplit(py::class_<ProjectHandle>& project) {
+    project.def(
+        "split_item",
+        [](ProjectHandle& handle, std::uint32_t track, std::uint32_t item, std::int64_t at,
+           std::int64_t length) -> std::optional<std::uint32_t> {
+            const py::gil_scoped_release released;
+            const project::PlaylistTrack* owner =
+                handle.project.playlist.find(core::PlaylistTrackId{track});
+            if (owner == nullptr) {
+                return std::nullopt;
+            }
+            const auto match =
+                std::ranges::find(owner->items, core::ItemId{item}, &project::PlaylistItem::id);
+            if (match == owner->items.end()) {
+                return std::nullopt;
+            }
+            const std::optional<adx::clip::SplitItem> halves =
+                adx::clip::splitItem(handle.project, *match, core::Ticks{length}, core::Ticks{at});
+            if (!halves) {
+                return std::nullopt;
+            }
+            core::ItemId created;
+            grouped(handle, "Slice clip", [&] {
+                run(handle, std::make_unique<project::SetPlaylistItem>(
+                                core::PlaylistTrackId{track}, core::ItemId{item}, halves->left,
+                                core::PlaylistTrackId{track}));
+                created = run(handle, std::make_unique<project::AddPlaylistItem>(
+                                          core::PlaylistTrackId{track}, halves->right))
+                              ->created();
+            });
+            return created.value;
+        },
+        py::arg("track"), py::arg("item"), py::arg("at"), py::arg("length"),
+        "Cut a placement in two at `at` (ticks; `length` is its length as the playlist "
+        "shows it), keeping every property on both halves: one undo step. The new "
+        "item's id, or None when `at` is not inside it.");
+}
+
 } // namespace
 
 void defineSession(py::class_<ProjectHandle>& project) {
+    defineSplit(project);
     project
         // GIL: trivial - opens a transaction
         .def(
@@ -424,7 +466,7 @@ void defineSession(py::class_<ProjectHandle>& project) {
                     project::PlaylistItem item;
                     item.start = core::Ticks{std::max<std::int64_t>(0, start)};
                     item.length = core::Ticks{std::max<std::int64_t>(0, length)};
-                    item.content = project::AudioClipRef{.sample = sample->created()};
+                    item.content = project::audioClipOf(sample->created());
                     created = run(handle, std::make_unique<project::AddPlaylistItem>(
                                               core::PlaylistTrackId{track}, item))
                                   ->created();

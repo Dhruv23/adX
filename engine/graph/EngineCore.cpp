@@ -1,7 +1,10 @@
 #include "engine/graph/EngineCore.h"
 
 #include <algorithm>
+#include <chrono>
+#include <utility>
 
+#include "engine/record/InputCapture.h"
 #include "engine/rt/Violation.h"
 
 namespace adx::graph {
@@ -25,6 +28,11 @@ void EngineCore::install(project::Snapshot* snapshot) noexcept {
         static_cast<void>(m_reaper.retire(m_current->lifetime));
     }
     m_current = snapshot;
+    // The project's routes when it has any; otherwise every input plays the selected
+    // channel. Swapped here, between blocks, with the snapshot that owns them.
+    m_router.setRoutes(snapshot->midiRoutes.empty() ? std::span<const midi::MidiRoute>(m_routes)
+                                                    : snapshot->midiRoutes);
+    m_toggled.fill(false);
     // The arrangement follows the snapshot's tempo map. When the map really changed,
     // the source keeps its musical position and invalidates the cursors itself.
     m_transport.arrangement().bindTempo(snapshot->tempo, snapshot->sampleRate);
@@ -86,11 +94,18 @@ void EngineCore::drain() noexcept {
                 message.flag, message.tickA,
                 static_cast<std::uint32_t>(std::max<std::int64_t>(message.tickB, 1)));
             break;
+        case MessageKind::Ping:
+            m_pingAt = message.tickA;
+            m_pingLevel = message.value;
+            break;
+        case MessageKind::MidiTarget:
+            m_routes[0].target = static_cast<std::uint32_t>(message.tickA);
+            break;
         }
     }
 }
 
-void EngineCore::process(float* out, std::uint32_t frames, std::uint32_t channels,
+void EngineCore::process(float* out, const float* in, std::uint32_t frames, std::uint32_t channels,
                          rt::BlockArena& arena) noexcept {
     drain();
     if (m_current == nullptr) {
@@ -105,8 +120,14 @@ void EngineCore::process(float* out, std::uint32_t frames, std::uint32_t channel
         }
         return;
     }
-    m_scheduler.setAudition(m_audition.beginBlock(frames));
-    m_scheduler.render(*m_current, m_transport, arena, out, frames, channels);
+    m_scheduler.setAudition(gatherLive(m_audition.beginBlock(frames), frames));
+    m_scheduler.render(*m_current, m_transport, arena, out, frames, channels, in, m_inputChannels);
+    // The input belongs where this block started: the scheduler noted the arrangement's
+    // position after the block's seek and play requests applied.
+    if (record::InputCapture* capture = m_capture.load(std::memory_order_acquire)) {
+        capture->capture(in, frames, m_inputChannels, m_scheduler.blockStart(),
+                         m_scheduler.blockRolling());
+    }
     // The click is the device's, not the mix's: after the graph, so it never reaches a
     // meter or a bounce. Positions are read after the render, which applied this block's
     // play, seek and loop requests; the block's start is its end less what it played. A
@@ -123,12 +144,108 @@ void EngineCore::process(float* out, std::uint32_t frames, std::uint32_t channel
                                     .value
                               : toTicks;
     m_metronome.mix(arrangement, fromTicks, toTicks, fromSamples, out, frames, channels);
+    if (m_pingAt >= 0 && arrangement.rolling()) {
+        const std::int64_t offset = m_pingAt - m_scheduler.blockStart();
+        if (offset >= 0 && std::cmp_less(offset, frames)) {
+            for (std::uint32_t c = 0; c < channels; ++c) {
+                out[(static_cast<std::size_t>(offset) * channels) + c] += m_pingLevel;
+            }
+            m_pingAt = -1;
+        }
+    }
 }
 
-void EngineCore::processStep(void* user, float* out, const float* /*in*/, std::uint32_t frames,
-                             std::uint32_t channels, const audio::StreamTime& /*time*/,
+void EngineCore::learn(const midi::MidiEvent& event) noexcept {
+    midi::ControlMessage control;
+    if (!midi::controlOf(event, control)) {
+        return;
+    }
+    m_lastControl.publish(control);
+    if (m_current == nullptr) {
+        return;
+    }
+    const std::span<const midi::CompiledBinding> bindings = m_current->midiBindings;
+    for (std::size_t b = 0; b < bindings.size(); ++b) {
+        const midi::CompiledBinding& binding = bindings[b];
+        if (!midi::matches(binding, control)) {
+            continue;
+        }
+        bool unused = false;
+        bool& toggled = b < m_toggled.size() ? m_toggled.at(b) : unused;
+        float value = 0.0F;
+        if (!midi::valueFor(binding, control, toggled, value)) {
+            continue;
+        }
+        // As a knob turn: this block hears it. The main thread is told, so the project
+        // (and the knob on screen) follows.
+        const std::uint32_t index = m_current->findParam(binding.target);
+        if (index < m_current->params.size()) {
+            m_current->params[index] = value;
+            if (index < m_current->paramBase.size()) {
+                m_current->paramBase[index] = value;
+            }
+            static_cast<void>(
+                m_learned.tryPush(midi::LearnedValue{.target = binding.target, .value = value}));
+        }
+    }
+}
+
+std::span<const AuditionEvent> EngineCore::gatherLive(std::span<const AuditionEvent> auditions,
+                                                      std::uint32_t frames) noexcept {
+    std::size_t count = std::min(auditions.size(), m_live.size());
+    std::copy_n(auditions.begin(), count, m_live.begin());
+    std::array<midi::RoutedEvent, midi::MidiRouter::kMaxFanOut> routed{};
+    for (std::atomic<midi::MidiInput*> const& slot : m_midiInputs) {
+        midi::MidiInput* input = slot.load(std::memory_order_acquire);
+        if (input == nullptr) {
+            continue;
+        }
+        const std::size_t got = input->drain(m_streamFrames, frames, m_midiScratch);
+        for (std::size_t i = 0; i < got; ++i) {
+            const midi::BlockMidi& incoming = m_midiScratch.at(i);
+            learn(incoming.event);
+            const std::size_t fanned = m_router.route(incoming.event, routed);
+            for (std::size_t r = 0; r < fanned; ++r) {
+                const midi::MidiEvent& event = routed.at(r).event;
+                if (routed.at(r).target == kNone || (!event.isNoteOn() && !event.isNoteOff())) {
+                    continue; // controllers and bend: MIDI learn's, later
+                }
+                if (count >= m_live.size()) {
+                    m_liveOverflow.fetch_add(1, std::memory_order_acq_rel);
+                    continue;
+                }
+                const bool on = event.isNoteOn();
+                m_live.at(count++) = AuditionEvent{
+                    .channel = routed.at(r).target,
+                    .event =
+                        BlockEvent{.offset = incoming.offset,
+                                   .noteId = liveNoteId(event.device, event.channel(), event.data1),
+                                   .instance = 0,
+                                   .timeSource = kAuditionSource,
+                                   .endTick = 0,
+                                   .value = 0.0F,
+                                   .duration = 0,
+                                   .kind = on ? BlockEventKind::NoteOn : BlockEventKind::NoteOff,
+                                   .pitch = event.data1,
+                                   .velocity = on ? event.data2 : std::uint8_t{0}}};
+            }
+        }
+    }
+    return {m_live.data(), count};
+}
+
+void EngineCore::processStep(void* user, float* out, const float* in, std::uint32_t frames,
+                             std::uint32_t channels, const audio::StreamTime& time,
                              rt::BlockArena& arena) noexcept {
-    static_cast<EngineCore*>(user)->process(out, frames, channels, arena);
+    auto* core = static_cast<EngineCore*>(user);
+    // Where this block is in wall time, for the MIDI inputs (MidiInput.h). steady_clock
+    // is a register read on Windows (CallbackCore.cpp).
+    core->m_streamFrames = time.streamFrames;
+    core->m_midiClock.publish(time.streamFrames,
+                              std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                  std::chrono::steady_clock::now().time_since_epoch())
+                                  .count());
+    core->process(out, in, frames, channels, arena);
 }
 
 project::Snapshot* EngineCore::detach() noexcept {

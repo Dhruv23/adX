@@ -10,7 +10,9 @@
 
 #include <cstdint>
 #include <span>
+#include <string_view>
 
+#include "engine/graph/AudioRegion.h"
 #include "engine/graph/PortSpec.h"
 #include "engine/rt/BlockArena.h"
 #include "engine/transport/TimeSource.h"
@@ -21,6 +23,9 @@ struct PrepareInfo {
     std::uint32_t sampleRate{48000};
     /// The largest `frames` process() will ever see. Size history buffers from this.
     std::uint32_t maxBlockFrames{2048};
+    /// An offline render: no device is waiting, so a node that waits on something
+    /// outside the process (a sandboxed plugin) may wait as long as it takes.
+    bool offline{false};
 };
 
 /// What an instrument is told to do, at a sample offset within this call.
@@ -98,6 +103,14 @@ struct ProcessContext {
     /// The project's tuning as an offset from A4 = 440 Hz, in cents. Instruments get it
     /// through ChannelNode's per-voice pitch; nothing else needs to read it.
     float tuningCents{0.0F};
+    /// An audio track's clips, sorted by start (AudioRegion.h). Empty for every other
+    /// node.
+    std::span<const AudioRegion> regions{};
+    /// The device input, interleaved `inputChannels` wide, for the one audio track being
+    /// monitored through its insert (phase_8.md §3.1, software monitoring). Empty for
+    /// every other node.
+    std::span<const float> input{};
+    std::uint32_t inputChannels{0};
 };
 
 /// Parameter `index` at frame `frame` of this call: the automated value when there is
@@ -148,6 +161,12 @@ public:
     [[nodiscard]] virtual bool modulation(float& out) const noexcept {
         static_cast<void>(out);
         return false;
+    }
+
+    /// What the node profiler files this node's time under (bench/profile_nodes.py): an
+    /// effect or instrument type, else the graph's plumbing. A static string.
+    [[nodiscard]] virtual std::string_view profileName() const noexcept {
+        return "graph";
     }
 };
 

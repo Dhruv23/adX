@@ -15,6 +15,7 @@
 #include "engine/core/Ids.h"
 #include "engine/core/Rational.h"
 #include "engine/project/Color.h"
+#include "engine/project/PluginRef.h"
 #include "engine/project/SampleZone.h"
 #include "engine/project/VoiceStealMode.h"
 
@@ -52,6 +53,9 @@ struct InstrumentSpec {
     /// the project like a sample. Only a path - a project never carries a bank, whose
     /// licence usually forbids redistributing it. Empty for every other type.
     std::string voicebank;
+    /// The hosted plugin of a `clap` or `vst3` instrument (phase_9.md §4.7); empty
+    /// otherwise.
+    PluginRef plugin;
 
     [[nodiscard]] const ParamValue* find(std::string_view name) const noexcept;
     [[nodiscard]] ParamValue* find(std::string_view name) noexcept;
@@ -107,6 +111,12 @@ struct Channel {
     float volume{1.0F};
     float pan{0.0F};
     float pitchOffsetCents{0.0F};
+
+    /// Frozen (phase_8.md §3.4): the channel's own output, rendered once to this file
+    /// (relative to the project, like a sample) and played instead of its instrument.
+    /// Everything else about the channel is kept, so unfreezing is clearing this.
+    /// Empty when the channel is live.
+    std::string frozen;
 
     [[nodiscard]] friend bool operator==(const Channel&, const Channel&) noexcept = default;
 };

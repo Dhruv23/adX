@@ -3,10 +3,13 @@
 # and only on purpose.
 docs/examples/c418_demo.adx 1586dba1eb11596ea8d93f407f77c83e
 docs/examples/example.adx 6602fb5b224e7a1a5044a72317c42c95
-docs/examples/stakillaz_demo.adx 2ac2fb22fda038d0f4aac545d1e56d9b
+docs/examples/stakillaz_demo.adx 2f8863bbc4c648b09418f937a19cffbb
 docs/examples/suffocation.adx 06477321ef2fc1e18045dfb38da9c0a3
 tests/golden/chord_steal.adx 3f6c03a9146c83e2834328450f0a9108
+tests/golden/genre_c418_seed1.adx f5c87b6c8abc7517dedf3f9a031c2403
+tests/golden/genre_stakillaz_seed1.adx cc1879e992d98a84355ceaf0f89ad761
 tests/golden/placements_automation.adx 09f31fe1423b4797e3dafe3753c77049
 tests/golden/routing_sends.adx 80c09ddc8f7cdfc47c13233762825626
+tests/golden/sidechain_duck.adx 53836ceae4e2cb6342c624ae21be9973
 tests/golden/single_tone.adx ea408551981e787b5323c0dd65389cf9
 tests/golden/tempo_ramp.adx f4937fecfc46251d93fc72b4bec0ebb1

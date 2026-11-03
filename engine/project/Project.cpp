@@ -86,6 +86,33 @@ bool clipTargetFromString(std::string_view name, ClipTarget& out) noexcept {
     return true;
 }
 
+const char* toString(EditKind kind) noexcept {
+    switch (kind) {
+    case EditKind::Reverse:
+        return "reverse";
+    case EditKind::Normalize:
+        return "normalize";
+    case EditKind::RemoveDc:
+        return "dc";
+    case EditKind::Gain:
+        return "gain";
+    case EditKind::TrimSilence:
+        return "trim";
+    }
+    return "";
+}
+
+bool editKindFromString(std::string_view name, EditKind& out) noexcept {
+    for (const EditKind kind : {EditKind::Reverse, EditKind::Normalize, EditKind::RemoveDc,
+                                EditKind::Gain, EditKind::TrimSilence}) {
+        if (name == toString(kind)) {
+            out = kind;
+            return true;
+        }
+    }
+    return false;
+}
+
 const PlaylistTrack* Playlist::find(core::PlaylistTrackId id) const noexcept {
     return findById(tracks, id);
 }

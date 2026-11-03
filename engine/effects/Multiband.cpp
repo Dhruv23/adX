@@ -57,9 +57,10 @@ void MultibandComp::resetEffect() noexcept {
 }
 
 void MultibandComp::refresh(const EffectContext& context, std::uint32_t frame) noexcept {
-    m_bands = static_cast<std::size_t>(std::clamp(
-        static_cast<int>(std::floor(context.paramAt(idx(MultibandParam::Bands), frame) + 0.5F)), 3,
-        static_cast<int>(kMaxBands)));
+    m_bands = static_cast<std::size_t>(
+        std::clamp(static_cast<int>(
+                       dsp::floorExact(context.paramAt(idx(MultibandParam::Bands), frame) + 0.5F)),
+                   3, static_cast<int>(kMaxBands)));
     const double limit = 0.45 * context.sampleRate;
     double previous = 10.0;
     for (std::size_t x = 0; x + 1 < m_bands; ++x) {

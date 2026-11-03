@@ -163,6 +163,24 @@ private:
     core::InsertId m_previous;
 };
 
+/// Freezes a channel to a rendered file, or (with an empty path) thaws it. The file is
+/// written before this runs (Freeze.h); the command only points the channel at it.
+class SetChannelFrozen final : public Command {
+public:
+    SetChannelFrozen(core::ChannelId id, std::string path);
+
+    void apply(Project& project) override;
+    void revert(Project& project) override;
+    [[nodiscard]] std::string_view name() const noexcept override;
+    [[nodiscard]] CommandId kind() const noexcept override;
+    [[nodiscard]] DirtyMask dirty() const noexcept override;
+
+private:
+    core::ChannelId m_id;
+    std::string m_path;
+    std::string m_previous;
+};
+
 class SetInstrumentType final : public Command {
 public:
     SetInstrumentType(core::ChannelId id, std::string type);

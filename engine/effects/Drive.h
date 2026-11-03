@@ -19,6 +19,7 @@
 #include <array>
 #include <cstdint>
 
+#include "engine/dsp/Math.h"
 #include "engine/dsp/Oversampler.h"
 #include "engine/dsp/SvFilter.h"
 #include "engine/effects/Effect.h"
@@ -89,6 +90,8 @@ private:
     std::array<float, 2> m_dcOut{};
     float m_dcPole{0.9995F};
     SaturationModel m_model{SaturationModel::Tube};
+    dsp::DbGain m_driveGain;
+    dsp::DbGain m_outputGain;
 };
 
 class Overdrive final : public Effect {
@@ -117,6 +120,8 @@ private:
     std::array<AdaaClip, 2> m_clip{};
     dsp::SvfCoefficients m_tightCoefficients{};
     dsp::SvfCoefficients m_toneCoefficients{};
+    dsp::DbGain m_driveGain;
+    dsp::DbGain m_levelGain;
     OverdriveMode m_mode{OverdriveMode::Soft};
     OverdriveMode m_from{OverdriveMode::Soft};
     /// 1 when settled on m_mode; climbs from 0 over 5 ms after a change.

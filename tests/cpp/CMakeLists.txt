@@ -32,6 +32,8 @@ adx_add_cpp_test(adx_tests
         rt/test_block_arena.cpp
         rt/test_reaper.cpp
         rt/test_stream_silence.cpp
+        rt/test_wasapi_exclusive.cpp
+        audio/test_capture.cpp
         project/test_time.cpp
         project/test_tempomap.cpp
         project/test_curve.cpp
@@ -46,6 +48,7 @@ adx_add_cpp_test(adx_tests
         geometry/test_peak_cache.cpp
         geometry/bench_piano_roll.cpp
         geometry/test_phase6_geometry.cpp
+        geometry/test_analyzers.cpp
         format/test_lexer.cpp
         format/test_diagnostics.cpp
         format/test_roundtrip.cpp
@@ -87,6 +90,28 @@ adx_add_cpp_test(adx_tests
         sync/test_incremental.cpp
         render/test_snapshot.cpp
         render/test_phase6_engine.cpp
+        clip/ClipFixtures.cpp
+        clip/test_audio_clips.cpp
+        clip/test_clip_edits.cpp
+        render/test_export.cpp
+        render/test_bundle.cpp
+        render/test_golden_formats.cpp
+        midi/test_midi.cpp
+        analysis/test_analysis.cpp
+        analysis/test_harmony.cpp
+        analysis/test_timbre_cleaner.cpp
+        analysis/test_melody.cpp
+        generate/test_generate.cpp
+        record/test_record.cpp
+        midi/test_midi_device.cpp
+        midi/test_learn.cpp
+        plugin/PluginFixtures.cpp
+        plugin/test_protocol.cpp
+        plugin/test_cache.cpp
+        plugin/test_parammap.cpp
+        plugin/test_scanner.cpp
+        plugin/test_watchdog.cpp
+        plugin/test_plugin_render.cpp
 )
 
 # The corpus in docs/examples/ is a permanent parser regression fixture
@@ -94,3 +119,18 @@ adx_add_cpp_test(adx_tests
 # Both are found relative to the source tree rather than the build tree, because the
 # test binary is run from wherever ctest happens to put it.
 target_compile_definitions(adx_tests PRIVATE ADX_REPO_ROOT="${CMAKE_SOURCE_DIR}")
+
+# Phase 9: the sandbox child and the fixture plugins the plugin tests drive
+# (phase_9.md §4.8). Built before the tests, found by absolute path.
+add_subdirectory(${CMAKE_SOURCE_DIR}/tests/fixtures/plugins ${CMAKE_BINARY_DIR}/fixtures/plugins)
+add_dependencies(adx_tests adx_plugin_host adx_test_plugin_clap adx_test_plugin_vst3)
+target_compile_definitions(adx_tests PRIVATE
+    ADX_PLUGIN_HOST_EXE="$<TARGET_FILE:adx_plugin_host>"
+    ADX_TEST_PLUGIN_CLAP="$<TARGET_FILE:adx_test_plugin_clap>"
+    ADX_TEST_PLUGIN_VST3="$<TARGET_FILE:adx_test_plugin_vst3>")
+
+# With ADX_ENABLE_ONNX the runtime DLL has to sit beside the test binary, and before
+# test discovery runs it, so it is copied at configure time rather than after the link.
+if(ADX_ENABLE_ONNX)
+    file(COPY "${ADX_ONNX_RUNTIME_DLL}" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+endif()

@@ -18,16 +18,37 @@ Error fromRtAudio(RtAudioErrorType code, std::string_view context) {
 
 } // namespace
 
-RtAudioBackend::RtAudioBackend() {
+RtAudioBackend::RtAudioBackend(AudioApi api) {
     // RtAudio's constructor probes the system. It throws on some platforms in older
     // versions and reports through a callback in 6.x; either way, a machine with no
     // audio subsystem at all must leave this object usable-but-empty rather than
     // taking the process down, because enumerate() is called from the UI.
+    //
+    // Named, never left to RtAudio: its own default is the first compiled API in its
+    // list, and ASIO comes before WASAPI there - compiling ASIO in would otherwise move
+    // every user to it.
+    RtAudio::Api chosen = RtAudio::UNSPECIFIED;
+#if defined(_WIN32)
+    chosen =
+        api == AudioApi::Asio && asioCompiled() ? RtAudio::WINDOWS_ASIO : RtAudio::WINDOWS_WASAPI;
+#else
+    static_cast<void>(api);
+#endif
     try {
-        m_rtaudio = std::make_unique<RtAudio>();
+        m_rtaudio = std::make_unique<RtAudio>(chosen);
     } catch (...) {
         m_rtaudio.reset();
     }
+}
+
+bool RtAudioBackend::asioCompiled() noexcept {
+    std::vector<RtAudio::Api> apis;
+    RtAudio::getCompiledApi(apis);
+    return std::ranges::find(apis, RtAudio::WINDOWS_ASIO) != apis.end();
+}
+
+std::string RtAudioBackend::apiName() const {
+    return m_rtaudio ? RtAudio::getApiDisplayName(m_rtaudio->getCurrentApi()) : std::string{};
 }
 
 RtAudioBackend::~RtAudioBackend() {

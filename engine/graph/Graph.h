@@ -28,6 +28,8 @@ struct GraphNode {
     /// slots and fader reads as one hop, not five.
     std::string label;
     std::uint32_t eventTrack{kNone};
+    /// Index into the snapshot's audio tracks, or kNone.
+    std::uint32_t audioTrack{kNone};
     std::uint32_t timeSource{0};
     std::uint32_t paramBase{0};
     std::uint32_t paramCount{0};

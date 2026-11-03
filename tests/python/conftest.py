@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import pathlib
 import random
+import tempfile
 from collections.abc import Iterator
 
 import pytest
@@ -12,6 +13,11 @@ import pytest
 # Widget and Qt Quick tests run without a display unless a test asks for the GPU (and
 # runs itself in a subprocess). Set before PySide6 creates the application.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# The plugin host's scan cache: one of the suite's own, never the user's (phase_9.md 4.2).
+os.environ.setdefault(
+    "ADX_PLUGIN_CACHE",
+    str(pathlib.Path(tempfile.gettempdir()) / f"adx-pytest-{os.getpid()}" / "plugin-cache.json"),
+)
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 

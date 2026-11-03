@@ -1,6 +1,6 @@
 """A stereo level meter: RMS bars, peak lines, a falling peak hold.
 
-Fed from the 60 Hz frame (engine_bridge.FrameClock.levels): it reads numbers it is
+Fed from the 60 Hz frame (frame_clock.FrameClock.levels): it reads numbers it is
 given and never calls the engine itself.
 """
 

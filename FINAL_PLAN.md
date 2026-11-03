@@ -122,7 +122,7 @@ frame, total.
 adX/
 ├── FINAL_PLAN.md              ← this file; the source of truth
 ├── README.md                  ← build/run instructions (created in Phase 0)
-├── plans/                     ← per-phase execution plans, phase_0..phase_11 (§9)
+├── plans/                     ← per-phase execution plans, phase_0..phase_19 (§9)
 ├── engine/                    ← C++20 static lib. No Qt. No Python. No UI.
 │   ├── core/                  ids, time, tempo map, fixed-capacity containers
 │   ├── rt/                    lock-free queues, arenas, RT-safety assertions
@@ -417,6 +417,26 @@ recording that captures a live session back into the arrangement as ordinary
 playlist items · tempo nudge and tap tempo · live mini-notation patterns as
 launchable clips, which is where this joins §5.8 rather than duplicating it.
 
+### 5.12 Sound library (added 2026-10-25)
+The instruments, kits and chains that make adX useful on first launch, built
+only from adX's own engine and redistributable data.
+
+- **Rack presets** (`.adxrack`: layers, insert chain, sends, macros) with up to 8 macros each.
+- **Per-voice modulation** (mod matrix, mod and pitch envelopes, tempo-synced LFOs, mono/legato).
+- **A `physical` instrument**: plucked and bowed strings, modal bars/bells/pans, blown tubes.
+- **New DrumSynth models** (808 cowbell, cymbal, rim, clave, shaker, conga).
+- **New effects:** clipper, shaper, resonant filter, resonator, OTT, volume
+  shaper, ensemble, tape, FDN hall with shimmer, rotary, pitch correction.
+- **Sampler keyswitches, release triggers and dynamics crossfades**, plus SFZ, SF2 and DLS import.
+- **A General MIDI player** (`gm`) that plays SF2/DLS banks by program number.
+- **A pinned, licence-checked sample-library store** (CC0 VSCO 2 CE and VCSL,
+  Salamander, Iowa MIS fetch-only; ≤ 100 GB).
+- **Pack tooling:** multisample rendering, the Kick Lab, wavetable and IR
+  generators, audition and the loudness window.
+- **Seven packs:** Core Drums & Machines, Hyperpop, Hardcore, Classical
+  (orchestra and band), Ambient, Breakcore/Jungle/DnB, and Phonk + Vocal.
+  Every preset has a golden hash and a human listening verdict.
+
 ---
 
 ## 6. The `.adx` format, v2
@@ -463,7 +483,9 @@ Phase 2 deliverable.
 
 ## 7. Roadmap
 
-Twelve phases, 0 through 11. Every phase ends in something runnable and tested;
+Twenty-one phases: 0 through 19, plus 10.5 (added 2026-11-01). 0–11 build the DAW,
+10.5 makes every software check agent-runnable (§9), and 12–19 (added 2026-10-25)
+build its sound library (§5.12) on top. Every phase ends in something runnable and tested;
 no phase is a pure refactor with nothing to show. Phase numbering is the order
 of execution.
 
@@ -580,7 +602,9 @@ automation, state persistence). CLAP host. MIDI input, routing, MIDI learn,
 clock sync. ASIO.
 **Done when** a VST3 instrument and effect can be loaded, automated, saved,
 and reloaded, and a hardware MIDI keyboard plays a channel with measured
-round-trip latency under 10 ms.
+round-trip latency under 10 ms. (The keyboard and ASIO interface are hardware halves,
+deferred to the final review under §9; a virtual MIDI port and a software ASIO driver
+stand in until then.)
 
 ### Phase 10 — Analysis, visualization, polish · L · [plan](plans/phase_10.md)
 Port the analysis suite (melody extraction, timbre fit, BPM, form cleanup) and
@@ -593,7 +617,28 @@ analyzers open) holds every performance target with zero dropouts and zero
 allocator-hook violations, every golden hash is unchanged by the optimization
 pass, the full suite passes with `ADX_ENABLE_ONNX=OFF`, and the installer is
 verified on a clean VM. **The performance targets are a hard entry criterion for
-Phase 11** — §7's Phase 11 depends on them.
+Phase 11** — §7's Phase 11 depends on them. The clean machine is a fresh GitHub-hosted
+Windows runner in the full check: this development machine runs Windows 11 Home, which
+has no Windows Sandbox or Hyper-V.
+
+### Phase 10.5 — Agent-run testing · L · [plan](plans/phase_10.5.md)
+Added 2026-11-01, at the user's request, to carry out §9's rule that every phase-ending
+check is agent-run. It builds the tools the rule needs:
+- a control channel into the running app (off by default);
+- a driver library (`adx.testing`) and the `adx drive` CLI, so an agent can launch adX
+  through `adX.cmd`, click, drag, type, trigger actions and read state back;
+- a master capture tap, the xrun count in Python, and a glitch detector, so "no glitches"
+  is measured;
+- headless CLI commands (`plugins`, `analyze`, `describe`, `compare`, `glitch`, `midi`);
+- a `tools/lint.py plans` gate that fails when a definition of done asks the user for a
+  software check.
+
+With those it closes Phase 9's two user-run gates in software: real open-source plugins
+fetched by pinned hash (P9-2), and the live crash during playback (P9-3). It also writes
+software stand-ins for Phase 6's and Phase 7's closed human gates, so the final review
+can re-check them. It may run beside Phase 10's remaining work. Phase 11 needs both.
+**Done when** every check in phase_10.5.md §4.1 runs without the user, P9-2 and P9-3 are
+closed by scenarios, and the plans gate is in CI, seen to fire, and clean.
 
 ### Phase 11 — Live performance · L — **the final stage** · [plan](plans/phase_11.md)
 Everything in §5.11. Last on purpose: it is the only feature that depends on
@@ -616,7 +661,76 @@ archived engine's note-off handling already gets right and can be reused.
 — clips launched and stopped on quantized boundaries, scenes fired, follow-
 actions honoured — with no dropouts under the Phase 1 allocator hook, and the
 recorded performance reopens as an editable arrangement that renders identically
-to what was heard.
+to what was heard. (The physical pad controller is a hardware half, deferred to the
+final review under §9; an emulated controller on a virtual MIDI port, speaking a
+shipped profile's notes and receiving its LED feedback, stands in until then.)
+
+### Phases 12–19 — the sound library (§5.12)
+
+Phase 11 completes the DAW. These phases make it sound like something on first
+launch. Their order follows dependency: the engine gaps first, then the drums
+every pack leans on, then the synthetic packs (cheap to verify, fast to iterate),
+then the sample-heavy orchestral pack, then the packs that reuse it. Every pack
+phase ends in a **human listening gate** recorded in the user's own words,
+because "does this sound like a hardstyle kick?" is a question no test answers.
+
+### Phase 12 — Sound-design foundation · XL · [plan](plans/phase_12.md)
+Closes the seven gaps the pack research found in the post-Phase-11 engine, plus
+an eighth the user added (SF2/DLS banks and a General MIDI player):
+- rack presets with macros;
+- per-voice modulation and mono/legato;
+- the `physical` instrument;
+- the DrumSynth models;
+- eleven effects;
+- sampler keyswitch/release/dynamics zones, SFZ import and the library store;
+- SF2 and DLS import with per-zone articulation, and the `gm` instrument (a
+  16-part General MIDI player that defaults to the Windows `gm.dls`);
+
+then builds the pack tooling.
+**Done when** every pre-Phase-12 golden hash is unchanged, a demonstration rack
+per gap renders, and the user approves the set.
+
+### Phase 13 — Core Drums & Machines · M · [plan](plans/phase_13.md)
+808/909/707 machines from circuit-level recipes, VCSL acoustic and marching
+kits, the 808 bass family, transitions, bus chains, pattern templates.
+
+### Phase 14 — Hyperpop · L · [plan](plans/phase_14.md)
+Supersaws, gliding distorted 808s, plucks and bells, emo/digicore guitars, the
+General-MIDI nostalgia set, hard-tune and vocal-to-synth chains. Artist
+references: Porter Robinson, Ninajirachi, Madeon, glaive, Tiffany Day, underscores.
+
+### Phase 15 — Hardcore · L · [plan](plans/phase_15.md)
+A kick rack for every hard-dance style plus per-note Kick Lab renders. Also
+euphoric leads, rawstyle screeches, hoovers, happy-hardcore pianos, and tekk,
+jumpstyle and frenchcore basslines.
+
+### Phase 16 — Classical · XL · [plan](plans/phase_16.md)
+Every orchestral, concert/marching-band and rock/jazz-band instrument. The
+most realistic source wins per instrument (CC0 libraries, Iowa MIS, rendered or
+physical), each with a synthesized fallback and a recorded A/B verdict.
+
+### Phase 17 — Ambient · M · [plan](plans/phase_17.md)
+Steel pan and handpan, felt pianos, Wurlitzer, Juno/Prophet pads, granular and
+spectral textures, tape and shimmer chains. Extends the C418 pack; Dorian Concept.
+
+### Phase 18 — Breakcore / Jungle / DnB · M · [plan](plans/phase_18.md)
+Original performed breaks sliced into Slicer kits, a break-import workflow,
+reese and neuro basses, odd-meter templates. No third-party breaks are shipped.
+
+### Phase 19 — Phonk + Vocal · M · [plan](plans/phase_19.md)
+Drift/Memphis/Brazilian phonk (cowbells, growl 808s, tape) extending STAKILLAZ.
+Voice-instrument singing presets, stacks and vocal chains, tuned against Kasane
+Teto; a bank is never shipped.
+
+### Final review — after Phase 19
+Every phase marked Done is reviewed once more, after Phase 19 is done. First, every hardware
+half deferred under §9's hardware rule is run on real hardware, in the order STATE.md
+lists them. Then every Done phase is checked against its own definition of done on the
+finished tree. A hardware half that fails, or a box that no longer holds, reopens as an
+open issue against its phase. A phase marked Done (hardware deferred) becomes Done once
+its hardware halves pass.
+**Done when** every deferred hardware half has passed on real hardware, its output is
+recorded in its phase log, and §10 shows no phase as Done (hardware deferred).
 
 ---
 
@@ -632,13 +746,18 @@ to what was heard.
 | Build | CMake + presets, `scikit-build-core` | One `pip install -e .` builds engine, bindings, and app together. |
 | C++ tests | Catch2 | Fast, header-light, good matchers for float comparison. |
 | Python tests | pytest + pytest-qt | Standard; pytest-qt covers the panel logic. |
-| Time-stretch | RubberBand (ported) | Already integrated and working. |
+| Time-stretch | RubberBand v4.0.0 (ported) | Already integrated and working. Offline engine only (phase_8.md §3.3). **Licence: GPL-2.0-or-later** (or a commercial licence from its authors); linking it makes a distributed adX binary GPL. Recorded in Phase 8 because the earlier rows did not say so. |
 | Voice synthesis | WORLD (modified BSD) for UTAU-style resampling; DiffSinger via the optional ONNX flag later | A UTAU voicebank is only samples plus `oto.ini`; the synthesis is the *resampler*. WORLD is the engine behind tn_fnds/moresampler and is permissively licensed. Vocaloid has no third-party SDK, so it is reached only through the Phase 9 VST3 host, never natively. |
-| MP3 / FLAC | shine, libFLAC (ported) | Already integrated; permissive licensing. |
+| MP3 / FLAC | shine 3.1.1, libFLAC 1.4.3 (ported) | Already integrated. libFLAC is BSD-3-Clause. shine is **LGPL-2.0**, not permissive as this row used to say (corrected in Phase 8): it is linked statically, so a distributed binary owes its users the means to relink against a modified shine. |
+| OGG export | libvorbis 1.3.7 + libogg 1.3.5 — **new in Phase 8** | Justified before it was added (§9): OGG is in the §5.7 feature target; writing a Vorbis encoder is out of the question; the reference encoder is BSD-3-Clause, small, and depends on nothing but libogg. Encode only - decoding stays with miniaudio's stb_vorbis. Compiled from source as two static libraries, like shine. |
 | Decode | miniaudio (ported) | Single header, decode-only, no device layer. |
 | FFT | `SimpleFFT` (ported) | Sufficient for UI-rate analysis. Swap for pffft only if profiling demands it — not preemptively. |
 | ONNX | **Optional** build flag | See §8.2. |
-| Plugin hosting | VST3 SDK + CLAP | Phase 9. Out-of-process scanning so a bad plugin cannot take down the host. |
+| Plugin hosting | VST3 SDK 3.8.0 (MIT since 3.8.0) + CLAP 1.2.6 (MIT) — **added in Phase 9** | Phase 9. Every scan and every instance runs in a sandbox child (`adx_plugin_host.exe`), so a bad plugin cannot take down the host. CLAP is header-only. The VST3 SDK is fetched as just the two repositories hosting needs (`vst3_pluginterfaces`, `vst3_public_sdk`) and its hosting sources compiled as one static library, not through its own CMake project, which builds VSTGUI and the validator and links plugins into system folders: the Phase 0 §3.4 escape hatch, used without vendoring. Both are reached only from `engine/plugin/`. |
+| ASIO | RtAudio's own ASIO path (`ADX_ENABLE_ASIO`, on) — **Phase 9** | RtAudio ships the ASIO host files, so no SDK path is needed. The backend names its API explicitly: WASAPI unless ASIO is asked for, because RtAudio's own default would otherwise move every user to ASIO. |
+| MIDI devices | RtMidi 6.0.0 — **new in Phase 9** | Justified before it was added (§9): MIDI device input and output are §5.6. RtMidi is RtAudio's sibling, from the same author, with the same MIT-style licence, and on Windows it is a thin layer over WinMM with no dependencies of its own. It is hidden behind `engine/midi/MidiBackend.h`, as RtAudio is behind `AudioBackend`, so it is replaceable. Static, no tests, no install rules. |
+| Test plugins | Dexed 1.1.0 (GPL-3.0), Surge XT 1.3.4 (GPL-3.0), Airwindows Consolidated 2026-10-31-d013e10 (MIT) — **Phase 10.5**, test fixtures only | Real third-party plugins are how P9-2 and P9-3 are checked without the user (phase_10.5.md 4.6). Pinned by URL and SHA-256 in `tools/test_plugins.toml`, fetched by `tools/fetch_test_plugins.py` into `%LOCALAPPDATA%/adx-test-plugins` (cached in the full check), never committed, linked or shipped, so their GPL does not reach adX: they are separate programs adX loads in its sandbox child during tests. Between them, VST3 and CLAP instruments and effects, each with an editor. |
+| Sample libraries | VSCO 2 CE, VCSL (CC0); Salamander (CC BY 3.0); Iowa MIS (fetch-only) | Data, not code: nothing links against them. Pinned commits + SHA-256 manifests, a ≤ 100 GB store outside git, a licence gate on the installer (phase_12.md §4.8). |
 
 ### 8.2 ONNX is optional
 
@@ -685,14 +804,58 @@ allocator hook that fails CI, not by convention.
 is added. Prefer a small, well-understood implementation over a large,
 general one.
 
+**Hardware testing is done at the end.** (Set 2026-10-30, at the user's request.)
+A check that needs physical hardware - an audio interface, a loopback cable, a
+MIDI keyboard, a pad controller, an ASIO device - is split in two in its phase's
+definition of done:
+- the **emulated half**: the same check against a software stand-in (a virtual
+  audio cable, a virtual MIDI port, a software ASIO driver, a scripted or on-screen
+  controller). It is run, it must pass, its output is recorded in the phase log,
+  and the log says what the stand-in does not cover;
+- the **hardware half**: deferred to the final review (§7), listed in
+  `plans/STATE.md` under "Final review".
+
+A box whose emulated half has passed is **half checked**, written `- [~]`, and
+counts as checked when deciding whether a phase is done; such a phase is marked
+**Done (hardware deferred)**. A box with no emulated half, or whose emulated half
+fails, stays unchecked. Nothing else changes: CI, the slow suite and the launcher
+are still required in full. Until the final review, agents do not ask the user to
+run hardware checks.
+
+**Every phase-ending check is agent-run.** (Set 2026-11-01, at the user's request.)
+A check that tests the software has to be one an agent can run alone, end to end,
+with no one at the keyboard. That covers checks that need the GUI up, the app
+launched through `adX.cmd`, panels wired to each other, files and paths linked
+together, plugins loaded, or playback watched for glitches. Where such a check
+used to need the user, it gets a software path instead: a CLI command, the control
+channel and driver library (Phase 10.5), a capture and a glitch measurement. The
+check is then written against that path. Two kinds of check are exempt:
+- **hardware halves**, deferred to the final review as above;
+- **judgement gates**: listening sessions, approving a pack or a preset, A/B
+  verdicts, whether something sounds right. These test taste, not the software, and
+  stay with the user, recorded in their own words. The software they stand on (the
+  preset loads, renders clean, appears in the browser) is still checked by an agent
+  first.
+
+In a phase file, a definition-of-done box that needs the user is tagged
+`(hardware half)` or `(judgement)`; any other box an agent cannot run is a plan bug.
+`tools/lint.py plans` enforces this (phase_10.5.md §4.7). Any test in which the
+agent writes music uses *WannaCry* (Ninajirachi & Porter Robinson), set 2026-11-01:
+the user's MIDI `wanna_cry_human.adx`, the agent's piano transcription
+`output/transcription/wannacry_piano.adx`, and the piano-tutorial `.mp4` as reference
+audio. All three are local and uncommitted, so these runs are local, labelled
+`[wannacry]`, with a committed stand-in project in CI (phase_10.5.md §4.8). Gates the user closed
+before this rule (P6-1, P7-1) stay closed on the user's word. Phase 10.5 adds
+software stand-ins for them, so the final review can re-check them.
+
 **Documentation.** This file is updated whenever the plan changes. Phase
 completion is recorded in §10.
 
 There is exactly one permitted family of planning documents besides this one:
-`plans/phase_0.md` … `plans/phase_11.md`, one per §7 phase. They are
-**subordinate and non-overlapping** — this file owns *what* and *why*, each
+`plans/phase_0.md` … `plans/phase_19.md` and `plans/phase_10.5.md`, one per §7 phase.
+They are **subordinate and non-overlapping** — this file owns *what* and *why*, each
 phase file owns *how* for its phase alone, and where they disagree this file
-wins. Every §5 feature is assigned to exactly one phase file, so the twelve
+wins. Every §5 feature is assigned to exactly one phase file, so the twenty-one
 together are a complete specification of the remaining work. A phase file is
 updated only by the phase that owns it; scope moving between phases is a change
 to *this* file first.
@@ -723,11 +886,22 @@ of sync with each other and with the code.
 | [4 — Instruments & effects](plans/phase_4.md) | **Done** 2026-10-04 — CI green (run 37269752424); full check green (run 37273504347) | Owns all of §5.3 and §5.4; three tranches. Tranche A (the gate Phase 5 waits on): the DSP primitives, Additive, VA, Sampler with decode and a deduplicating sample pool, eleven effects, sidechains, BS.1770-4 metering checked against EBU TECH 3341, the C418 and STAKILLAZ preset packs. `suffocation.adx` through the v1 shim is within 1.5 dB of v1 in all 31 third-octave bands, measured against v1 with two of its scheduling bugs fixed (phase_4.md §11). Golden hashes identical in all three configurations, now one per instrument, preset and effect setting. Tranches B-D (2026-10-04): the rest of §5.3 and §5.4 - Slicer, sample pool, DrumSynth with the hardstyle kick, Granular, FM, Wavetable; fifteen more effects and Overdrive; and Voice, singing UTAU banks through WORLD, accepted against Kasane Teto locally. Both human gates passed: the suffocation A/B on parity (the file itself is a poor recreation, P4-10) and the Teto demo intelligible. 13 instrument and 27 effect types, each with golden hashes identical in all three configurations. |
 | [5 — Frontend foundation](plans/phase_5.md) | **Done** 2026-10-06 — CI green (run 37509766570); full check green (run 37512932612) | **The §2.2 bet held.** On real hardware (Direct3D 11), panning and zooming a 10,000-note pattern: frame time p99 0.22 ms against 16.6 ms, display vsync-locked at 60.0 fps (one missed vsync in 1,189 frames). A pan is 0 engine calls, a UI frame exactly 1; the three rules are a CI gate (`tools/lint.py rules`), seen to fire. A dockable shell with transport, browser, waveform and meters; the piano roll as a C++ scene-graph item over `engine/geometry/` with nine tools, six lanes and a lyric lane, every gesture one undoable command; the waveform view over the ported `ClipPeakCache`, never blocking. The plugin builds against a Qt SDK matching PySide6 (`tools/fetch_qt.py`) - PySide6 ships none. Twenty corrections in phase_5.md §10. |
 | [6 — The DAW proper](plans/phase_6.md) | **Done** 2026-10-21 — CI green (run 39422153732); full check green (run 39430247203); human gate closed by the user (P6-1) | The rest of the application: channel rack, playlist, mixer with routing matrix, generic parameter editor (every Phase 4 instrument and effect editable, eighteen hand-built overviews beside it), automation lanes and engine-side controllers, browser with typed drag-and-drop, history, inspector, preferences, one action registry and one global selection with the clipboard as `.adx` text. The gate, `test_workflow_end_to_end`, writes, arranges, mixes and exports a 32-bar track through the real panels and re-renders it bit-identical after save and reopen. The mixer holds 60 fps with 200 inserts metering on real hardware at one engine call per frame. Undo coalescing is bounded by gestures (each press), not a clock: a slow drag is one step, two quick ones are two. The user made a track with it (§6 box 2, closed 2026-10-21); three sessions of usability fixes are phase_6.md §11. Fifteen corrections in phase_6.md §10. |
-| [7 — Text-first layer](plans/phase_7.md) | **Built** 2026-10-21 — automated gates green locally; human gate (P7-1) closed 2026-10-25; CI (P7-0) open | The half no other DAW has (§1). A project edits in the GUI, the in-app editor and an external editor at once: a re-parsed file becomes the narrowest commands, one undo step, with ids remapped so every surviving entity keeps its engine node; a watcher reloads on save; conflicts are raised, never guessed. A reload never cuts a voice - effect swaps crossfade, changed or removed instruments ring out. The gates: 200 interleaved GUI and external edits while playing, converging after each (it found two data-loss bugs first), and 100 reloads under a playing pad with output bit-identical to none. Mini-notation ported (and its Euclid fixed), live and lit step by step in the editor; a scripting API over the GUI's commands with a console. Nineteen corrections in phase_7.md §11. |
-| [8 — Audio & export](plans/phase_8.md) | Not started | |
-| [9 — Plugins & MIDI](plans/phase_9.md) | Not started | Largest risk; out-of-process plugin sandbox. |
-| [10 — Analysis, visualization, polish](plans/phase_10.md) | Not started | Its performance targets gate Phase 11. |
-| [11 — Live performance](plans/phase_11.md) | Not started | Final stage. Transport prerequisite lands in Phase 3. |
+| [7 — Text-first layer](plans/phase_7.md) | **Done** 2026-10-25 — CI green (run 40243278857), full check green (run 40248449713); human gate (P7-1) closed by the user | The half no other DAW has (§1). A project edits in the GUI, the in-app editor and an external editor at once: a re-parsed file becomes the narrowest commands, one undo step, with ids remapped so every surviving entity keeps its engine node; a watcher reloads on save; conflicts are raised, never guessed. A reload never cuts a voice - effect swaps crossfade, changed or removed instruments ring out. The gates: 200 interleaved GUI and external edits while playing, converging after each (it found two data-loss bugs first), and 100 reloads under a playing pad with output bit-identical to none. Mini-notation ported (and its Euclid fixed), live and lit step by step in the editor; a scripting API over the GUI's commands with a console. Nineteen corrections in phase_7.md §11. |
+| [8 — Audio & export](plans/phase_8.md) | **Built** 2026-10-29 — every automated §6 box observed locally; the latency gate half checked on a virtual cable (P8-1, hardware half deferred to the final review); CI (P8-0) open | adX records, edits and delivers: audio clips with slip, fades, crossfades, envelopes, non-destructive edits, RubberBand stretch, pitch and warp markers; freeze bit-identical; export to WAV/RF64, MP3, FLAC and OGG with stems that sum to the master, ranges, tails, normalise and dither, as a background job; MIDI file I/O exact at 3840 PPQ; collect-and-save; recording with punch, count-in, takes, comping and loopback calibration; `adx render` with no Qt in the process. The golden corpus covers every format. Twenty-two corrections in phase_8.md §11, among them three real bugs the gates found (a capture drain that could swap left and right, a slice tool that dropped clip properties, waveforms never drawn for unpinned clips). |
+| [9 — Plugins & MIDI](plans/phase_9.md) | Built (2026-10-30); not done | Largest risk; out-of-process plugin sandbox. CLAP and VST3 effects and instruments in sandbox children (crash, hang, late, NaN contained; state, automation, learn, PDC); MIDI input, routing, learn and clock; ASIO compiled in. Open: CI (P9-0); the MIDI-latency gate, whose emulated half fails on shared-mode output (P9-1, P9-9); the ASIO gate's emulated half, not yet run (P9-4); and the real-plugin and live-crash gates (P9-2, P9-3), agent-run since 2026-11-01 (§9) and closed by Phase 10.5's scenarios. Hardware halves deferred to the final review. |
+| [10 — Analysis, visualization, polish](plans/phase_10.md) | In progress (2026-10-30) | Its performance targets gate Phase 11. Chroma, key and chord detection and chord suggestion exist in the engine; key accuracy is below its target (STATE.md P10-1). |
+| [10.5 — Agent-run testing](plans/phase_10.5.md) | Built (2026-11-03); not done | Added 2026-11-01 (§9, "Every phase-ending check is agent-run"). Control channel, driver, capture and glitch detector, headless CLI, the `plans` lint gate; closes P9-2 and P9-3 in software. Every §5 test observed locally on 2026-11-03, the 26 scenarios included (P9-2 and P9-3 closed locally); open: CI and the full check (STATE.md P10.5-0), and P10.5-2 to P10.5-4. |
+| [11 — Live performance](plans/phase_11.md) | Not started | Final DAW stage. Transport prerequisite lands in Phase 3. Needs Phase 10 and Phase 10.5. |
+| Sound-library plans | **Done** | 2026-10-25. `plans/phase_12.md` … `plans/phase_19.md` written from per-pack research; §5.12 added. |
+| [12 — Sound-design foundation](plans/phase_12.md) | Not started | Engine gaps + pack tooling; gates every pack. |
+| [13 — Core Drums & Machines](plans/phase_13.md) | Not started | |
+| [14 — Hyperpop](plans/phase_14.md) | Not started | |
+| [15 — Hardcore](plans/phase_15.md) | Not started | |
+| [16 — Classical](plans/phase_16.md) | Not started | Largest asset set; ≤ 100 GB library budget. |
+| [17 — Ambient](plans/phase_17.md) | Not started | |
+| [18 — Breakcore / Jungle / DnB](plans/phase_18.md) | Not started | |
+| [19 — Phonk + Vocal](plans/phase_19.md) | Not started | |
+| Final review (§7) | Not started | After Phase 19: every deferred hardware half run on real hardware, then every Done phase re-checked. List in `plans/STATE.md`. |
 
 ### Honest assessment of scale
 

@@ -158,10 +158,12 @@ class PianoRollPanel(DockPanel):
         for bar in self._build_toolbars():
             outer.addWidget(bar)
         self.ruler = Ruler(PPQ)
+        self.ruler.setObjectName("piano_roll.ruler")
         self.keyboard = PianoKeyboard()
         self.keyboard.key_clicked.connect(lambda pitch: self._sound(pitch, 100))
         self.timeline = Timeline()
         self.quick = QQuickWidget()
+        self.quick.setObjectName("piano_roll.roll")
         self.quick.setResizeMode(QQuickWidget.ResizeMode.SizeRootObjectToView)
         self.input = RollInput(self)
         context = self.quick.rootContext()
@@ -205,8 +207,10 @@ class PianoRollPanel(DockPanel):
         bar = QToolBar()
         first = bar
         self.pattern_box = QComboBox()
+        self.pattern_box.setObjectName("piano_roll.pattern")
         self.pattern_box.setToolTip("Pattern")
         self.channel_box = QComboBox()
+        self.channel_box.setObjectName("piano_roll.channel")
         self.channel_box.setToolTip("Channel")
         self.pattern_box.activated.connect(self._clip_chosen)
         self.channel_box.activated.connect(self._clip_chosen)
@@ -226,6 +230,7 @@ class PianoRollPanel(DockPanel):
         self.tool_actions["draw"].setChecked(True)
         bar = QToolBar()
         self.grid_box = QComboBox()
+        self.grid_box.setObjectName("piano_roll.grid")
         for label, _ticks in quantize.GRIDS:
             self.grid_box.addItem(label)
         self.grid_box.addItem("Off")
@@ -298,6 +303,25 @@ class PianoRollPanel(DockPanel):
             self.pattern_box.setCurrentText(best)
         self._fill_channels()
         self._clip_chosen()
+
+    def _sync_lists(self) -> None:
+        """New, renamed or removed patterns and channels reach the two boxes; what is
+        chosen stays chosen while it exists."""
+        if self.project is None:
+            return
+        for box, names in (
+            (self.pattern_box, self.project.patterns()),
+            (self.channel_box, self.project.channels()),
+        ):
+            if [box.itemText(i) for i in range(box.count())] == names:
+                continue
+            current = box.currentText()
+            box.blockSignals(True)
+            box.clear()
+            box.addItems(names)
+            if current in names:
+                box.setCurrentText(current)
+            box.blockSignals(False)
 
     def _fill_channels(self) -> None:
         if self.project is None:
@@ -438,6 +462,7 @@ class PianoRollPanel(DockPanel):
 
     def refresh(self) -> None:
         """The project changed outside the roll (an undo from the menu, say)."""
+        self._sync_lists()
         if self.model is not None:
             self.model.invalidate()
             self.model.select(self.model.selection)

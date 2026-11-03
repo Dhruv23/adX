@@ -8,8 +8,10 @@
 namespace adx::audio {
 
 AudioThread::AudioThread(std::unique_ptr<AudioBackend> backend)
-    : m_backend(std::move(backend)), m_arenaStorage(kBlockArenaBytes) {
+    : m_backend(std::move(backend)), m_arenaStorage(kBlockArenaBytes),
+      m_scopeRing(std::make_unique<ScopeTapRing>()) {
     m_core.attachArena(m_arenaStorage.data(), m_arenaStorage.size());
+    m_core.attachScopeTap(*m_scopeRing);
     // Also the reference that drags AllocGuard.cpp - and with it the operator new
     // replacements - into this binary at all. See allocGuardLinked() for why that is
     // not a formality.

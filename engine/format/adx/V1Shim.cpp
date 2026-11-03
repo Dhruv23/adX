@@ -887,11 +887,11 @@ void V1Migration::buildTrackPlaylist(const RawTrack& track, const std::string& n
         execute(std::move(sample));
         project::PlaylistItem item;
         item.start = m_project.tempo.ticksAtSeconds(clip.startSeconds);
-        item.content =
-            project::AudioClipRef{.sample = sampleRaw->created(),
-                                  .stretch = static_cast<float>(clip.stretch),
-                                  .pitchSemitones = static_cast<float>(clip.pitchSemitones),
-                                  .reverse = clip.reverse};
+        project::AudioClipRef audio = project::audioClipOf(sampleRaw->created());
+        audio.stretch = static_cast<float>(clip.stretch);
+        audio.pitchSemitones = static_cast<float>(clip.pitchSemitones);
+        audio.reverse = clip.reverse;
+        item.content = audio;
         execute(std::make_unique<project::AddPlaylistItem>(laneId, item));
         m_diag.add(code::kV1ClipSecondsConverted, track.span,
                    "'" + clip.path + "' started at " + formatDouble(clip.startSeconds) +

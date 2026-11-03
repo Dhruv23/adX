@@ -15,4 +15,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+rem pyw has no console: with PYTHONFAULTHANDLER set, the interpreter dies before adX
+rem starts, trying to write its handler to the stderr pyw does not have.
+set PYTHONFAULTHANDLER=
 start "" pyw -3.12 -m adx gui %*

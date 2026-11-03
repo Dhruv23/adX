@@ -59,6 +59,18 @@ enum class ColorRole : std::uint8_t {
     kMeterHot,
     kMeterClip,
     kEqCurve,
+    // Phase 10: the analyzers.
+    kAnalyzerGrid,
+    kSpectrumFill,
+    kSpectrumLine,
+    kSpectrumPeak,
+    kScopeLeft,
+    kScopeRight,
+    kVectorTrace,
+    kCorrelation,
+    kLoudness,
+    kParticleYoung,
+    kParticleOld,
     kCount,
 };
 
@@ -111,6 +123,17 @@ inline constexpr std::array<const char*, kColorRoleCount> kColorRoleNames = {
     "meter_hot",
     "meter_clip",
     "eq_curve",
+    "analyzer_grid",
+    "spectrum_fill",
+    "spectrum_line",
+    "spectrum_peak",
+    "scope_left",
+    "scope_right",
+    "vector_trace",
+    "correlation",
+    "loudness",
+    "particle_young",
+    "particle_old",
 };
 
 } // namespace adx::geometry

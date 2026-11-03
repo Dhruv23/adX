@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QActionGroup, QDragEnterEvent, QDropEvent
+from PySide6.QtGui import QAction, QActionGroup, QDragMoveEvent, QDropEvent
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 from adx import dnd, engine_bridge
@@ -116,6 +116,7 @@ class PlaylistPanel(DockPanel):
         middle.setSpacing(0)
         middle.addWidget(self.headers)
         self.canvas = GeometryView(self, MODES)
+        self.canvas.setObjectName("playlist.canvas")
         self.canvas.setAcceptDrops(True)
         self.canvas.installEventFilter(self)
         middle.addWidget(self.canvas, 1)
@@ -324,30 +325,14 @@ class PlaylistPanel(DockPanel):
             self.session.build_and_execute("AddPatternItem", track, pattern, tick, 0)
 
     def slice(self, track: int, item: int, at: int) -> None:
-        """Cut a clip in two at ``at``: the original shortened, the rest a new clip."""
+        """Cut a clip in two at ``at``: one step, and both halves keep everything - the
+        envelopes cut where the clip is, the fades at their ends, the stretch, the edits
+        (clip::splitItem)."""
         row = self.item_row(item)
         if row is None:
             return
-        start, length, offset = int(row["start"]), int(row["length"]), int(row["offset"])
-        if not start < at < start + length:
-            return
-        project = self.session.require()
-        with self.session.group("Slice clip"):
-            self.edit_item(track, item, {"length": at - start})
-            if int(row["kind"]) == 0:
-                self.session.build_and_execute(
-                    "AddPatternItem", track, int(row["ref"]), at, start + length - at
-                )
-                new = int(project.playlist_items()["item"].max())
-                self.edit_item(track, new, {"offset": offset + (at - start)})
-            elif int(row["kind"]) == 1:
-                samples = {i: full for i, _p, full in project.samples()}
-                new = project.add_audio_item(
-                    track, samples[int(row["ref"])], at, start + length - at
-                )
-                self.edit_item(
-                    track, new, {"offset": offset + (at - start), "stretch": float(row["stretch"])}
-                )
+        if self.session.require().split_item(track, item, at, int(row["length"])) is not None:
+            self.session.notify()
 
     def group_tracks(self, parent: int, members: list[int]) -> None:
         """Members join ``parent``'s group: one step."""
@@ -438,7 +423,8 @@ class PlaylistPanel(DockPanel):
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt's name
         if watched is self.canvas and event.type() in (QEvent.Type.DragEnter, QEvent.Type.DragMove):
-            assert isinstance(event, QDragEnterEvent)
+            # A move is a QDragMoveEvent, an enter its subclass: both are moves.
+            assert isinstance(event, QDragMoveEvent)
             payload = dnd.decode(event.mimeData())
             if payload is not None and isinstance(payload, dnd.SampleFile | dnd.PatternRef):
                 event.acceptProposedAction()

@@ -6,11 +6,12 @@ plays its default, and its first turn sets it with a command.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from adx import engine_bridge
 from adx.panels.automation.lane import automated_paths, create_lane
-from adx.panels.params import GenericEditor, ParamTarget, slot_path
+from adx.panels.params import GenericEditor, ParamTarget, arm_learn, slot_path
 from adx.session import Session
 
 
@@ -21,6 +22,51 @@ def effect_descriptors(effect: str) -> list[dict[str, Any]]:
         None,
     )
     return list(entry["params"]) if entry is not None else []
+
+
+def plugin_descriptors(plugin: dict[str, Any] | None, format_name: str) -> list[dict[str, Any]]:
+    """A hosted plugin's parameters as generic-editor descriptors, from the scan cache
+    (the plugin is described, never instantiated, for this)."""
+    if plugin is None:
+        return []
+    described = engine_bridge.Plugins.describe(format_name, str(plugin["uid"]), str(plugin["path"]))
+    if described is None:
+        return []
+    out: list[dict[str, Any]] = []
+    for param in described["params"]:
+        if param["hidden"]:
+            continue
+        steps = int(param["steps"])
+        low, high = float(param["min"]), float(param["max"])
+        # Plugins report what they report: Airwindows Consolidated's unused slots give
+        # uninitialised defaults like 3e32, which a knob cannot draw.
+        default = float(param["default"])
+        default = min(high, max(low, default)) if math.isfinite(default) else low
+        out.append(
+            {
+                "name": str(param["key"]),
+                "label": str(param["name"]),
+                "min": low,
+                "max": high,
+                "default": default,
+                "unit": "count" if steps else "normalized",
+                "scale": "stepped" if steps else "linear",
+                "rate": "sample",
+                "curve_part": 0,
+            }
+        )
+    return out
+
+
+def slot_descriptors(info: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """A slot's descriptors: the catalog's for a native effect, the plugin's own for a
+    hosted one."""
+    if info is None:
+        return []
+    effect = str(info["type"])
+    if effect in ("clap", "vst3"):
+        return plugin_descriptors(info.get("plugin"), effect)
+    return effect_descriptors(effect)
 
 
 def slot_info(session: Session, insert: int, slot: int) -> dict[str, Any] | None:
@@ -47,28 +93,31 @@ def slot_target(session: Session, insert: int, slot: int) -> ParamTarget:
         else:
             session.build_and_execute("SetSlotParam", slot, parameter, value)
 
-    def automate(parameter: str) -> None:
+    def ensure(parameter: str) -> str:
+        """The parameter's path, set to its default first if the slot lacks it."""
         path = slot_path(insert, slot, parameter)
+        if not session.require().param_valid(path):
+            info = slot_info(session, insert, slot)
+            default = next(
+                (float(d["default"]) for d in slot_descriptors(info) if d["name"] == parameter),
+                0.0,
+            )
+            session.build_and_execute("SetSlotParam", slot, parameter, default)
+        return path
+
+    def automate(parameter: str) -> None:
         with session.group(f"Automate {parameter}"):
-            if not session.require().param_valid(path):
-                info = slot_info(session, insert, slot)
-                effect = "" if info is None else str(info["type"])
-                default = next(
-                    (
-                        float(d["default"])
-                        for d in effect_descriptors(effect)
-                        if d["name"] == parameter
-                    ),
-                    0.0,
-                )
-                session.build_and_execute("SetSlotParam", slot, parameter, default)
-            create_lane(session, path)
+            create_lane(session, ensure(parameter))
+
+    def learn(parameter: str) -> None:
+        arm_learn(ensure(parameter))
 
     return ParamTarget(
         path_of=lambda parameter: slot_path(insert, slot, parameter),
         read_values=read_values,
         turn=turn,
         automate=automate,
+        learn=learn,
         automated_paths=lambda: automated_paths(session),
     )
 
@@ -85,5 +134,11 @@ def params_in_order(session: Session, insert: int, slot: int, effect: str) -> li
 
 
 def generic_for_slot(session: Session, insert: int, slot: int, effect: str) -> GenericEditor:
-    """The generic editor for a slot."""
-    return GenericEditor(effect_descriptors(effect), slot_target(session, insert, slot))
+    """The generic editor for a slot - a hosted plugin's too, from its own parameter
+    list (phase_9.md 4.6: the fallback that is always there)."""
+    descriptors = (
+        slot_descriptors(slot_info(session, insert, slot))
+        if effect in ("clap", "vst3")
+        else effect_descriptors(effect)
+    )
+    return GenericEditor(descriptors, slot_target(session, insert, slot))

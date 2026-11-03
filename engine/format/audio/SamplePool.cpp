@@ -65,29 +65,51 @@ std::shared_ptr<const SampleEntry> SamplePool::request(const std::filesystem::pa
     return entry;
 }
 
-std::filesystem::path SamplePool::resolve(const project::Resources& resources,
-                                          std::string_view relative) const {
+std::filesystem::path resolveSamplePath(const project::Resources& resources,
+                                        std::span<const std::filesystem::path> library,
+                                        std::string_view relative) {
     const std::filesystem::path written{std::string(relative)};
+    const std::filesystem::path base{resources.baseDirectory};
     std::vector<std::filesystem::path> candidates;
-    if (written.is_absolute()) {
-        candidates.push_back(written);
-    } else {
-        candidates.push_back(std::filesystem::path{resources.baseDirectory} / written);
+    candidates.push_back(written.is_absolute() ? written : base / written);
+    candidates.push_back(base / "samples" / written.filename());
+    for (const std::string& folder : resources.searchPaths) {
+        const std::filesystem::path directory = std::filesystem::path{folder}.is_absolute()
+                                                    ? std::filesystem::path{folder}
+                                                    : base / folder;
+        candidates.push_back(directory / written.relative_path());
+        candidates.push_back(directory / written.filename());
     }
-    {
-        const std::lock_guard lock(m_mutex);
-        for (const std::filesystem::path& directory : m_searchPaths) {
-            candidates.push_back(directory / written.relative_path());
-            candidates.push_back(directory / written.filename());
-        }
+    for (const std::filesystem::path& directory : library) {
+        candidates.push_back(directory / written.relative_path());
+        candidates.push_back(directory / written.filename());
     }
     for (const std::filesystem::path& candidate : candidates) {
-        std::error_code error;
-        if (std::filesystem::is_regular_file(candidate, error)) {
+        if (sampleExists(candidate)) {
             return candidate;
         }
     }
     return candidates.front();
+}
+
+bool sampleExists(const std::filesystem::path& resolved) {
+    std::error_code error;
+    return std::filesystem::is_regular_file(resolved, error);
+}
+
+std::filesystem::path SamplePool::resolve(const project::Resources& resources,
+                                          std::string_view relative) const {
+    std::vector<std::filesystem::path> library;
+    {
+        const std::lock_guard lock(m_mutex);
+        library = m_searchPaths;
+    }
+    return resolveSamplePath(resources, library, relative);
+}
+
+std::vector<std::filesystem::path> SamplePool::searchPaths() const {
+    const std::lock_guard lock(m_mutex);
+    return m_searchPaths;
 }
 
 void SamplePool::addSearchPath(std::filesystem::path directory) {

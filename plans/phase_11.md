@@ -5,7 +5,7 @@
 | **Status** | Not started |
 | **Governs** | `engine/session/`, the session view, launch scheduling, pad mapping, performance recording |
 | **FINAL_PLAN refs** | §1 (live performance is in scope), §5.11 in full, §7 Phase 3 checkpoint, §7 Phase 11, §10 |
-| **Entry criteria** | [phase_10.md](phase_10.md) §7 complete — **including `bench_full_project`**, which is a hard prerequisite, not a soft one |
+| **Entry criteria** | [phase_10.md](phase_10.md) §7 complete — **including `bench_full_project`**, which is a hard prerequisite, not a soft one — and [phase_10.5.md](phase_10.5.md) §6 complete (the driver, capture and glitch detector this phase's gates are written against) |
 | **Next** | none. This is the last phase. |
 | **§5 coverage owned** | §5.11 **all** |
 
@@ -379,6 +379,9 @@ playlist clip into a session slot is one command.
 | `mini_clip_cycles_independently` | two mini clips with `<a b>` advance their own cycle counters |
 | `pad_profile_parse` | every shipped profile loads; an unknown key warns and is preserved |
 | `pad_learn_builds_profile` | a scripted press sequence produces a correct profile |
+| `virtual_pad_drives_a_set` | the emulated controller (`tools/virtual_pad.py`, a loopMIDI port speaking a shipped profile) launches, stops and fires scenes, and the LED states it receives match the clip state ring - the emulated half of the hardware boxes in §6 |
+| `scenario_scripted_set_20min` | the agent-run emulated half of §6's 20-minute set: the app launched through `adX.cmd`, a scripted set into loopMIDI by `virtual_pad.py --headless`, 0 xruns, 0 glitch findings, LEDs match, the recording renders bit-identically to the capture (phase_10.5.md §4.5) |
+| `scenario_performance_walkthrough` | every step of `docs/performance.md`, learn mode included, followed through the driver, with the state each step promises asserted |
 | `pad_velocity_to_gain` | velocity maps to clip gain per the configured curve |
 | `pad_feedback_thread` | LED output runs on its own thread; 0 audio-thread MIDI writes; 30 Hz maintained under UI load |
 | `tempo_nudge_rate` | nudge scales rate and returns exactly; no accumulated drift after 100 nudges |
@@ -409,12 +412,30 @@ FINAL_PLAN §7's gate, unpacked:
 - [ ] **A human has performed a real set** on real hardware, for at least 20
       minutes, and reported no glitches — recorded in the phase log. Every other
       criterion is a proxy for this one, and this one is the claim being made.
+      Under FINAL_PLAN §9 this box splits. **Emulated half** (makes it `[~]`),
+      agent-run (FINAL_PLAN §9, 2026-11-01): `scenario_scripted_set_20min` launches the
+      app through `adX.cmd` with the control channel. Its clips are cut from WannaCry
+      (phase_10.5.md §4.8): the transcription's sections and the user's 4-bar melody.
+      It plays a 20-minute set script
+      (launches, stops, scenes, follow actions, tempo nudges, taps). The script goes
+      through `tools/virtual_pad.py --headless` as a shipped profile's notes into a
+      loopMIDI port, via `adx midi play` (phase_10.5.md §4.4). "No glitches" is
+      measured (phase_10.5.md §4.5): zero xruns, zero glitch-detector findings on the
+      master capture, every LED state received matching the clip state ring, and the
+      recorded performance rendering bit-identically to the capture. It does not cover
+      a real device's USB timing, velocity curve or sysex throughput. **Hardware
+      half:** the same set on a physical pad controller, deferred to the final review
+      (STATE.md "Final review"). (hardware half)
 - [ ] Every §5.11 item exists: session view, per-clip positions, quantized launch
       with queued-next indicator, scenes, follow actions, pad mapping with
       velocity and LED feedback, performance recording, tempo nudge, tap tempo,
       launchable mini-notation clips.
 - [ ] `docs/performance.md` written and its setup walkthrough verified on a real
-      device.
+      device. **Emulated half** (makes it `[~]`): `scenario_performance_walkthrough`
+      follows `docs/performance.md` step by step through the driver against the
+      emulated controller, learn mode included, asserting the state each step says
+      the reader should see. **Hardware half:** a physical controller, deferred to the
+      final review. (hardware half)
 - [ ] FINAL_PLAN.md §10 Phase 11 row set to Done.
 
 ---

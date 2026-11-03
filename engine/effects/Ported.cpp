@@ -22,7 +22,7 @@ constexpr float kAllpassFeedback = 0.5F;
 constexpr float kWetScale = 3.0F;
 
 [[nodiscard]] std::size_t scaled(std::size_t samples, std::uint32_t rate) noexcept {
-    return std::max<std::size_t>(1, static_cast<std::size_t>(std::floor(
+    return std::max<std::size_t>(1, static_cast<std::size_t>(dsp::floorExact(
                                         (static_cast<double>(samples) * rate / 44100.0) + 0.5)));
 }
 

@@ -175,6 +175,7 @@ The section types v2 defines are, in canonical order:
 | `[PATTERN <name>]` | any | pattern name |
 | `[PLAYLIST]` | 0 or 1 | — |
 | `[MIXER]` | 0 or 1 | — |
+| `[MIDI]` | 0 or 1 | — |
 | `[MARKERS]` | 0 or 1 | — |
 
 Any other section type is `ADX1002`: preserved verbatim as residue, reported as a
@@ -352,6 +353,7 @@ across it.
 | `CREATED` | string | `""` | ISO-8601 date, opaque to the engine. |
 | `TUNING` | number | `440.0` | A4 in Hz. |
 | `LOOP` | position `-` position | absent | `LOOP=8:0:0-16:0:0`. Presence means the loop is enabled — v1's rule, preserved deliberately. |
+| `SAMPLE_PATHS` | string: folders separated by `;` | `""` | Where to look for a sample that is not where its path says, after the path itself. Relative folders are relative to the project. The project's own `samples/` folder is always searched and is never listed here. |
 
 An `ADX_VERSION` greater than 2 is `ADX2009`: the file is still read with the v2
 grammar, and every construct this version does not know becomes residue, which is
@@ -377,6 +379,30 @@ labelling it v1 would send the next load through the v1 shim.
 | `MUTE` | boolean | `no` |
 | `SOLO` | boolean | `no` |
 | `COLOR` | `#rrggbb` | `#808080` |
+| `FROZEN` | string: a WAV path, resolved like a sample path | none |
+| `PLUGIN` | string: a hosted plugin's id | none; `clap` and `vst3` instruments only |
+| `PLUGIN_NAME` | string | none |
+| `PLUGIN_PATH` | string: the plugin file where it was last found | none |
+| `PLUGIN_ISOLATED` | boolean | `no` |
+| `STATE` | string: `"base64:"` and the plugin's own state | none |
+
+`INSTRUMENT=clap` or `INSTRUMENT=vst3` hosts a third-party plugin as the channel's
+instrument (phase_9.md §4.7). `PLUGIN` is its identity - a CLAP plugin's reverse-DNS id,
+a VST3 processor's class id in 32 hex digits - and `PLUGIN_PATH` where it was found, so
+a moved plugin is still found by id after a rescan. Its parameters are ordinary `PARAM`
+lines, named by the key the scan derives from each parameter's name (lower case, with
+anything but letters, digits and `_` made `_`); their values are in the plugin's own
+units (CLAP's plain values, VST3's normalised 0..1). A parameter the file does not name
+keeps whatever the plugin's state says. `STATE` is the irreducible rest - the plugin's
+own opaque bytes, base64, quoted because base64 padding contains `=` - and is written
+last in the section so it never sits between lines a reader diffs. `PLUGIN_ISOLATED=yes`
+hosts it in a sandbox process of its own instead of the shared one.
+
+`FROZEN` marks a frozen channel (phase_8.md §3.4): the engine plays that file in the
+channel's place, from the start of the arrangement at unit rate, and ignores the
+channel's instrument and notes. Everything else about the channel is kept as it was,
+so removing the line (unfreezing) gets the live channel back exactly. adX writes the
+file to `freeze/<channel>-<hash>.wav` beside the project.
 
 Plus three positional lines:
 
@@ -491,7 +517,8 @@ breakpoint  = position , hspace , number , [ hspace , curve ] ;
 ```ebnf
 track-block = "TRACK" , hspace , integer , { hspace , track-kv } , newline ,
               { item-line } ;
-track-kv    = "name" "=" string | "height" "=" integer | "mute" "=" boolean ;
+track-kv    = "name" "=" string | "height" "=" integer | "mute" "=" boolean
+            | "out" "=" "insert." , integer ;   (* default: the master *)
 
 item-line   = pattern-item | audio-item | auto-item ;
 pattern-item = "PATTERN" , hspace , name-seg , hspace , position , { hspace , item-kv } ;
@@ -501,29 +528,74 @@ auto-item    = "AUTOMATION" , hspace , param-path , hspace , position , { hspace
 
 item-kv     = "length" "=" duration | "offset" "=" duration
             | "stretch" "=" number | "pitch" "=" number
-            | "reverse" "=" boolean | "mute" "=" boolean ;
+            | "reverse" "=" boolean | "mute" "=" boolean
+            | "lane" "=" integer                       (* 0..255; default 0 *)
+            | audio-kv ;                               (* AUDIO items only *)
+audio-kv    = "fadein" "=" duration | "fadeincurve" "=" curve
+            | "fadeout" "=" duration | "fadeoutcurve" "=" curve
+            | "crossfade" "=" "linear"                 (* default: equal power *)
+            | "edit" "=" edit , { "," , edit } ;
+edit        = "reverse" | "dc" | ( "normalize" | "gain" | "trim" ) , ":" , number ;
+
+warp-line   = "WARP" , hspace , number , hspace , duration ;
+                 (* indented under an AUDIO item: source seconds, then item time *)
 
 envelope-block = "ENVELOPE" , hspace , ( "gain" | "pan" | "pitch" | param-path ) ,
                  newline , { breakpoint } ;   (* indented under a PATTERN or AUDIO item *)
 ```
 
 The integer after `TRACK` is the playlist track's id. `offset` is the source
-offset used by slip editing (Phase 8 makes it do something; the model carries it
-from here so that it does not have to be retrofitted). An omitted `length` means
-the content's natural length.
+offset slip editing changes: how far into its content the item starts playing. An
+omitted `length` means the content's natural length.
 
 An `ENVELOPE` block, indented under a `PATTERN` or `AUDIO` item, is automation that
 belongs to that placement (phase_4.md §4.0): its breakpoint times are item-relative,
 points past the item's length are not played, and a parameter it drives returns to
 its own value when the item ends. `gain`, `pan` and `pitch` (cents) are properties of
 the placement; anything else is a parameter path, resolved like an `AUTOMATION`
-lane's (`ADX3001` if it names nothing). Gain, pan and pitch envelopes are stored and
-round-trip, but are audible only on audio clips, which play from Phase 8.
+lane's (`ADX3001` if it names nothing). Gain, pan and pitch envelopes are audible only on
+audio clips; on a pattern item they are stored and round-trip.
+
+`out=insert.N` sends a track's audio items to mixer insert `N` rather than the
+master. Pattern items are unaffected: their notes play through their channels' own
+routing.
 
 A pattern name that is not a `bare-name` is quoted (`PATTERN "Verse 2" 0:0:0`). An
 `AUTOMATION` item carries its breakpoints indented beneath it, in the same form as a
 pattern's lanes: a playlist-level lane belongs to no pattern, so it has nowhere
 else to live.
+
+### 7.4.1 Audio clips: edits, warps and takes
+
+Everything here is non-destructive (phase_8.md §3.2): the source file is never
+written, and every key below describes how to play it.
+
+- `fadein` / `fadeout` are the lengths of the clip's fades; `fadeincurve` /
+  `fadeoutcurve` their shapes (§8), written only when not `linear`. A fade compiles
+  exactly as a gain envelope's first or last segment would.
+- `crossfade` is how this clip crosses into an overlapping clip on the same lane:
+  equal power unless `linear`.
+- `edit` lists processing applied in order to a copy of the audio before it plays:
+  `reverse`, `dc` (remove the DC offset), `normalize:<dBFS>` (scale the peak to that
+  level), `gain:<dB>`, `trim:<dBFS>` (drop leading and trailing audio below that
+  level). Removing an entry, or undo, gets the original back.
+- `WARP` lines, indented under the item and sorted by item time, pin a time in the
+  source file (seconds) to a time in the item. With two or more, the audio between
+  each pair is stretched to fit (RubberBand, offline, pitch unchanged); with fewer,
+  the clip plays at its `stretch`.
+- `lane` is which lane of its track an item is drawn on. Recorded takes stack on
+  lanes 1, 2, …; a comp of them sits on lane 0 with the takes muted. Lanes are for
+  drawing only: the engine plays every unmuted item whatever its lane.
+
+```
+TRACK 3 name="Vox" out=insert.4
+  AUDIO "takes/Vox 2.wav" 8:0:0 length=4:0:0 mute=yes lane=2
+  AUDIO "takes/Vox 1.wav" 8:0:0 length=2:0:0 fadeout=0:0:480 fadeoutcurve=smooth
+  AUDIO "loops/break.wav" 16:0:0 crossfade=linear edit=dc,normalize:-0.3
+    WARP 0 0:0:0
+    WARP 0.512 0:1:0
+    WARP 1.98 1:0:0
+```
 
 ### 7.5 `[MIXER]`
 
@@ -537,7 +609,10 @@ insert-kv   = "name" "=" string | "gain" "=" number | "pan" "=" number
 slot-line   = "SLOT" , hspace , integer , hspace , ident , { hspace , slot-kv } ;
 slot-kv     = "mix" "=" number | "bypass" "=" boolean | "sidechain" "=" reference
             | "ir" "=" string                    (* a Convolution's impulse response *)
+            | "plugin" "=" string | "name" "=" string | "path" "=" string
+            | "isolated" "=" boolean             (* clap and vst3 slots only *)
             | ident , "=" , number ;
+state-line  = "STATE" , hspace , string ;      (* a child of a clap or vst3 SLOT *)
 
 send-line   = "SEND" , hspace , integer , hspace , reference , { hspace , send-kv } ;
 send-kv     = "level" "=" number | "pre" "=" boolean ;
@@ -567,6 +642,21 @@ owns them. `mix=` is the slot's own wet/dry, never one of its named parameters.
 new effect node. Without one, a Convolution builds a synthetic room from its `size`
 and `damping`.
 
+A slot of type `clap` or `vst3` hosts a third-party plugin (phase_9.md §4.7):
+`plugin=` names it, `name=` and `path=` say what and where it was, and its named
+parameters follow as for any effect - keys and units as for a plugin instrument (§7.2).
+Its opaque state is a `STATE "base64:..."` line indented beneath the slot, on its own so
+a diff of the parameters stays readable:
+
+```
+INSERT 2 name="Bus"
+  SLOT 1 clap plugin="com.example.eq" name="Example EQ" path="C:/Program Files/Common Files/CLAP/eq.clap" band1_gain=-3.5
+    STATE "base64:QURYVAAAAAAAAOA/AAAAAAAAAAA="
+```
+
+Plugins run in sandbox processes; a plugin that cannot be found or loaded leaves its
+slot passing audio through, and the file keeps everything about it.
+
 `sidechain=insert.N` keys the slot from another insert's output - a ducker or
 compressor listening to the kick (phase_4.md §4.9). It is an edge in the routing
 graph like a `ROUTE`, so a key that would close a cycle is `ADX3005`. An effect that
@@ -574,6 +664,33 @@ takes no key input ignores it.
 
 A file that declares no insert at all gets a master insert named `Master`, created
 on load and written out on the next save: every channel has to feed something.
+
+### 7.5.1 `[MIDI]`
+
+```ebnf
+midi-route  = "ROUTE" , hspace , channel-name , { hspace , route-kv } ;
+route-kv    = "device" "=" string                 (* an input's name; default any *)
+            | "channels" "=" integer , { "," , integer }   (* 1..16; default all *)
+            | "keys" "=" integer , ".." , integer          (* default 0..127 *)
+            | "vel" "=" integer , ".." , integer           (* default 1..127 *)
+            | "transpose" "=" integer | "curve" "=" number ;
+learn-line  = "LEARN" , hspace , control-kind , hspace , integer , hspace , param-path ,
+              { hspace , learn-kv } ;
+control-kind = "cc" | "note" | "bend" | "pressure" ;
+learn-kv    = "channel" "=" integer               (* 1..16; default any *)
+            | "device" "=" string | "min" "=" number | "max" "=" number
+            | "toggle" "=" boolean ;
+```
+
+The project's MIDI setup (phase_9.md §3 step 2, §4.1). A `ROUTE` sends the keys of an
+input to a channel, transposed and through a velocity curve (`curve` -1..1: above 0 lifts
+soft playing). A project with no routes plays the selected channel from every input,
+which is what a keyboard plugged in expects. `LEARN` binds a controller - a CC, a key, the
+pitch bend or channel pressure - to any parameter path (§5.1): its value maps from `min`
+at the controller's bottom to `max` at its top, and a `toggle` note binding flips between
+them on each press. The path is resolved at load like an `AUTOMATION` target and written
+back through the parameter it resolved to, so renaming the channel a binding points into
+keeps the binding. A path that does not resolve is `ADX3001`, and the line is kept.
 
 ### 7.6 `[MARKERS]`
 

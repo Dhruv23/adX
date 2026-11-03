@@ -53,8 +53,9 @@ void Compressor::processWet(std::span<const float> inLeft, std::span<const float
             m_external = context.paramAt(at(CompressorParam::KeyInput), i) >= 0.5F;
             m_linear = context.paramAt(at(CompressorParam::Smoothing), i) >= 0.5F;
         }
-        const float keyLeft = m_external ? context.sideLeft[i] : inLeft[i];
-        const float keyRight = m_external ? context.sideRight[i] : inRight[i];
+        const bool external = m_external || context.followKey;
+        const float keyLeft = external ? context.sideLeft[i] : inLeft[i];
+        const float keyRight = external ? context.sideRight[i] : inRight[i];
         float level = 0.0F;
         if (m_rms) {
             const float square = 0.5F * ((keyLeft * keyLeft) + (keyRight * keyRight));
@@ -181,8 +182,12 @@ void Limiter::processWet(std::span<const float> inLeft, std::span<const float> i
         // a stale history. The sample peak is delayed by the same kDelay the true-peak
         // estimate comes out late by, so both describe the same sample - the one the
         // audio line will release `lookahead` samples from now.
-        const float truePeak = std::max(m_peakLeft.push(inLeft[i]), m_peakRight.push(inRight[i]));
-        m_samplePeaks[m_samplePeakIndex] = std::max(std::abs(inLeft[i]), std::abs(inRight[i]));
+        // Following a key, the detectors read it: the gain is the full mix's, applied to
+        // this signal (SlotNode::canFollowKey).
+        const float keyLeft = context.followKey ? context.sideLeft[i] : inLeft[i];
+        const float keyRight = context.followKey ? context.sideRight[i] : inRight[i];
+        const float truePeak = std::max(m_peakLeft.push(keyLeft), m_peakRight.push(keyRight));
+        m_samplePeaks[m_samplePeakIndex] = std::max(std::abs(keyLeft), std::abs(keyRight));
         m_samplePeakIndex = (m_samplePeakIndex + 1) % m_samplePeaks.size();
         const float samplePeak = m_samplePeaks[m_samplePeakIndex];
         const float peak = m_truePeak ? std::max(truePeak, samplePeak) : samplePeak;
@@ -214,8 +219,16 @@ void Limiter::processWet(std::span<const float> inLeft, std::span<const float> i
         float left = 0.0F;
         float right = 0.0F;
         m_line.push(inLeft[i], inRight[i], left, right);
-        outLeft[i] = std::clamp(left * gain, -m_ceiling, m_ceiling);
-        outRight[i] = std::clamp(right * gain, -m_ceiling, m_ceiling);
+        if (context.followKey) {
+            // A stem's copy: the full mix's gain, unclipped. The ceiling protects the
+            // mix, and a stem can be louder than the mix it is part of - two that
+            // partly cancel - so clipping it would stop the stems summing.
+            outLeft[i] = left * gain;
+            outRight[i] = right * gain;
+        } else {
+            outLeft[i] = std::clamp(left * gain, -m_ceiling, m_ceiling);
+            outRight[i] = std::clamp(right * gain, -m_ceiling, m_ceiling);
+        }
     }
     publishReduction(static_cast<float>(dsp::gainToDb(m_envelope)));
 }
@@ -251,8 +264,9 @@ void Gate::processWet(std::span<const float> inLeft, std::span<const float> inRi
                                            0.001F * static_cast<float>(context.sampleRate));
             m_external = context.paramAt(at(GateParam::KeyInput), i) >= 0.5F;
         }
-        const float keyLeft = m_external ? context.sideLeft[i] : inLeft[i];
-        const float keyRight = m_external ? context.sideRight[i] : inRight[i];
+        const bool external = m_external || context.followKey;
+        const float keyLeft = external ? context.sideLeft[i] : inLeft[i];
+        const float keyRight = external ? context.sideRight[i] : inRight[i];
         const float level = levelDb(std::max(std::abs(keyLeft), std::abs(keyRight)));
         const float threshold = context.paramAt(at(GateParam::Threshold), i);
 

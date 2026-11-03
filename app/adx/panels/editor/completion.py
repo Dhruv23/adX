@@ -23,6 +23,7 @@ SECTIONS = (
     "PATTERN",
     "PLAYLIST",
     "MIXER",
+    "MIDI",
     "MARKERS",
     "CONTROLLER",
     "ARRANGEMENT",
@@ -33,6 +34,10 @@ KEYS: dict[str, tuple[str, ...]] = {
     "PROJECT": ("ADX_VERSION=", "TITLE=", "AUTHOR=", "CREATED=", "TUNING=", "LOOP="),
     "CHANNEL": (
         "INSTRUMENT=",
+        "PLUGIN=",
+        "PLUGIN_NAME=",
+        "PLUGIN_PATH=",
+        "STATE=",
         "VOICEBANK=",
         "OUTPUT=",
         "POLYPHONY=",
@@ -50,7 +55,8 @@ KEYS: dict[str, tuple[str, ...]] = {
     "PATTERN": ("LENGTH=", "COLOR=", "NOTES ", "MINI ", "AUTOMATION "),
     "PLAYLIST": ("TRACK ", "PATTERN ", "AUDIO "),
     "ARRANGEMENT": ("TRACK ", "PATTERN ", "AUDIO "),
-    "MIXER": ("INSERT ", "SLOT ", "SEND ", "ROUTE "),
+    "MIXER": ("INSERT ", "SLOT ", "SEND ", "ROUTE ", "STATE "),
+    "MIDI": ("ROUTE ", "LEARN "),
     "CONTROLLER": ("TYPE=", "TARGET=", "SOURCE=", "SHAPE=", "PERIOD="),
 }
 

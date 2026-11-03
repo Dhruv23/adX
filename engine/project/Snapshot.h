@@ -22,6 +22,8 @@
 #include "engine/core/Curve.h"
 #include "engine/core/TempoMath.h"
 #include "engine/graph/RenderGraph.h"
+#include "engine/midi/MidiLearn.h"
+#include "engine/midi/MidiRouter.h"
 #include "engine/project/EventTrack.h"
 #include "engine/project/Knot.h"
 #include "engine/project/ParamRef.h"
@@ -80,6 +82,14 @@ struct Snapshot {
 
     std::span<const AutomationLane> automation;
 
+    /// One table per audio track the graph plays (AudioRegion.h), indexed by
+    /// NodeStep::audioTrack. Rebuilt with every snapshot: it is small, and its sample
+    /// positions depend on the tempo map.
+    std::span<const graph::AudioTrackTable> audioTracks;
+    /// The audio table whose node hears the device input: the track armed with
+    /// software monitoring (SnapshotBuilder::setMonitor), or kNone.
+    std::uint32_t monitorTable{graph::kNone};
+
     graph::RenderGraph graph;
 
     /// Audio thread state after publication: every resolved parameter value. A knob
@@ -98,6 +108,12 @@ struct Snapshot {
     /// or none when nothing is automated.
     std::span<const std::uint32_t> paramLaneStart;
     std::span<const std::uint32_t> paramLanes;
+
+    /// The project's MIDI input routes, compiled; empty means "every input plays the
+    /// selected channel" (EngineCore's own route).
+    std::span<const midi::MidiRoute> midiRoutes;
+    /// Learned controls, compiled: device names resolved to slots.
+    std::span<const midi::CompiledBinding> midiBindings;
 
     /// What the reaper destroys when this snapshot retires: the storage that owns
     /// every span above, on the main thread. The audio thread copies it into the

@@ -62,7 +62,7 @@ public:
     [[nodiscard]] StreamInfo info() const noexcept;
 
     /// The scope/spectrum tap. Written every callback, read by the UI at 60 Hz.
-    [[nodiscard]] rt::OverwriteRing<rt::StereoFrame, 8192>& scopeTap() noexcept {
+    [[nodiscard]] ScopeTapRing& scopeTap() noexcept {
         return m_core.scopeTap();
     }
 
@@ -98,6 +98,8 @@ private:
     /// Reserved once, on the main thread, and never resized. The core's arena hands
     /// slices of it out; nothing on the audio thread touches this vector.
     std::vector<std::byte> m_arenaStorage;
+    /// The core's scope tap, on the heap for the same reason (CallbackCore::attachScopeTap).
+    std::unique_ptr<ScopeTapRing> m_scopeRing;
     CallbackCore m_core;
     rt::Reaper m_reaper;
 };

@@ -5,6 +5,7 @@
 // O(frames) Python objects (FINAL_PLAN §2.2 Rule 2). The file on disk is the output.
 // The render itself runs with the GIL released (Rule 3).
 
+#include <map>
 #include <stdexcept>
 #include <string>
 
@@ -12,6 +13,7 @@
 
 #include "bindings/Bindings.h"
 #include "bindings/ProjectHandle.h"
+#include "engine/graph/Scheduler.h"
 #include "engine/render/OfflineRender.h"
 
 namespace py = pybind11;
@@ -74,4 +76,42 @@ void registerRenderBindings(py::module_& m) {
         "Render `project` offline through the realtime engine's own code path and, if "
         "`path` is given, write a 32-bit float WAV. `end` of 0 means the end of the "
         "arrangement. Returns render statistics, including the golden-corpus hash.");
+
+    m.def(
+        "profile_render",
+        [](adx::bindings::ProjectHandle& project, std::uint32_t blockFrames) {
+            adx::graph::NodeProfile& profile = adx::graph::nodeProfile();
+            profile.nanoseconds.fill(0);
+            profile.calls.fill(0);
+            profile.names.fill({});
+            profile.used = 0;
+            adx::render::OfflineRenderOptions options;
+            options.blockFrames = blockFrames;
+            adx::render::RenderStats stats;
+            {
+                const py::gil_scoped_release released;
+                profile.enabled.store(true, std::memory_order_relaxed);
+                static_cast<void>(adx::render::renderOffline(project.project, options, stats));
+                profile.enabled.store(false, std::memory_order_relaxed);
+            }
+            if (!stats.error.empty()) {
+                throw std::runtime_error(stats.error);
+            }
+            // Summed by name: every Saturation slot is one row.
+            std::map<std::string, std::pair<std::uint64_t, std::uint64_t>> byName;
+            for (std::size_t i = 0; i < profile.used; ++i) {
+                auto& row =
+                    byName[std::string{profile.names[i].empty() ? "graph" : profile.names[i]}];
+                row.first += profile.nanoseconds[i];
+                row.second = std::max(row.second, profile.calls[i]);
+            }
+            py::list out;
+            for (const auto& [name, row] : byName) {
+                out.append(py::make_tuple(name, row.first, row.second));
+            }
+            return py::make_tuple(out, stats.wallSeconds);
+        },
+        py::arg("project"), py::arg("block_frames") = 256,
+        "Render offline with every graph step timed: ([(type, total ns, blocks)], wall seconds). "
+        "The optimization pass's profiler (bench/profile_nodes.py).");
 }

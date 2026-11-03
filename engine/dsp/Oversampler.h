@@ -42,14 +42,13 @@ public:
         // The zero-stuffed stream is x, 0, x, 0...: output 2m reads the even taps
         // against the input history, output 2m + 1 the odd taps.
         push(m_up, m_upIndex, x);
-        float even = 0.0F;
+        // Of the even taps only the centre is not zero (a half-band), so the even phase
+        // is one multiply. Skipping exact zeros in order leaves each sum bit for bit what
+        // it was: v + 0.0f and v + -0.0f are v, and a sum begun at +0 cannot become -0.
+        const float even = 0.0F + (taps[kCentre] * read(m_up, m_upIndex, kCentre / 2));
         float odd = 0.0F;
-        for (std::size_t k = 0; k < kHalf; ++k) {
-            const float h = read(m_up, m_upIndex, k);
-            even += taps[2 * k] * h;
-            if ((2 * k) + 1 < Taps) {
-                odd += taps[(2 * k) + 1] * h;
-            }
+        for (std::size_t k = 0; (2 * k) + 1 < Taps; ++k) {
+            odd += taps[(2 * k) + 1] * read(m_up, m_upIndex, k);
         }
         // x 2: zero-stuffing halved the energy.
         out[0] = 2.0F * even;
@@ -62,14 +61,20 @@ public:
         push(m_down, m_downIndex, second);
         float sum = 0.0F;
         // Output aligned to the *first* of the pair: tap n against the sample n back.
-        for (std::size_t n = 0; n < Taps; ++n) {
+        // Only the odd taps and the centre are not zero; the rest are skipped, in order.
+        for (std::size_t n = 1; n < kCentre; n += 2) {
+            sum += taps[n] * read(m_down, m_downIndex, n + 1);
+        }
+        sum += taps[kCentre] * read(m_down, m_downIndex, kCentre + 1);
+        for (std::size_t n = kCentre + 1; n < Taps; n += 2) {
             sum += taps[n] * read(m_down, m_downIndex, n + 1);
         }
         return sum;
     }
 
 private:
-    static constexpr std::size_t kHalf = (Taps + 1) / 2;
+    static constexpr std::size_t kCentre = Taps / 2;
+    static_assert(kCentre % 2 == 0, "the centre tap is an even one");
     static constexpr std::size_t kRing = 128;
     static_assert(Taps + 2 <= kRing);
 

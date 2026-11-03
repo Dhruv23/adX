@@ -38,6 +38,8 @@ struct NodeStep {
     /// Index into the snapshot's event tracks, or kNone for a node that takes no
     /// events.
     std::uint32_t eventTrack{kNone};
+    /// Index into the snapshot's audio tracks, or kNone (AudioRegion.h).
+    std::uint32_t audioTrack{kNone};
     /// Which time source drives this node. 0, the arrangement, until Phase 11.
     std::uint32_t timeSource{0};
     /// This node's slice of the snapshot's parameter storage.

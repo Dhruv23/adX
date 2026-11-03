@@ -25,6 +25,7 @@
 #include "bindings/PendingCommand.h"
 #include "bindings/ProjectHandle.h"
 #include "engine/core/Curve.h"
+#include "engine/format/adx/Value.h"
 #include "engine/format/adx/Writer.h"
 #include "engine/project/ParamRegistry.h"
 #include "engine/project/TypeCatalog.h"
@@ -129,6 +130,16 @@ py::tuple curveTuple(const adx::core::Curve& curve) {
                           curve.c2x, curve.c2y);
 }
 
+py::object pluginDict(const project::PluginRef& plugin) {
+    py::dict d;
+    d["uid"] = plugin.uid;
+    d["name"] = plugin.name;
+    d["path"] = plugin.path;
+    d["isolated"] = plugin.isolated;
+    d["has_state"] = !plugin.state.empty();
+    return d;
+}
+
 py::list channelsInfo(const ProjectHandle& handle) {
     py::list out;
     for (const project::Channel& c : handle.project.channels) {
@@ -137,7 +148,10 @@ py::list channelsInfo(const ProjectHandle& handle) {
         d["name"] = c.name;
         d["color"] = colorText(c.color);
         d["instrument"] = c.instrument.type;
-        d["known"] = project::findInstrumentType(c.instrument.type) != nullptr;
+        d["known"] = project::findInstrumentType(c.instrument.type) != nullptr ||
+                     project::isPluginType(c.instrument.type);
+        d["plugin"] =
+            c.instrument.plugin.empty() ? py::object(py::none()) : pluginDict(c.instrument.plugin);
         py::list params;
         for (const project::ParamValue& p : c.instrument.params) {
             params.append(py::make_tuple(p.name, p.value, p.hasCurve, curveTuple(p.curve)));
@@ -180,7 +194,9 @@ py::dict mixerInfo(const ProjectHandle& handle) {
             py::dict s;
             s["id"] = slot.id.value;
             s["type"] = slot.type;
-            s["known"] = project::findEffectType(slot.type) != nullptr;
+            s["known"] =
+                project::findEffectType(slot.type) != nullptr || project::isPluginType(slot.type);
+            s["plugin"] = slot.plugin.empty() ? py::object(py::none()) : pluginDict(slot.plugin);
             s["mix"] = slot.mix;
             s["bypass"] = slot.bypass;
             s["sidechain"] = slot.sidechain.value;
@@ -365,6 +381,7 @@ py::dict playlistInfo(const ProjectHandle& handle) {
         d["soloed"] = track.soloed;
         d["group"] = track.group.value;
         d["collapsed"] = track.collapsed;
+        d["output"] = track.output.value;
         d["audible"] = playlist.audible(track);
         d["items"] = track.items.size();
         tracks.append(d);
@@ -454,6 +471,45 @@ py::list itemEnvelopes(const ProjectHandle& handle, std::uint32_t track, std::ui
         out.append(d);
     }
     return out;
+}
+
+py::object audioItem(const ProjectHandle& handle, std::uint32_t track, std::uint32_t item) {
+    const project::PlaylistTrack* owner =
+        handle.project.playlist.find(adx::core::PlaylistTrackId{track});
+    if (owner == nullptr) {
+        return py::none();
+    }
+    const auto match =
+        std::ranges::find(owner->items, adx::core::ItemId{item}, &project::PlaylistItem::id);
+    if (match == owner->items.end()) {
+        return py::none();
+    }
+    const auto* audio = std::get_if<project::AudioClipRef>(&match->content);
+    if (audio == nullptr) {
+        return py::none();
+    }
+    py::dict d;
+    d["sample"] = audio->sample.value;
+    d["lane"] = match->lane;
+    d["stretch"] = audio->stretch;
+    d["pitch"] = audio->pitchSemitones;
+    d["reverse"] = audio->reverse;
+    d["fade_in"] = audio->fadeIn.length.value;
+    d["fade_out"] = audio->fadeOut.length.value;
+    d["fade_in_curve"] = adx::format::formatCurve(audio->fadeIn.curve);
+    d["fade_out_curve"] = adx::format::formatCurve(audio->fadeOut.curve);
+    d["crossfade"] = audio->crossfade == project::CrossfadeKind::Linear ? "linear" : "equal";
+    py::list edits;
+    for (const project::ClipEdit& edit : audio->edits) {
+        edits.append(py::make_tuple(std::string(project::toString(edit.kind)), edit.amount));
+    }
+    d["edits"] = edits;
+    py::list warps;
+    for (const project::WarpMarker& warp : audio->warps) {
+        warps.append(py::make_tuple(warp.source, warp.at.value));
+    }
+    d["warps"] = warps;
+    return d;
 }
 
 py::list controllersInfo(const ProjectHandle& handle) {
@@ -630,6 +686,10 @@ void defineStructureAccess(py::class_<ProjectHandle>& project) {
         // GIL: trivial - one placement's envelopes
         .def("item_envelopes", &itemEnvelopes, py::arg("track"), py::arg("item"),
              "A placement's clip envelopes: target and an (n, 8) points array each.")
+        // GIL: trivial - one placement's clip properties
+        .def("audio_item", &audioItem, py::arg("track"), py::arg("item"),
+             "An audio placement's clip properties (fades, curves, crossfade, edits, warps, "
+             "lane), or None when it is not audio (phase_8.md 3.2).")
         // GIL: trivial - one dict per controller
         .def("controllers_info", &controllersInfo, "Every controller's settings.")
         .def(

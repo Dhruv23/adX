@@ -86,15 +86,20 @@ void throwOnError(const adx::audio::Error& error) {
 } // namespace
 
 void registerAudioBindings(py::module_& m) {
+    // GIL: trivial - asks RtAudio which APIs were compiled
+    m.def(
+        "asio_compiled", [] { return adx::audio::RtAudioBackend::asioCompiled(); },
+        "True when this build has RtAudio's ASIO backend (phase_9.md 4.9).");
     m.def(
         "enumerate_devices",
-        []() {
+        [](bool asio) {
             std::vector<py::dict> out;
             {
                 // Probing the driver is real work and can take a while on a machine
                 // with a lot of hardware.
                 const py::gil_scoped_release released;
-                adx::audio::RtAudioBackend backend;
+                adx::audio::RtAudioBackend backend(asio ? adx::audio::AudioApi::Asio
+                                                        : adx::audio::AudioApi::Default);
                 const auto devices = backend.enumerate();
                 const py::gil_scoped_acquire acquired;
                 out.reserve(devices.size());
@@ -104,7 +109,8 @@ void registerAudioBindings(py::module_& m) {
             }
             return out;
         },
-        "Every audio device the system exposes, as a list of dicts.");
+        py::arg("asio") = false,
+        "Every audio device the system exposes (through ASIO when asked), as dicts.");
 
     m.def(
         "open_stream",

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Built 2026-10-21: every automated §7 box observed locally on Debug, RelWithDebInfo and Release; the human gate (§7 box 3, P7-1) closed 2026-10-25. CI (P7-0) is open: the first push failed and was fixed (§11, 17-19) - see plans/STATE.md |
+| **Status** | Done 2026-10-25: every automated §7 box observed locally on Debug, RelWithDebInfo and Release; the human gate (§7 box 3, P7-1) closed by the user; at `be487fe` (tag `phase-7`) CI green (run 40243278857) and the full check green (run 40248449713), after the first push failed and was fixed (§11, 17-19) |
 | **Governs** | bidirectional GUI↔text sync, filesystem hot reload, the editor panel, mini-notation, the Python scripting API |
 | **FINAL_PLAN refs** | §1 (the second half — *the reason the project exists*), §3.1 (PatternCompiler), §3.2 (hot reload, live-code editor), §5.8, §7 Phase 7 |
 | **Entry criteria** | [phase_6.md](phase_6.md) §6 complete |

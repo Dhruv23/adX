@@ -1,0 +1,35 @@
+# Open-source plugins the scenarios host (phase_10.5.md 4.6). Test fixtures only: never
+# shipped, linked or committed. tools/fetch_test_plugins.py downloads each archive into
+# %LOCALAPPDATA%/adx-test-plugins (ADX_TEST_PLUGINS moves it), refuses a hash mismatch,
+# and unpacks the listed bundles. A replacement is a recorded change to this file.
+#
+# Between them: a VST3 instrument, a VST3 effect, a CLAP instrument and a CLAP effect,
+# every one with an editor.
+
+[[plugin]]
+name = "Dexed"
+version = "1.1.0"
+license = "GPL-3.0"
+role = "instrument"
+url = "https://github.com/asb2m10/dexed/releases/download/v1.1.0/Dexed-1.1.0-win.zip"
+sha256 = "4773150a3dfa281d1caef583f493a41ed99ea95b054b5a3479780799ed6279cc"
+bundles = ["Dexed.vst3", "Dexed.clap"]
+
+[[plugin]]
+name = "Airwindows Consolidated"
+# The project publishes one rolling Windows build; the date and commit are its version.
+version = "2026-10-31-d013e10"
+license = "MIT"
+role = "effect"
+url = "https://github.com/baconpaul/airwin2rack/releases/download/DAWPlugin/AirwindowsConsolidated-2026-10-31-d013e10-Windows.zip"
+sha256 = "a21a0df8b0e47a96b4932fed3c05490c3f208fad84eb2fc73f4ca570dd34f292"
+bundles = ["Airwindows Consolidated.vst3", "Airwindows Consolidated.clap"]
+
+[[plugin]]
+name = "Surge XT"
+version = "1.3.4"
+license = "GPL-3.0"
+role = "instrument"
+url = "https://github.com/surge-synthesizer/releases-xt/releases/download/1.3.4/surge-xt-win64-1.3.4-pluginsonly.zip"
+sha256 = "564e162c560af07ad4ed47fe1bfcd827cf97a575de30d06c48249aad2e7c35e6"
+bundles = ["Surge XT.vst3", "Surge XT.clap", "Surge XT Effects.vst3", "Surge XT Effects.clap"]

@@ -24,6 +24,13 @@ class Preferences:
 
     sample_rate: int = 48000
     buffer_frames: int = 256
+    #: Open the default input for recording (phase_8.md 3.1); applies at the next start.
+    record_input: bool = False
+    #: Play the default output in WASAPI exclusive mode (STATE.md P9-9): about 6 ms
+    #: instead of about 60 on shared mode, but output only, and other apps go quiet.
+    exclusive_audio: bool = False
+    #: MIDI inputs to open, by port name (phase_9.md 4.1).
+    midi_inputs: list[str] = field(default_factory=list)
     sample_dirs: list[str] = field(default_factory=list)
     preset_dirs: list[str] = field(default_factory=list)
     project_dir: str = ""

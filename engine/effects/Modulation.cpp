@@ -10,12 +10,12 @@ namespace {
 
 /// A triangle in [-1, 1] at `phase` turns.
 [[nodiscard]] float triangle(double phase) noexcept {
-    const double p = phase - std::floor(phase);
+    const double p = phase - dsp::floorExact(phase);
     return static_cast<float>(p < 0.5 ? (4.0 * p) - 1.0 : 3.0 - (4.0 * p));
 }
 
 [[nodiscard]] double wrap(double phase) noexcept {
-    return phase - std::floor(phase);
+    return phase - dsp::floorExact(phase);
 }
 
 } // namespace
@@ -122,7 +122,7 @@ void Phaser::processWet(std::span<const float> inLeft, std::span<const float> in
             m_increment = static_cast<double>(context.paramAt(idx(PhaserParam::Rate), i)) /
                           context.sampleRate;
             m_stages = 2 * static_cast<std::size_t>(
-                               std::clamp(static_cast<int>(std::floor(
+                               std::clamp(static_cast<int>(dsp::floorExact(
                                               context.paramAt(idx(PhaserParam::Stages), i) + 0.5F)),
                                           1, 6));
             m_stereo = std::clamp(context.paramAt(idx(PhaserParam::Stereo), i), 0.0F, 0.5F);
@@ -174,9 +174,10 @@ void Tremolo::processWet(std::span<const float> inLeft, std::span<const float> i
         if (context.control(i)) {
             m_increment = context.paramAt(idx(TremoloParam::Rate), i) /
                           static_cast<float>(context.sampleRate);
-            m_shape = static_cast<dsp::LfoShape>(std::clamp(
-                static_cast<int>(std::floor(context.paramAt(idx(TremoloParam::Shape), i) + 0.5F)),
-                0, dsp::kLfoShapeCount - 1));
+            m_shape = static_cast<dsp::LfoShape>(
+                std::clamp(static_cast<int>(dsp::floorExact(
+                               context.paramAt(idx(TremoloParam::Shape), i) + 0.5F)),
+                           0, dsp::kLfoShapeCount - 1));
         }
         const float increment = m_increment;
         const dsp::LfoShape shape = m_shape;

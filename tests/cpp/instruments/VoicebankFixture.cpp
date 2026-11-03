@@ -10,6 +10,12 @@
 #include <string_view>
 #include <vector>
 
+#if defined(_WIN32)
+#    include <process.h>
+#else
+#    include <unistd.h>
+#endif
+
 namespace adx::tests {
 namespace {
 
@@ -140,13 +146,24 @@ void write(const fs::path& dir, std::string_view name, const std::vector<float>&
     writeFrq(dir / u8(std::string(name) + "_wav.frq"), samples.size());
 }
 
+std::uint32_t processId() {
+#if defined(_WIN32)
+    return static_cast<std::uint32_t>(_getpid());
+#else
+    return static_cast<std::uint32_t>(getpid());
+#endif
+}
+
 void writeBytes(const fs::path& path, std::string_view bytes) {
     std::ofstream out(path, std::ios::binary);
     out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
 }
 
 fs::path build() {
-    const fs::path root = fs::temp_directory_path() / "adx_voicebank_synth";
+    // One directory per process: ctest -j runs several test processes at once, and two
+    // of them rebuilding one shared bank delete each other's files mid-test.
+    const fs::path root =
+        fs::temp_directory_path() / ("adx_voicebank_synth_" + std::to_string(processId()));
     fs::remove_all(root);
     // Shift-JIS spellings: 単独音 連続音 for the folders' names in the oto files is not
     // needed - the folders are named in UTF-8 by the OS - but every oto.ini and

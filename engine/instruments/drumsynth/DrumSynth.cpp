@@ -95,8 +95,9 @@ void DrumSynth::startVoice(graph::Voice& voice, const graph::BlockEvent& /*event
                            const graph::VoiceRender& render) noexcept {
     DrumVoice& s = stateOf(voice);
     const std::uint32_t rate = sampleRate();
-    const int modelParam = std::clamp(
-        static_cast<int>(std::floor(render.param(idx(P::Model)) + 0.5F)), 0, kDrumModelCount - 1);
+    const int modelParam =
+        std::clamp(static_cast<int>(dsp::floorExact(render.param(idx(P::Model)) + 0.5F)), 0,
+                   kDrumModelCount - 1);
     const bool kit = modelParam == static_cast<int>(DrumModel::Kit);
     s.model = kit ? kitModel(voice.pitch) : static_cast<DrumModel>(modelParam);
     // In a kit only toms are tuned by their key, as a kit's toms are.
@@ -156,7 +157,7 @@ void DrumSynth::startVoice(graph::Voice& voice, const graph::BlockEvent& /*event
     case DrumModel::Hat:
         for (std::size_t m = 0; m < s.metal.size(); ++m) {
             const float phase = static_cast<float>(m) * 0.381966F;
-            s.metal[m].reset(phase - std::floor(phase));
+            s.metal[m].reset(phase - dsp::floorExact(phase));
         }
         s.filterCoefficients = dsp::svfCoefficients(
             std::min((7000.0 + (5000.0 * tone)) * ratio, rateD * 0.45), 1.2, rateD);
@@ -208,11 +209,11 @@ bool DrumSynth::renderVoice(graph::Voice& voice, std::span<float> left, std::spa
         case DrumModel::Tom: {
             const float hz = s.frequency * bend * dsp::exp2F(s.pitchDrop * s.sweep / 12.0F);
             s.phase += hz * inverseRate;
-            s.phase -= std::floor(s.phase);
+            s.phase -= dsp::floorExact(s.phase);
             float body = dsp::sinTurnsF(s.phase);
             if (s.subLevel > 0.0F) {
                 s.subPhase += s.frequency * bend * inverseRate;
-                s.subPhase -= std::floor(s.subPhase);
+                s.subPhase -= dsp::floorExact(s.subPhase);
                 body += dsp::sinTurnsF(s.subPhase) * s.subLevel;
             }
             out = (body + transient) * s.amp;
@@ -226,9 +227,9 @@ bool DrumSynth::renderVoice(graph::Voice& voice, std::span<float> left, std::spa
         case DrumModel::Snare: {
             const float dip = dsp::exp2F(s.pitchDrop * s.sweep / 12.0F) * bend;
             s.phase += s.frequency * dip * inverseRate;
-            s.phase -= std::floor(s.phase);
+            s.phase -= dsp::floorExact(s.phase);
             s.phase2 += s.frequency * (330.0F / 180.0F) * dip * inverseRate;
-            s.phase2 -= std::floor(s.phase2);
+            s.phase2 -= dsp::floorExact(s.phase2);
             const float shell = (dsp::sinTurnsF(s.phase) + (0.6F * dsp::sinTurnsF(s.phase2))) *
                                 0.6F * s.toneAmp * (1.0F - (0.5F * s.noiseLevel));
             const float wires =

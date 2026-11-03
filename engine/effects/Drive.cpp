@@ -11,10 +11,13 @@ namespace {
 /// The tube's bias: how far off centre the curve is driven, which is what makes it
 /// asymmetric and gives it even harmonics.
 constexpr float kTubeBias = 0.25F;
+/// tanh(kTubeBias), once: the same call on the same constant, so the same float the
+/// curve used to work out for every sample at four times the rate.
+const float kTubeOffset = dsp::tanhF(kTubeBias);
 
 [[nodiscard]] int stepped(const EffectContext& context, std::uint32_t index,
                           std::uint32_t frame) noexcept {
-    return static_cast<int>(std::floor(context.paramAt(index, frame) + 0.5F));
+    return static_cast<int>(dsp::floorExact(context.paramAt(index, frame) + 0.5F));
 }
 
 } // namespace
@@ -31,7 +34,7 @@ float saturate(SaturationModel model, float x) noexcept {
         break;
     }
     // tanh(x + b) - tanh(b): zero in, zero out; the DC it makes on signal is blocked.
-    return dsp::tanhF(x + kTubeBias) - dsp::tanhF(kTubeBias);
+    return dsp::tanhF(x + kTubeBias) - kTubeOffset;
 }
 
 float overdriveShape(OverdriveMode mode, float x) noexcept {
@@ -87,8 +90,8 @@ void Saturation::processWet(std::span<const float> inLeft, std::span<const float
             m_model = static_cast<SaturationModel>(
                 std::clamp(stepped(context, idx(SaturationParam::Model), i), 0, 2));
         }
-        const float drive = dsp::dbToGainF(context.paramAt(idx(SaturationParam::Drive), i));
-        const float output = dsp::dbToGainF(context.paramAt(idx(SaturationParam::Output), i));
+        const float drive = m_driveGain(context.paramAt(idx(SaturationParam::Drive), i));
+        const float output = m_outputGain(context.paramAt(idx(SaturationParam::Output), i));
         const SaturationModel model = m_model;
         for (std::size_t c = 0; c < 2; ++c) {
             const float shaped = m_oversampler[c].process(
@@ -146,8 +149,8 @@ void Overdrive::processWet(std::span<const float> inLeft, std::span<const float>
                 m_blend = 0.0F;
             }
         }
-        const float drive = dsp::dbToGainF(context.paramAt(idx(OverdriveParam::Drive), i));
-        const float level = dsp::dbToGainF(context.paramAt(idx(OverdriveParam::Level), i));
+        const float drive = m_driveGain(context.paramAt(idx(OverdriveParam::Drive), i));
+        const float level = m_levelGain(context.paramAt(idx(OverdriveParam::Level), i));
         const OverdriveMode mode = m_mode;
         const OverdriveMode from = m_from;
         const float blend = m_blend;

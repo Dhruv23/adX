@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Not started |
+| **Status** | Built 2026-10-30. Every automated §6 box observed locally on Debug, RelWithDebInfo and Release. **Not done:** CI (P9-0); MIDI latency, whose emulated half fails (P9-1, P9-9); ASIO's emulated half, not yet run (P9-4); the real-plugin and live-crash gates (P9-2, P9-3), agent-run since 2026-11-01 and closed by Phase 10.5's scenarios - see §10. Hardware halves are deferred to the final review |
 | **Governs** | VST3 and CLAP hosting, the plugin sandbox, MIDI device I/O, MIDI learn, clock sync, ASIO |
 | **FINAL_PLAN refs** | §5.6, §7 Phase 9, §8 (plugin hosting row), §10 ("the single largest risk") |
 | **Entry criteria** | [phase_8.md](phase_8.md) §6 complete |
@@ -335,23 +335,57 @@ assumes a global position, sync is contained rather than invasive.
 
 ## 6. Definition of done
 
-- [ ] `midi_roundtrip_latency` measured under 10 ms on real hardware, recorded.
+- [ ] `midi_roundtrip_latency` measured under 10 ms on real hardware, recorded. (hardware half)
+      **Emulated half run and failing (P9-1):** loopMIDI into the engine, measured to the
+      output mix, 67.75 to 74.24 ms median (§10); MIDI in is about 5 ms, the rest is
+      shared-mode output (P9-9). It becomes `[~]` when that tool measures under 10 ms;
+      it does not cover a keyboard's USB link or the device buffer after the mix. The
+      hardware keyboard is deferred to the final review (FINAL_PLAN §9).
 - [ ] A VST3 instrument and a VST3 effect load, automate, save and reload
       (FINAL_PLAN's stated gate), verified with at least three real third-party
-      plugins as well as the fixture.
-- [ ] A CLAP instrument and effect do the same.
-- [ ] Every `adx_test_plugin` misbehavior mode is handled without taking down the
-      host, and each has a passing test.
+      plugins as well as the fixture. **The fixture half is observed**
+      (`plugin_state_roundtrip`, `plugin_instrument_plays`,
+      `plugin_instrument_round_trips_through_text`, `plugin_latency_compensated`, all
+      for VST3). **The three real plugins (P9-2)** are agent-run since 2026-11-01
+      (FINAL_PLAN §9): pinned open-source plugins, fetched by hash, driven through the
+      GUI by `scenario_real_plugins` (phase_10.5.md §4.6).
+- [ ] A CLAP instrument and effect do the same. **The fixture half is observed**
+      (the same tests for CLAP, plus `plugin_params_automatable`); real plugins with
+      P9-2.
+- [x] Every `adx_test_plugin` misbehavior mode is handled without taking down the
+      host, and each has a passing test. Crash on load (`scanner_survives_crash_on_load`),
+      crash on process (`watchdog_crash_bypasses`), hang (`watchdog_hang_restarts`;
+      at scan, `scanner_survives_hang`), allocate in process
+      (`plugin_alloc_does_not_affect_host`), wrong latency
+      (`plugin_wrong_latency_detected`), latency change mid-playback
+      (`plugin_latency_change_midplay`), malformed state
+      (`plugin_malformed_state_handled`), a modal dialog on scan
+      (`scanner_survives_dialog_on_scan`), NaN (`plugin_nan_is_contained`) - and a slow
+      child (`watchdog_late_block_silences`).
 - [ ] A crashing plugin during playback does not interrupt playback of the rest
-      of the project — demonstrated live, not only in a test.
+      of the project — shown in the running app, not only in a unit test. **In a test**
+      (`watchdog_crash_bypasses`: the other channel bit-identical throughout, the
+      hosted path dry after the crash). **Live (P9-3)** is agent-run since 2026-11-01:
+      `scenario_live_plugin_crash` launches the app through `adX.cmd`, plays, turns
+      `mode` to 1 through the GUI, and checks the notice, Restart, the capture and the
+      xrun count (phase_10.5.md §4.6).
 - [ ] ASIO works with a real interface, with the latency readout matching a
-      measured loopback.
-- [ ] MIDI learn works from the Phase 6 generic editor on both native and plugin
-      parameters.
-- [ ] `headless_render_with_plugins` passes in CI.
-- [ ] FINAL_PLAN.md §8 gains rows for the VST3 SDK, CLAP and RtMidi; §10 Phase 9
-      row updated, and its "may need its own plan document" note is resolved by
-      pointing at this file.
+      measured loopback. (hardware half) **Built and enumerating** (`asio_device_enumeration`
+      `[.device]`, `rtaudio_default_api_is_not_asio`). **Emulated half not yet run
+      (P9-4):** FlexASIO over VB-Audio Virtual Cable, the readout against
+      `tools/measure_latency.py` through `Engine(asio=True)`; it would not cover a real
+      interface's own ASIO driver. The real interface is deferred to the final review
+      (FINAL_PLAN §9).
+- [x] MIDI learn works from the Phase 6 generic editor on both native and plugin
+      parameters (`test_panel_midi_learn.py`: the menu entry, enabled, arms learn and
+      binds the next control, on a Delay's parameter and on the fixture's `gain`; the
+      engine side in `midi_learn_binds_and_persists`).
+- [ ] `headless_render_with_plugins` passes in CI. **Passes locally**
+      (`test_plugin_lifecycle.py::test_headless_render_with_plugins`, `adx render` with
+      no display); **CI is P9-0.**
+- [x] FINAL_PLAN.md §8 gains rows for the VST3 SDK, CLAP and RtMidi (and ASIO); §10
+      Phase 9 row updated; the "may need its own plan document" note already points at
+      this file.
 
 ---
 
@@ -395,3 +429,217 @@ FINAL_PLAN §10 calls this the largest risk in the project. Specifically:
 | Real-world plugins misbehave in ways the fixture does not model | The fixture covers the known classes; the blacklist, watchdog and per-plugin isolation option handle the unknown ones without a code change |
 | Window embedding across processes is unreliable for some plugins | The generic editor fallback (§4.6) means those plugins remain fully usable |
 | Plugin state as a base64 blob undermines the text-first premise | Acknowledged explicitly (§4.7); named parameters carry everything that can be named, the blob is isolated to one line, and a sidecar option exists |
+
+---
+
+## 10. Evidence and progress
+
+Started 2026-10-29 (MIDI input), built 2026-10-30. Nothing is committed: the tree also
+holds Phase 8, which is built but not done either (P8-0, P8-1).
+
+### What exists
+
+**The sandbox (§4.2-§4.4).** `adx_plugin_host.exe` (`engine/plugin/Bridge/ChildMain.cpp`)
+scans (`--scan`, JSON to stdout, one child per file, parallel, under a 30 s deadline) and
+hosts (`--serve`). Control is a length-prefixed binary protocol on the child's stdin and
+stdout (`Protocol.h`); the child duplicates those handles and points the CRT's at stderr,
+so a plugin that prints cannot corrupt it. Audio is one shared region per instance
+(`SharedAudio.h`) exchanged a block at a time under a request/reply sequence pair and two
+named events; the audio thread's side (`AudioLink.cpp`) never waits past a deadline -
+half the block in realtime, ten seconds in an offline render - and waits in 20 ms slices
+so a child the watchdog found dead ends the wait at once. Each instance owns its region
+and events, so a restarted child reattaches to the same memory and the audio thread's
+pointers never change. The watchdog (`HostProcess::watch`, 20 ms) turns a dead child into
+`Crashed` (dry, a notice, a restart on request), a block outstanding for 2 s into a kill
+and an automatic restart with the last state, and the audio thread's own counters into
+`LateBypassed` (50 late in a second) and `Muted` (NaN or infinity, never propagated).
+Instances share one child; one marked isolated gets a child of its own at its next
+restart. `PluginHost` owns the children, the cache, and the notices the app shows.
+
+**Formats.** CLAP 1.2.6 (`clap/ClapModule.cpp`: params, state, latency, audio ports,
+GUI, restart, main-thread callbacks; note and parameter events merged by time) and VST3
+3.8.0 (`vst3/Vst3Module.cpp`, over the SDK's hosting helpers: single or split
+component/controller, connection points, `IComponentHandler` edits fed back to the
+processor and echoed to adX, `restartComponent`, state as one blob holding component and
+controller state, `IPlugView` editors). Both load effects and instruments.
+
+**In the graph (§4.5, §4.7).** `PluginEffect` is a slot node whose latency is the
+plugin's, PDC-compensated like any node's, with its own dry path following the plugin's
+live latency so a mix below 1 does not comb. `PluginInstrument` renders whole blocks
+through a new `ChannelNode::renderWhole` hook (notes at their offsets; note-offs by the key
+their note-on had; release-all and loop wrap handled). Parameters are declared by the node
+(`DeclaresParams`) from the scan cache and laid out by the graph like a type's; one the
+project does not name gets NaN, read as "leave the plugin's value", so a saved state is
+never overwritten by defaults nobody chose. Parameter changes from a plugin's own editor
+come back (`ProjectSync::applyPluginEchoes`) as value commands; live state goes into the
+project before every save and export (`syncPluginStates`). A latency change is a notice
+and a rebuild. `bridge::measureLatency` probes with an impulse and reports a plugin whose
+report is wrong.
+
+**Format.** `SLOT n clap|vst3 plugin=.. name=.. path=.. [isolated=yes] key=value...` with
+a quoted `STATE "base64:..."` line beneath it; `INSTRUMENT=clap|vst3` with `PLUGIN`,
+`PLUGIN_NAME`, `PLUGIN_PATH`, `PLUGIN_ISOLATED` and a last `STATE=` key; the `[MIDI]`
+section (`ROUTE`, `LEARN`). docs/adx-format-v2.md §7.2, §7.5, §7.5.1.
+
+**MIDI (§3 steps 1-3).** Input, routing and the clock from the first session (below).
+Now also: MIDI learn - bindings in the project (`project::MidiSettings`, commands, the
+format), compiled into the snapshot, matched on the audio thread and written as knob
+turns, their values sent back so the project and the knob follow
+(`RenderEngine::applyLearned`), and the last control published for learn mode; and the
+project's own routes replacing the omni route when there are any. Device names map to
+engine slots through `midi/DeviceNames`.
+
+**ASIO (§4.9).** RtAudio's ASIO path compiled in (`ADX_ENABLE_ASIO`, on); the backend
+names its API, WASAPI unless ASIO is asked for (`Engine(asio=True)`,
+`enumerate_devices(asio=True)`).
+
+**The app.** A Plugins panel (scan on a worker thread, installed and failed lists,
+rescan and forget a file, add an effect to the selected insert or an instrument to the
+selected channel), a plugin window (the plugin's editor embedded by handle, the generic
+editor below it always), the effect and instrument panels' generic editors built from a
+plugin's own parameter list, a MIDI panel (learned controls, learn status, routes), "MIDI
+learn" enabled in every parameter's menu, and `PluginRuntime` (learned values, editor
+echoes, notices to the status bar, rebuild on latency change, learn mode, state sync).
+
+### Evidence (2026-10-30, the final tree)
+
+| Check | Result |
+|---|---|
+| ctest Debug (`-LE slow`) | 466 / 466 (Phase 10's six harmony tests included) |
+| ctest RelWithDebInfo | 467 / 467, slow suite included |
+| ctest Release | 467 / 467, slow suite included |
+| Debug `[.slow]`, `ADX_FULL_EVIDENCE=1` | passed, 1419.69 s |
+| `[plugin]` in Release, three runs back to back | 28 / 28 each |
+| pytest, `CI=1` | 248 passed (GPU tests deselected), none skipped |
+| clang-tidy | clean, all 331 files, on all three compile databases |
+| clang-format, headers, format-safety, positions, dsp-math, rules | clean |
+| ruff, ruff format, mypy `--strict` | clean |
+| Launcher | `check_launcher: adX.cmd opened adX 0.1.0 - 16 panels, audio device open` |
+
+Phase 9 tests: `[plugin]` - `protocol_byte_roundtrip`, `plugin_scan_json_roundtrip`,
+`plugin_state_base64`, `plugin_param_keys`, `protocol_roundtrip`,
+`scanner_cache_invalidation`, `plugin_cache_saves_and_reloads`,
+`scanner_finds_both_formats`, `scanner_survives_crash_on_load`, `scanner_survives_hang`,
+`scanner_survives_dialog_on_scan`, `scanner_survives_hang_at_the_real_deadline`
+(`[.slow]`), `watchdog_crash_bypasses`, `watchdog_hang_restarts`,
+`watchdog_late_block_silences`, `plugin_shared_child_isolation`,
+`plugin_alloc_does_not_affect_host`, `plugin_nan_is_contained`,
+`plugin_malformed_state_handled`, `plugin_slot_round_trips_through_text`,
+`plugin_params_absent_keep_the_plugins_own`, `plugin_params_automatable`,
+`plugin_latency_compensated`, `plugin_wrong_latency_detected`,
+`plugin_latency_change_midplay`, `plugin_state_roundtrip`, `plugin_instrument_plays`,
+`plugin_instrument_round_trips_through_text`; `[midi][learn]` - `midi_learn_controls_normalise`,
+`midi_learn_binds_and_persists`, `midi_learn_survives_rename`, `midi_learn_relearn_replaces`,
+`midi_project_routes_play_their_channel`; `rtaudio_default_api_is_not_asio`,
+`asio_device_enumeration` (`[.device]`). Python: `test_plugin_lifecycle.py` (scan, render,
+state sync and save, crash notice and restart, plugin descriptors, headless `adx render`),
+`test_midi.py`, `panels/test_panel_midi_learn.py`.
+
+From the first session (MIDI input, 2026-10-29): `midi_input_sample_accurate`,
+`midi_input_plays_at_its_offset_through_the_engine`, `midi_input_no_alloc`,
+`midi_router_filters`, `midi_router_note_off_follows_its_note_on`,
+`midi_clock_pll_stability`, `midi_clock_follows_position`, `midi_clock_sends_24_a_beat`,
+and the live-MIDI and MIDI-preferences Python tests.
+
+### MIDI latency without a keyboard (2026-10-30, observed locally)
+
+The user has no MIDI keyboard, so `midi_roundtrip_latency` ran in software: loopMIDI
+1.0.16.27 as the port, `tools/measure_midi_latency.py` + `tools/midi_latency_probe.cpp`
+(notes sent into loopMIDI, onset found in WASAPI loopback of the default output, both
+stamped on QPC). Default output: 48000 Hz float stereo, Release pyd, 30 notes each:
+
+```
+block    64: to the mix median  67.75 ms, p95  68.30, max  68.36 (30 notes, 0 missed); endpoint 10.00 ms; est. audible  77.75 ms
+block   128: to the mix median  69.45 ms, p95  71.04, max  71.69 (30 notes, 0 missed); endpoint 10.00 ms; est. audible  79.45 ms
+block   256: to the mix median  74.24 ms, p95  76.26, max  76.81 (30 notes, 0 missed); endpoint 10.00 ms; est. audible  84.24 ms
+```
+
+**Far over the 10 ms gate.** Splitting the path: `Engine.audition` (no MIDI at all) to the
+mix measured 62.85 ms median at block 64 and 68.50 at 256 (15 notes each), so MIDI in
+(loopMIDI + RtMidi + the input thread) is about 5 ms and the rest is audio output. The
+device's driver offers one shared-mode period, 480 frames (default = fundamental = min =
+max), and a 1056-frame buffer at it. RtAudio 6.0.1's WASAPI thread keeps that 22 ms buffer
+full and its own ring (block + device buffer) full behind it, then the Windows mix adds
+its 10 ms period: about 55 to 60 ms before any block size. Shared mode on this device can
+never get under 10 ms (its period alone is 10 ms); the gate needs WASAPI exclusive mode or
+ASIO. Recorded as P9-9.
+
+### Not built
+
+MIDI output and sending clock to a device; clock follow wired to the arrangement's time
+source; MTC; pitch bend and MPE into `pitchCurve` (`midi_bend_import_roundtrip`,
+`midi_export_slide_mpe`); UST/USTX/VSQX import; recording a plugin parameter's automation
+from its own editor (echoes become values, not lanes); a stored per-plugin "embedding
+off" preference (the window always tries to embed and always shows the generic editor).
+All are open issues (STATE.md P9-5 to P9-8).
+
+### The first session (2026-10-29)
+
+Started 2026-10-29, in the session that finished building Phase 8 and before Phase 8's
+hardware gate (P8-1) closed. §3 puts MIDI first because it is the low-risk half; none
+of it depends on the latency measurement except `midi_roundtrip_latency`, which is a
+hardware gate of its own.
+
+## 11. Corrections made while executing this plan
+
+1. **The event rings in the shared region are plain arrays** (§4.3 sketched SpscRings).
+   The region is exchanged a whole block at a time under the request/reply pair, and a
+   host that finds the child still on the previous block writes nothing at all, so the
+   two sides never touch it at once: arrays guarded by the sequence are the same safety
+   for less.
+2. **"The host never blocks on the child" became "never waits past a deadline"** (§4.3).
+   Reading only what is ready would cost a whole block of latency on every plugin; the
+   audio thread instead waits on the child's event, bounded - half the block in realtime
+   (the graph needs the rest), ten seconds offline - in 20 ms slices that end early when
+   the watchdog has marked the child dead. Rule 1's "no unbounded wait" holds. Sub-
+   millisecond deadlines use a high-resolution waitable timer made on the main thread
+   with the event.
+3. **Control is the child's stdin and stdout, not a named pipe** (§4.3). Anonymous
+   pipes polled with `PeekNamedPipe` give the host a timeout without overlapped I/O; the
+   child takes its own duplicates of both handles before pointing the CRT's at stderr.
+   (Redirecting first closed the handle under the protocol - every scan's output was
+   empty until this was found.)
+4. **Load-time misbehaviour is selected by an environment variable** (§4.8 said "by
+   parameter"). Nothing can set a parameter before the plugin loads; `ADX_TEST_PLUGIN`
+   (crash, hang[:s], dialog), inherited by the scanner child, can. Run-time modes are the
+   `mode` parameter as planned, and the mode is not part of the fixture's state: a
+   project reopened does not crash again by itself.
+5. **Plugin parameters are declared by the node, not the TypeCatalog.** A slot or
+   instrument of type `clap`/`vst3` lays out its slice from the cached descriptor
+   (`DeclaresParams`), and an unnamed parameter's fallback is NaN, "leave it" - the
+   only way a saved state and the project's named values can coexist without the
+   graph's defaults overwriting the state. The layout comparison now compares fallbacks
+   bitwise (NaN != NaN rebuilt every graph until it did).
+6. **`PluginEffect` is a `SlotNode`, not an `effects::Effect`.** `Effect` fixes its
+   latency at prepare; a plugin can change its own (§4.5), so the node keeps a dry delay
+   that follows the plugin's live latency and PDC catches up on the rebuild the notice
+   triggers.
+7. **A plugin instrument needed a hook in `ChannelNode`** (`renderWhole`, `wholeSounding`):
+   `process` is final and voice-based, and a plugin has voices of its own. Departure and
+   handover release it and render a two-second tail.
+8. **The VST3 SDK is two repositories, not one, and not its CMake** (§9's anticipated
+   escape hatch, used without vendoring): `vst3_pluginterfaces` and `vst3_public_sdk`,
+   side by side under one root, hosting sources compiled as `adx_vst3sdk` in C++17 -
+   `module_win32.cpp` passes `u8string()` where C++20 makes it `std::u8string`. The
+   fixture's VST3 build uses `pluginterfaces` alone (`funknownimpl.h`), which needs the
+   factory to list `IPluginFactory` as an indirect interface or the SDK's own loader
+   rejects it.
+9. **ASIO needs no SDK path** (§4.9). RtAudio ships the ASIO host files itself; the work
+   was making the backend name its API, because RtAudio's own default is the first
+   compiled API in its list and ASIO precedes WASAPI there.
+10. **Plugin state is quoted in the file.** base64's `=` padding read as a key=value in
+    a bare token and was lost on load; `STATE "base64:..."`.
+11. **File times go into the scan cache as text.** A Windows file time is past 2^53 and
+    did not survive JSON's double, so no cached file was ever "fresh".
+12. **A notice could be lost.** A NaN mute or late bypass right before an instance was
+    destroyed - the end of a short render - never reached the watchdog; the instance now
+    reports an unreported state change as it goes. Found by `plugin_nan_is_contained`
+    failing only in Release.
+13. **MIDI routes and learned bindings are part of the snapshot,** not EngineCore state:
+    they swap in exactly when the graph they target does, and a binding to a deleted
+    parameter is simply not compiled (it stays in the file).
+14. **The two fixture builds need different output names.** One name for both made their
+    import libraries and debug databases collide; which build won depended on order.
+15. **Automatic clang-tidy fixes renamed the VST3 namespace aliases but not their uses**
+    (and only `--fix-errors` applies anything under warnings-as-errors). Reviewed by hand,
+    as the Phase 8 note on macro fixes advised.

@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "engine/audio/AudioThread.h"
+#include "engine/audio/StreamConfig.h"
 #include "engine/graph/EngineCore.h"
 #include "engine/project/ParamRef.h"
 #include "engine/project/SnapshotBuilder.h"
@@ -39,6 +40,14 @@ struct EngineOptions {
     std::uint32_t sampleRate{48000};
     std::uint32_t blockFrames{256};
     std::uint32_t outputChannels{2};
+    /// Recording (phase_8.md §3.1): the device to listen to and how many of its
+    /// channels. None by default - a stream that cannot record opens no input.
+    std::uint32_t inputDeviceId{audio::kNoDevice};
+    std::uint32_t inputChannels{0};
+    /// Pulled by an offline render rather than a device clock: nothing is late, so a
+    /// sandboxed plugin is waited for rather than given a realtime deadline
+    /// (phase_9.md §4.3).
+    bool offline{false};
 };
 
 struct CommitResult {
@@ -73,7 +82,9 @@ public:
 
     /// Brings the audio thread up to `stack.revision()`, rebuilding only what the
     /// dirty mask since the last sync says changed. Nothing to do returns
-    /// rebuilt == false.
+    /// rebuilt == false - unless an audio clip was playing a stand-in that is now
+    /// ready (SnapshotBuilder::audioReady), so a caller that commits at UI rate hears a
+    /// stretched clip as soon as it has rendered.
     CommitResult commit(const project::Project& project, const project::CommandStack& stack);
 
     /// A knob turn. Executes the matching value command, so the edit is in the
@@ -82,6 +93,10 @@ public:
     /// for a ref that names nothing turnable.
     bool setParam(project::Project& project, project::CommandStack& stack, project::ParamRef ref,
                   float value);
+
+    /// Software monitoring: the input plays through `track`'s insert while it is set
+    /// (invalid turns it off). Rebuilds, because the track may need a node.
+    CommitResult setMonitor(const project::Project& project, core::PlaylistTrackId track);
 
     // --- the arrangement's transport ---
 
@@ -99,9 +114,21 @@ public:
                   double seconds);
     /// Releases every audition note.
     void stopAudition();
+    /// Puts every value a learned MIDI control wrote since the last call into the
+    /// project, through the value commands, so the knob follows and the save has it.
+    /// Returns how many. Main thread, at UI rate.
+    std::size_t applyLearned(project::Project& project, project::CommandStack& stack);
+
+    /// Live MIDI input (EngineCore::setMidiInput) plays `channel` from the next block; an
+    /// invalid id silences it. Notes already held release where they started.
+    void setMidiTarget(core::ChannelId channel);
     /// The click: on every `beat` ticks while the arrangement rolls, the first of every
     /// `beatsPerBar` higher. Realtime only - nothing renders it offline (P5-3).
     void setMetronome(bool enabled, core::Ticks beat, std::uint32_t beatsPerBar);
+
+    /// One sample of `level` at arrangement sample `at`, straight to the output, while
+    /// the transport rolls past it. Loopback calibration (RecordSession.h).
+    void ping(std::int64_t at, float level);
 
     /// Where the audio thread says the arrangement is, as of its last block. O(1).
     [[nodiscard]] core::Ticks positionTicks() const noexcept;
@@ -136,6 +163,14 @@ public:
     /// Latency along the slowest path, in samples. The UI's latency readout.
     [[nodiscard]] std::uint32_t latencySamples() const noexcept {
         return m_builder.totalLatency();
+    }
+
+    /// An audio clip still plays a silent stand-in: its file is decoding or its
+    /// processed buffer rendering. commit() swaps the real one in once it is ready. A
+    /// device-clocked engine never notices; a test that renders a take as fast as it
+    /// can must wait for this to clear first.
+    [[nodiscard]] bool audioPending() const noexcept {
+        return m_builder.audioPending();
     }
 
     [[nodiscard]] audio::AudioThread& audio() noexcept {

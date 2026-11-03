@@ -1,4 +1,5 @@
 #include "engine/dsp/Envelope.h"
+#include "engine/dsp/Math.h"
 
 #include <algorithm>
 #include <cmath>
@@ -11,7 +12,7 @@ namespace {
         return 0;
     }
     const double samples = static_cast<double>(seconds) * static_cast<double>(sampleRate);
-    return static_cast<std::uint32_t>(std::floor(samples + 0.5));
+    return static_cast<std::uint32_t>(floorExact(samples + 0.5));
 }
 
 } // namespace

@@ -12,11 +12,11 @@ constexpr double kBufferSeconds = 10.0;
 
 [[nodiscard]] int stepped(const EffectContext& context, std::uint32_t index,
                           std::uint32_t frame) noexcept {
-    return static_cast<int>(std::floor(context.paramAt(index, frame) + 0.5F));
+    return static_cast<int>(dsp::floorExact(context.paramAt(index, frame) + 0.5F));
 }
 
 [[nodiscard]] double fraction(double x) noexcept {
-    return x - std::floor(x);
+    return x - dsp::floorExact(x);
 }
 
 /// The gate's level at p, before smoothing: 1 open, 1 - depth closed.
@@ -45,7 +45,7 @@ double grossBeatMap(GrossBeatPattern pattern, double p) noexcept {
         // The second half plays the first half backwards.
         return p < 0.5 ? p : 1.0 - p;
     case GrossBeatPattern::StutterEighth:
-        return p - (std::floor(p * 8.0) / 8.0);
+        return p - (dsp::floorExact(p * 8.0) / 8.0);
     case GrossBeatPattern::TapeStop: {
         // Normal for the first half; then the speed falls linearly to zero at the end.
         if (p < 0.5) {
@@ -55,7 +55,7 @@ double grossBeatMap(GrossBeatPattern pattern, double p) noexcept {
         return 0.5 + t - (t * t);
     }
     case GrossBeatPattern::RepeatBeat:
-        return p - (std::floor(p * 4.0) / 4.0);
+        return p - (dsp::floorExact(p * 4.0) / 4.0);
     case GrossBeatPattern::TwoThirds:
         return p * (2.0 / 3.0);
     case GrossBeatPattern::Off:

@@ -22,10 +22,12 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "engine/clip/ClipEdit.h"
 #include "engine/graph/CompiledGraph.h"
 #include "engine/graph/GraphBuilder.h"
 #include "engine/project/Note.h"
@@ -68,7 +70,7 @@ void destroySnapshot(Snapshot* snapshot) noexcept;
 
 class SnapshotBuilder {
 public:
-    SnapshotBuilder(std::uint32_t sampleRate, std::uint32_t maxBlockFrames);
+    SnapshotBuilder(std::uint32_t sampleRate, std::uint32_t maxBlockFrames, bool offline = false);
     ~SnapshotBuilder();
 
     SnapshotBuilder(const SnapshotBuilder&) = delete;
@@ -99,6 +101,23 @@ public:
 
     /// Latency along the slowest path of the last successful build, in samples.
     [[nodiscard]] std::uint32_t totalLatency() const noexcept;
+
+    /// True when the last build played a stand-in for an audio clip whose real buffer
+    /// has since finished decoding or rendering: a rebuild now would play it.
+    [[nodiscard]] bool audioReady() const noexcept;
+
+    /// True while the last build plays a stand-in for any audio clip - ready or not
+    /// yet. A rebuild (RenderEngine::commit) clears what has become ready.
+    [[nodiscard]] bool audioPending() const noexcept {
+        return !m_audioWaiting.empty();
+    }
+
+    /// Software monitoring on `track` (invalid: off) from the next build on.
+    void setMonitor(core::PlaylistTrackId track);
+
+    /// Renders one stem instead of the master from the next build on (GraphBuilder.h,
+    /// StemSpec). An offline render's builder only; null goes back to the master.
+    void setStem(const graph::StemSpec* stem);
 
     /// Clears every cache, so the next build starts from nothing. For the debug mode
     /// phase_3.md §10 asks for: build incrementally, build from scratch, compare.
@@ -147,6 +166,10 @@ private:
 
     std::uint32_t m_sampleRate;
     graph::NodeStore m_nodes;
+    /// The stem copy's nodes: a second instance of every insert, slot and channel it
+    /// uses, so the full mix and the stem never share DSP state.
+    graph::NodeStore m_stemNodes;
+    std::optional<graph::StemSpec> m_stem;
 
     std::shared_ptr<const TempoBlock> m_tempo;
     std::shared_ptr<graph::GraphBuild> m_graphBuild;
@@ -155,6 +178,9 @@ private:
     std::map<std::uint32_t, ChannelCacheEntry> m_channels;
     std::uint64_t m_clipVersion{0};
     bool m_primed{false};
+    /// Audio entries the last build had to stand in for (ClipEdit.h).
+    /// With whether its decoded file was ready then.
+    std::vector<std::pair<std::shared_ptr<const clip::ClipRenderEntry>, bool>> m_audioWaiting;
 
     SnapshotBuildStats m_stats;
 };

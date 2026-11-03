@@ -17,6 +17,7 @@ import numpy as np
 
 from adx import engine_bridge
 from adx.engine_bridge import PPQ, Project
+from adx.patterns import fitted_length, pattern_id
 from adx.selection import Context, Kind, Selection
 from adx.session import Session
 
@@ -180,7 +181,17 @@ class EditOps:
             notes,
             "Paste notes",
         )
-        return self.session.execute(command)
+        project = self.session.require()
+        needed = fitted_length(project, context.pattern, [notes])
+        if needed is None:
+            return self.session.execute(command)
+        # Past the pattern's end: the pattern grows to hold them, in the same step.
+        with self.session.group("Paste notes"):
+            done = self.session.execute(command)
+            self.session.build_and_execute(
+                "SetPatternLength", pattern_id(project, context.pattern), needed
+            )
+        return done
 
     # --- duplicate ------------------------------------------------------------------
 

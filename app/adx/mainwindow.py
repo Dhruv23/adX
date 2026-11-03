@@ -11,31 +11,43 @@ whatever a user did to it.
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QEvent, QObject, QSettings, Qt, QTimer
 from PySide6.QtGui import QCloseEvent, QKeyEvent, QShowEvent
 from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QMainWindow, QMessageBox
 
-from adx import __version__, engine_bridge
+from adx import __version__, engine_bridge, frame_clock
 from adx.actions import ActionRegistry
 from adx.autosave import Autosave
+from adx.delivery import Delivery
 from adx.edit_ops import EditOps
-from adx.engine_bridge import PPQ, Engine, FrameClock, Project
+from adx.engine_bridge import PPQ, Engine, Project
+from adx.frame_clock import FrameClock
+from adx.live_midi import LiveMidi
 from adx.menus import register_actions
+from adx.panels.analysis.panel import AnalysisPanel
+from adx.panels.analyzers import AnalyzerHost, AnalyzerPanel, make_panels
 from adx.panels.automation.panel import AutomationPanel
 from adx.panels.base import DockPanel
 from adx.panels.browser import BrowserPanel
 from adx.panels.channel_rack.panel import ChannelRackPanel
+from adx.panels.clip_editor.panel import ClipEditorPanel
 from adx.panels.effect.panel import EffectPanel
+from adx.panels.generate.genre_suite import GeneratePanel
 from adx.panels.geometry_view import GeometryView
 from adx.panels.history.panel import HistoryPanel
 from adx.panels.inspector.panel import InspectorPanel
 from adx.panels.instrument.panel import InstrumentPanel
+from adx.panels.midi.learn import MidiPanel
 from adx.panels.mixer.panel import MixerPanel
+from adx.panels.params import set_learn_hook
 from adx.panels.piano_roll.panel import PianoRollPanel
 from adx.panels.playlist.panel import PlaylistPanel
+from adx.panels.plugins.browser import PluginBrowserPanel
 from adx.panels.waveform.widget import WaveformPanel
+from adx.plugin_runtime import PluginRuntime
 from adx.preferences import Preferences
 from adx.scripting import api as scripting_api
 from adx.selection import Context, Kind, Selection
@@ -48,7 +60,7 @@ from adx.transport_bar import TransportBar
 #: Bump when the dock layout changes shape, so an old saved layout is not restored
 #: into panels it does not describe. 2: Phase 6's panels. 3: the editors in the middle.
 #: 4: Phase 7's text editor and console.
-LAYOUT_VERSION = 4
+LAYOUT_VERSION = 5
 
 NEW_PROJECT = """[PROJECT]
 ADX_VERSION=2
@@ -92,9 +104,14 @@ class MainWindow(QMainWindow):
         self._before_maximize = QByteArray()
         self._quickstart: QDialog | None = None
         self.setWindowTitle("adX")
+        self.setObjectName("window")
+        #: The agent's control channel, when the launch asked for one (application.run).
+        self.control_server: object | None = None
         self.setDockNestingEnabled(True)
         self.transport = TransportBar(self)
         self.addToolBar(self.transport)
+        self.delivery = Delivery(self)
+        self.addToolBar(self.delivery.record)
         self._build_panels()
         self.resize(1600, 960)
         self._place_panels()
@@ -109,6 +126,7 @@ class MainWindow(QMainWindow):
         self._connect()
         self.clock = FrameClock(engine, parent=self)
         self.mixer.attach(self.clock)
+        self.analyzer_host.attach(self.clock)
         self.clock.frame.connect(self._on_frame)
         scripting_api.follow_frames(self.clock.frame)
         self.text.set_mode(self.prefs.sync_mode)
@@ -120,9 +138,10 @@ class MainWindow(QMainWindow):
             self,
         )
         self.statusBar().showMessage("Ready")
-        engine_bridge.errors.error.connect(
-            lambda where, message: self.status(f"{where}: {message}")
-        )
+        frame_clock.errors.error.connect(lambda where, message: self.status(f"{where}: {message}"))
+        self.live_midi = LiveMidi(engine, self.session, self.selection, self.status)
+        if not engine.null_backend and self.prefs.midi_inputs:
+            self.live_midi.apply(self.prefs.midi_inputs)
         self.restore_layout()
         self.clock.start()
 
@@ -130,6 +149,10 @@ class MainWindow(QMainWindow):
 
     def _build_panels(self) -> None:
         s, sel = self.session, self.selection
+        # Plugins and MIDI learn (phase_9.md): the per-tick pump, and what "MIDI learn"
+        # in any parameter's menu arms.
+        self.plugin_runtime = PluginRuntime(self.engine, s, self.status, self)
+        set_learn_hook(self.plugin_runtime.arm)
         self.browser = BrowserPanel(str(Path.cwd()), self, session=s)
         self.channel_rack = ChannelRackPanel(s, sel, self)
         self.piano_roll = PianoRollPanel(self)
@@ -141,6 +164,13 @@ class MainWindow(QMainWindow):
         self.history = HistoryPanel(s, self)
         self.inspector = InspectorPanel(s, sel, self)
         self.waveform = WaveformPanel(self)
+        self.clip_editor = ClipEditorPanel(s, sel, self)
+        self.plugins = PluginBrowserPanel(s, sel, self)
+        self.midi = MidiPanel(s, self.plugin_runtime, self)
+        self.analysis_panel = AnalysisPanel(s, self)
+        self.analyzer_host = AnalyzerHost(self.engine, parent=self)
+        self.analyzers = make_panels(self.analyzer_host, self)
+        self.generate = GeneratePanel(self.open_generated, self)
         self.text = TextLayer(self)
         self.editor = self.text.editor
         self.console = self.text.console
@@ -153,11 +183,17 @@ class MainWindow(QMainWindow):
             self.mixer,
             self.automation,
             self.waveform,
+            self.clip_editor,
             self.instrument,
             self.effect,
             self.inspector,
             self.editor,
             self.console,
+            self.plugins,
+            self.midi,
+            self.analysis_panel,
+            self.generate,
+            *self.analyzers,
         ]
 
     def _connect(self) -> None:
@@ -233,6 +269,18 @@ class MainWindow(QMainWindow):
         project, _diagnostics = Project.loads(NEW_PROJECT)
         self._adopt(project, None)
 
+    def open_generated(self, text: str, title: str) -> bool:
+        """A generated track or template as a new, unsaved project (the Generate panel)."""
+        if not self._may_discard():
+            return False
+        project, diagnostics = Project.loads(text)
+        if any(str(d["severity"]) == "error" for d in diagnostics):
+            self.status(f"{title}: the generated text did not load")
+            return False
+        self._adopt(project, None)
+        self.status(f"Generated {title}")
+        return True
+
     def open_dialog(self) -> None:
         """Ask for a file, then open it."""
         start = str(self.settings.value("last_dir", str(Path.cwd())))
@@ -268,6 +316,8 @@ class MainWindow(QMainWindow):
             return False
         if self.path is None:
             return self.save_as()
+        # The file holds what the plugins hold now, not what they held at load.
+        self.plugin_runtime.sync_states()
         self.project.save(self.path)
         self.text.saved(self.path)
         self.saved_revision = self.project.revision()
@@ -287,8 +337,9 @@ class MainWindow(QMainWindow):
         return self.save()
 
     def export_wav(self, path: str) -> dict[str, object]:
-        """Render the arrangement offline to a 32-bit float WAV (the full export dialog is
-        Phase 8's). Returns the render statistics, the hash among them."""
+        """Render the arrangement offline straight to a 32-bit float WAV, in place: the
+        quick path tests and scripts use. Returns the render statistics, the hash among
+        them. The export dialog is :meth:`export_dialog`."""
         project = self.session.require()
         stats = engine_bridge.render_to_file(project, path)
         seconds = float(stats["frames"]) / float(stats["sample_rate"])
@@ -296,13 +347,8 @@ class MainWindow(QMainWindow):
         return stats
 
     def export_dialog(self) -> None:
-        """Ask for a file, then export."""
-        stem = Path(self.path).stem if self.path else "untitled"
-        path, _filter = QFileDialog.getSaveFileName(
-            self, "Export WAV", f"{stem}.wav", "WAV (*.wav)"
-        )
-        if path:
-            self.export_wav(path)
+        """The export matrix (phase_8.md 3.5)."""
+        self.delivery.export_dialog()
 
     def _dirty(self) -> bool:
         return self.project is not None and self.project.revision() != self.saved_revision
@@ -373,7 +419,9 @@ class MainWindow(QMainWindow):
 
     def status(self, message: str) -> None:
         """A line in the status bar."""
-        self.statusBar().showMessage(message, 8000)
+        # The window may be gone (teardown): an error reported then has nowhere to show.
+        with contextlib.suppress(RuntimeError):
+            self.statusBar().showMessage(message, 8000)
 
     # --- cross-panel navigation -----------------------------------------------------
 
@@ -487,6 +535,8 @@ class MainWindow(QMainWindow):
         self.playlist.frame(ticks, rolling)
         self.mixer.frame(self.clock)
         self.text.frame(ticks, rolling)
+        for analyzer in self.analyzers:
+            analyzer.frame(self.clock.analyzer_frame)
 
     # --- preferences, layout and theme ----------------------------------------------
 
@@ -495,7 +545,8 @@ class MainWindow(QMainWindow):
         from adx.panels.preferences.dialog import PreferencesDialog
 
         latency = self.engine.latency_samples() / max(1, self.engine.sample_rate) * 1000.0
-        dialog = PreferencesDialog(self.prefs, latency, self)
+        inputs = self.live_midi.available() if not self.engine.null_backend else []
+        dialog = PreferencesDialog(self.prefs, latency, self, midi_inputs=inputs)
         if dialog.exec() and dialog.result_preferences is not None:
             self.apply_preferences(dialog.result_preferences)
 
@@ -506,6 +557,8 @@ class MainWindow(QMainWindow):
         self.set_theme_name(prefs.theme)
         self.autosave.set_interval(prefs.autosave_minutes)
         self.text.set_mode(prefs.sync_mode)
+        if not self.engine.null_backend:
+            self.live_midi.apply(prefs.midi_inputs)
         self.browser.preset_dirs = [self.browser.preset_dirs[0], *prefs.preset_dirs]
         self.browser.refresh()
 
@@ -545,15 +598,24 @@ class MainWindow(QMainWindow):
         self.setCorner(Qt.Corner.BottomLeftCorner, Qt.DockWidgetArea.LeftDockWidgetArea)
         self.setCorner(Qt.Corner.TopLeftCorner, Qt.DockWidgetArea.LeftDockWidgetArea)
         self.tabifyDockWidget(self.browser, self.history)
+        self.tabifyDockWidget(self.history, self.plugins)
+        self.tabifyDockWidget(self.plugins, self.midi)
+        self.tabifyDockWidget(self.midi, self.generate)
         self.splitDockWidget(self.playlist, self.instrument, Qt.Orientation.Horizontal)
         self.tabifyDockWidget(self.playlist, self.channel_rack)
         self.tabifyDockWidget(self.channel_rack, self.piano_roll)
         self.tabifyDockWidget(self.instrument, self.effect)
         self.tabifyDockWidget(self.effect, self.inspector)
         self.tabifyDockWidget(self.inspector, self.editor)
+        self.tabifyDockWidget(self.editor, self.analysis_panel)
         self.tabifyDockWidget(self.mixer, self.automation)
         self.tabifyDockWidget(self.automation, self.waveform)
-        self.tabifyDockWidget(self.waveform, self.console)
+        self.tabifyDockWidget(self.waveform, self.clip_editor)
+        self.tabifyDockWidget(self.clip_editor, self.console)
+        previous: DockPanel = self.console
+        for analyzer in self.analyzers:
+            self.tabifyDockWidget(previous, analyzer)
+            previous = analyzer
         self.browser.raise_()
         self.playlist.raise_()
         self.instrument.raise_()
@@ -637,6 +699,9 @@ class MainWindow(QMainWindow):
         self.waveform.waveform.apply_theme(theme)
         for panel in (self.playlist, self.channel_rack, self.mixer, self.automation, self.history):
             panel.apply_theme(theme)
+        for analyzer in self.analyzers:
+            if isinstance(analyzer, AnalyzerPanel):
+                analyzer.apply_theme(theme)
         self.editor.apply_theme(theme)
 
     def show_quickstart(self) -> None:

@@ -27,6 +27,17 @@ namespace adx::graph {
 inline constexpr std::uint32_t kAuditionSource = 0xFFFFU;
 /// Audition note ids live above this bit, clear of model and arpeggiator ids.
 inline constexpr std::uint32_t kAuditionNoteBit = 0x40000000U;
+/// Live input's note ids (a MIDI keyboard): this bit as well, then the device, MIDI
+/// channel and key, so a note-off finds the voice its note-on started. Audition's own
+/// counter stays below it.
+inline constexpr std::uint32_t kLiveNoteBit = 0x20000000U;
+
+/// The note id live input gives (device, MIDI channel, key).
+[[nodiscard]] constexpr std::uint32_t liveNoteId(std::uint8_t device, std::uint8_t channel,
+                                                 std::uint8_t key) noexcept {
+    return kAuditionNoteBit | kLiveNoteBit | (static_cast<std::uint32_t>(device) << 11U) |
+           (static_cast<std::uint32_t>(channel & 0x0FU) << 7U) | (key & 0x7FU);
+}
 
 /// One audition event for the step that plays `channel`.
 struct AuditionEvent {

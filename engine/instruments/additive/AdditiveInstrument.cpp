@@ -67,7 +67,7 @@ using P = AdditiveParam;
 }
 
 [[nodiscard]] int stepped(const graph::VoiceRender& render, P param, std::uint32_t frame) noexcept {
-    return static_cast<int>(std::floor(render.paramAt(idx(param), frame) + 0.5F));
+    return static_cast<int>(dsp::floorExact(render.paramAt(idx(param), frame) + 0.5F));
 }
 
 [[nodiscard]] std::uint32_t voiceSeed(const graph::Voice& voice) noexcept {
@@ -247,6 +247,7 @@ bool AdditiveInstrument::renderVoice(graph::Voice& voice, std::span<float> left,
 
     bool alive = true;
     float env = state.ampEnv.level();
+    dsp::MidiHz hzOf; // the pitch's Hz, again only when it moves
     for (std::uint32_t i = 0; i < left.size(); ++i) {
         if (!alive) {
             left[i] = 0.0F;
@@ -270,7 +271,7 @@ bool AdditiveInstrument::renderVoice(graph::Voice& voice, std::span<float> left,
                 state.vibratoPhase -= 1.0F;
             }
         }
-        const float increment = dsp::midiToHz(pitch + (cents * 0.01F)) * inverseRate;
+        const float increment = hzOf(pitch + (cents * 0.01F)) * inverseRate;
 
         if (control(voice, i)) {
             refresh(voice, state, render, i);
@@ -287,7 +288,7 @@ bool AdditiveInstrument::renderVoice(graph::Voice& voice, std::span<float> left,
             float& phase = state.phase[k];
             phase += step;
             if (phase >= 1.0F) {
-                phase -= std::floor(phase);
+                phase -= dsp::floorExact(phase);
             }
         }
 
@@ -298,7 +299,7 @@ bool AdditiveInstrument::renderVoice(graph::Voice& voice, std::span<float> left,
             osc += sub * subLevel;
             state.subPhase += increment;
             if (state.subPhase >= 1.0F) {
-                state.subPhase -= std::floor(state.subPhase);
+                state.subPhase -= dsp::floorExact(state.subPhase);
             }
         }
 

@@ -126,6 +126,17 @@ enum class CommandId : std::uint16_t {
     // Phase 7: what a reload from text needs (PatchCommands.h).
     kSetNoteClip,
     kReplaceProject,
+
+    // Phase 8: freeze, and relinking samples.
+    kSetChannelFrozen,
+    kSetSamplePath,
+    kSetSampleSearchPaths,
+
+    // Phase 9: hosted plugins and MIDI.
+    kSetPluginState,
+    kAddMidiBinding,
+    kRemoveMidiBinding,
+    kSetMidiRoutes,
 };
 
 class Command {

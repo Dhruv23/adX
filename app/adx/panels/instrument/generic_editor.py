@@ -11,7 +11,8 @@ from typing import Any
 
 from adx import engine_bridge
 from adx.panels.automation.lane import automated_paths, create_lane
-from adx.panels.params import GenericEditor, ParamTarget, channel_path
+from adx.panels.effect.generic_editor import plugin_descriptors
+from adx.panels.params import GenericEditor, ParamTarget, arm_learn, channel_path
 from adx.session import Session
 
 
@@ -55,26 +56,34 @@ def channel_target(session: Session, channel: int) -> ParamTarget:
             # a command, after which it is a path like any other.
             session.build_and_execute("SetChannelParam", channel, parameter, value)
 
-    def automate(parameter: str) -> None:
+    def ensure(parameter: str) -> str:
+        """The parameter's path, set to its default first if the channel lacks it."""
         path = channel_path(name(), parameter)
+        if not session.require().param_valid(path):
+            default = next(
+                (
+                    float(d["default"])
+                    for d in descriptors_of(instrument_of(session, channel))
+                    if d["name"] == parameter and int(d["curve_part"]) == 0
+                ),
+                0.0,
+            )
+            session.build_and_execute("SetChannelParam", channel, parameter, default)
+        return path
+
+    def automate(parameter: str) -> None:
         with session.group(f"Automate {parameter}"):
-            if not session.require().param_valid(path):
-                default = next(
-                    (
-                        float(d["default"])
-                        for d in descriptors_of(instrument_of(session, channel))
-                        if d["name"] == parameter and int(d["curve_part"]) == 0
-                    ),
-                    0.0,
-                )
-                session.build_and_execute("SetChannelParam", channel, parameter, default)
-            create_lane(session, path)
+            create_lane(session, ensure(parameter))
+
+    def learn(parameter: str) -> None:
+        arm_learn(ensure(parameter))
 
     return ParamTarget(
         path_of=lambda parameter: channel_path(name(), parameter),
         read_values=read_values,
         turn=turn,
         automate=automate,
+        learn=learn,
         automated_paths=lambda: automated_paths(session),
     )
 
@@ -98,5 +107,11 @@ def set_curve_callback(session: Session, channel: int) -> SetCurve:
 
 
 def generic_for(session: Session, channel: int, instrument: str) -> GenericEditor:
-    """The generic editor for a channel's instrument."""
-    return GenericEditor(descriptors_of(instrument), channel_target(session, channel))
+    """The generic editor for a channel's instrument - a hosted plugin's from its own
+    parameter list."""
+    if instrument in ("clap", "vst3"):
+        info = channel_info(session, channel)
+        descriptors = plugin_descriptors(None if info is None else info.get("plugin"), instrument)
+    else:
+        descriptors = descriptors_of(instrument)
+    return GenericEditor(descriptors, channel_target(session, channel))

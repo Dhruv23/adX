@@ -17,20 +17,57 @@ from types import TracebackType
 from PySide6.QtCore import QSettings, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 
-from adx import engine_bridge
+from adx import engine_bridge, frame_clock
+from adx.control import server as control_server
 from adx.engine_bridge import Engine, QuickPluginError
 from adx.mainwindow import MainWindow
+from adx.preferences import Preferences
 
 
-def start_engine(null_audio: bool) -> tuple[Engine, str]:
-    """An engine with its stream started, and a note on which backend it uses."""
+def start_engine(
+    null_audio: bool,
+    input_channels: int = 0,
+    sample_rate: int = 48000,
+    block_frames: int = 256,
+    exclusive: bool = False,
+) -> tuple[Engine, str]:
+    """An engine with its stream started, and a note on which backend it uses. With
+    ``input_channels``, the default input is opened too, for recording; a device that
+    will not open with an input is opened without one. ``exclusive`` tries WASAPI
+    exclusive mode first (output only, so no recording input) and falls back to shared
+    mode when the device refuses it."""
     if not null_audio:
-        engine = Engine(null_backend=False)
-        try:
-            engine.start()
-            return engine, "audio device open"
-        except RuntimeError as error:
-            fallback = f"no audio device ({error}); rendering on a timer instead"
+        error: RuntimeError | None = None
+        if exclusive:
+            engine = Engine(sample_rate=sample_rate, block_frames=block_frames, exclusive=True)
+            try:
+                engine.start()
+            except RuntimeError as failed:
+                error = failed
+            else:
+                stream = engine.stream
+                note = (
+                    f"audio device open, exclusive mode ({stream['block_frames']} frames, "
+                    f"{stream['output_latency_ms']:.1f} ms)"
+                )
+                return engine, note + ("; no recording input" if input_channels else "")
+        shared_note = f"; exclusive mode refused ({error})" if exclusive else ""
+        for inputs in dict.fromkeys((input_channels, 0)):
+            engine = Engine(
+                null_backend=False,
+                sample_rate=sample_rate,
+                block_frames=block_frames,
+                input_channels=inputs,
+            )
+            try:
+                engine.start()
+            except RuntimeError as failed:
+                error = failed
+                continue
+            if inputs == input_channels:
+                return engine, "audio device open" + shared_note
+            return engine, f"audio device open; no recording input ({error})" + shared_note
+        fallback = f"no audio device ({error}); rendering on a timer instead"
     else:
         fallback = "null audio backend (--null-audio)"
     engine = Engine(null_backend=True)
@@ -48,7 +85,7 @@ def _install_excepthook() -> None:
 
     def hook(kind: type[BaseException], value: BaseException, trace: TracebackType | None) -> None:
         traceback.print_exception(kind, value, trace)
-        engine_bridge.errors.report("error", value)
+        frame_clock.errors.report("error", value)
         if not shown[0] and QApplication.instance() is not None:
             shown[0] = True
             QMessageBox.critical(None, "adX", f"{kind.__name__}: {value}\n\nDetails are on stderr.")
@@ -66,14 +103,35 @@ def create(
     app.setApplicationName("adX")
     app.setOrganizationName("adX")
     engine_bridge.load_quick_plugin()
-    engine, note = start_engine(null_audio)
+    if settings is None:
+        # A driven run (phase_10.5.md) keeps its layout and recent files out of the user's.
+        folder = os.environ.get("ADX_SETTINGS_DIR")
+        settings = (
+            QSettings(os.path.join(folder, "settings.ini"), QSettings.Format.IniFormat)
+            if folder
+            else QSettings("adX", "adX")
+        )
+    prefs = Preferences.load(settings)
+    engine, note = start_engine(
+        null_audio,
+        2 if prefs.record_input else 0,
+        sample_rate=prefs.sample_rate,
+        block_frames=prefs.buffer_frames,
+        exclusive=prefs.exclusive_audio,
+    )
     window = MainWindow(engine, settings)
     window.statusBar().showMessage(note)
     return app, window
 
 
-def run(project: str | None = None, null_audio: bool = False) -> int:
-    """Open the application; returns its exit status."""
+def run(
+    project: str | None = None,
+    null_audio: bool = False,
+    control: bool = False,
+    control_file: str | None = None,
+) -> int:
+    """Open the application; returns its exit status. ``control`` (or ``ADX_CONTROL``)
+    opens the agent's control channel (phase_10.5.md 4.2); it is off otherwise."""
     _install_excepthook()
     try:
         app, window = create(null_audio)
@@ -87,12 +145,23 @@ def run(project: str | None = None, null_audio: bool = False) -> int:
     else:
         window.new_project()
     window.show()
+    servers: list[control_server.ControlServer] = []
+    if control or control_server.requested():
+        # From the event loop, after the window's first layout pass (showEvent queues
+        # it): a driver connecting earlier read a half-laid-out tree under load.
+        def start_control() -> None:
+            servers.append(control_server.ControlServer(window, control_file))
+            window.control_server = servers[0]
+
+        QTimer.singleShot(0, start_control)
     smoke = os.environ.get("ADX_SMOKE")
-    if not smoke:
+    if not smoke and not os.environ.get("ADX_NO_QUICKSTART"):
         window.maybe_show_quickstart()
     if smoke:
         _smoke_after_start(app, window, smoke)
     status = int(app.exec())
+    for server in servers:
+        server.close()
     window.engine.stop()
     _teardown(window)
     return status
@@ -110,6 +179,8 @@ def _smoke_after_start(app: QApplication, window: MainWindow, report: str) -> No
             "visible": window.isVisible(),
             "channels": len(window.session.require().channels_info()),
             "status": window.statusBar().currentMessage(),
+            "pid": os.getpid(),
+            "control": getattr(window, "control_server", None) is not None,
         }
         with open(report, "w", encoding="utf-8") as out:
             json.dump(facts, out)

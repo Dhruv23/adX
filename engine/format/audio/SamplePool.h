@@ -25,6 +25,7 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -41,6 +42,18 @@ struct Resources;
 namespace adx::format {
 
 class SamplePool;
+
+/// Where `relative` (as a project writes it) is on disk, trying in order: the path
+/// against the project directory; the project's `samples/` folder; each of the
+/// project's SAMPLE_PATHS by relative path and by file name; then each of `library`'s
+/// folders the same two ways. The first candidate when none exists, so a failure names
+/// a real place. One rule, shared by playback, the waveform and collect-and-save.
+[[nodiscard]] std::filesystem::path
+resolveSamplePath(const project::Resources& resources,
+                  std::span<const std::filesystem::path> library, std::string_view relative);
+
+/// True when resolveSamplePath() found the file rather than falling back.
+[[nodiscard]] bool sampleExists(const std::filesystem::path& resolved);
 
 /// One requested file. The handle is what the audio thread reads.
 class SampleEntry {
@@ -108,6 +121,8 @@ public:
     [[nodiscard]] std::filesystem::path resolve(const project::Resources& resources,
                                                 std::string_view relative) const;
     void addSearchPath(std::filesystem::path directory);
+    /// The library folders added so far (the app's preferences).
+    [[nodiscard]] std::vector<std::filesystem::path> searchPaths() const;
 
     /// Blocks until every queued decode has finished. Offline render and tests.
     void waitAll();

@@ -56,6 +56,8 @@ class ChannelRow(QWidget):
     def __init__(self, channel: int, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.channel = channel
+        # By id, which a project keeps across launches (the control channel's address).
+        self.setObjectName(f"channel_rack.row:{channel}")
         self.setFixedHeight(ROW_HEIGHT)
         self.setAcceptDrops(True)
         layout = QHBoxLayout(self)
@@ -74,14 +76,17 @@ class ChannelRow(QWidget):
         self.volume = Knob(0.0, 2.0, 1.0, 1.0, "")
         self.volume.setFixedSize(26, 26)
         self.volume.setToolTip("Volume")
+        self.volume.setObjectName(f"channel_rack.row:{channel}.volume")
         self.volume.value_changed.connect(
             lambda v: self.field_changed.emit(self.channel, "volume", v)
         )
         self.pan = Knob(-1.0, 1.0, 0.0, 0.0, "")
         self.pan.setFixedSize(26, 26)
         self.pan.setToolTip("Pan")
+        self.pan.setObjectName(f"channel_rack.row:{channel}.pan")
         self.pan.value_changed.connect(lambda v: self.field_changed.emit(self.channel, "pan", v))
         self.name = QLabel()
+        self.name.setObjectName(f"channel_rack.row:{channel}.name")
         self.name.setFixedWidth(96)
         self.name.setToolTip("Click to select; double-click to rename")
         self.output = QComboBox()

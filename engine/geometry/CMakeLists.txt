@@ -1,12 +1,19 @@
 target_sources(adx_engine_static PRIVATE
+    AnalyzerHub.cpp
     AutomationGeometry.cpp
     ClipPeakCache.cpp
     EqCurveGeometry.cpp
     GeometryBuffer.cpp
     HitTest.cpp
+    LoudnessGeometry.cpp
     MeterGeometry.cpp
+    ParticleGeometry.cpp
     PianoRollGeometry.cpp
     PlaylistGeometry.cpp
+    ScopeGeometry.cpp
+    SpectrogramGeometry.cpp
+    SpectrumGeometry.cpp
     StepGridGeometry.cpp
+    VectorGeometry.cpp
     WaveformGeometry.cpp
 )

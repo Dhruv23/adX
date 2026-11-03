@@ -15,7 +15,8 @@ from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtWidgets import QHBoxLayout, QScrollArea, QSplitter, QToolBar, QVBoxLayout, QWidget
 
 from adx import dnd, engine_bridge
-from adx.engine_bridge import FrameClock, MeterGeometry
+from adx.engine_bridge import MeterGeometry
+from adx.frame_clock import FrameClock
 from adx.panels.base import DockPanel
 from adx.panels.geometry_view import WORLD_TRIANGLES, GeometryView, Pointer
 from adx.panels.mixer.routing_matrix import RoutingMatrix

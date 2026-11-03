@@ -64,6 +64,45 @@ public:
         return available;
     }
 
+    /// Any reader thread. Copies frames [first, first + count) by absolute position -
+    /// what a reader that drains the ring without gaps needs (a capture, an analyzer
+    /// history), since readLatest() is relative to a cursor that may move between two
+    /// calls. Returns how many it copied: fewer than `count` when the end is not
+    /// written yet. Frames overwritten before or during the copy are not returned;
+    /// `lost` says how many of the requested ones that was, and `out` starts after
+    /// them, at frame first + lost.
+    [[nodiscard]] std::size_t readFrom(std::uint64_t first, Frame* out, std::size_t count,
+                                       std::uint64_t& lost) const noexcept {
+        const std::uint64_t writePos = m_writeCursor.load(std::memory_order_acquire);
+        lost = 0;
+        if (first + count > writePos) {
+            count = first < writePos ? static_cast<std::size_t>(writePos - first) : 0;
+        }
+        // The writer stores a slot before it moves the cursor, so the slot at
+        // writePos - Capacity may be mid-overwrite: the safe window is one shorter.
+        constexpr std::uint64_t kSafe = Capacity - 1;
+        const std::uint64_t oldest = writePos > kSafe ? writePos - kSafe : 0;
+        if (first < oldest) {
+            lost = std::min<std::uint64_t>(oldest - first, count);
+            first += lost;
+            count -= static_cast<std::size_t>(lost);
+        }
+        for (std::size_t i = 0; i < count; ++i) {
+            out[i] = m_buffer[(first + i) & kMask];
+        }
+        // The writer may have lapped the oldest of them during the copy: those are lost
+        // too, and the rest move down, so `out` always holds [first + lost, + count).
+        const std::uint64_t after = m_writeCursor.load(std::memory_order_acquire);
+        if (after > kSafe && first < after - kSafe) {
+            const auto overtaken =
+                static_cast<std::size_t>(std::min<std::uint64_t>(after - kSafe - first, count));
+            std::copy(out + overtaken, out + count, out);
+            lost += overtaken;
+            count -= overtaken;
+        }
+        return count;
+    }
+
     /// Total frames ever written. The archived version kept this in a size_t and
     /// computed `available = min(count, writePos)`, which is correct but quietly
     /// assumes the cursor never wraps. The assumption is kept, and here is the

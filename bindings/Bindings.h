@@ -29,8 +29,38 @@ void registerTransportBindings(pybind11::module_& m);
 /// Engine.frame(): everything the UI's 60 Hz timer reads, in one call (phase_5.md §4.8).
 void defineEngineFrame(pybind11::class_<adx::bindings::EngineHandle>& engine);
 
+/// Adds MIDI devices and the live-input target to Engine (phase_9.md §4.1).
+void defineEngineMidi(pybind11::class_<adx::bindings::EngineHandle>& engine);
+/// Phase 10.5: xruns, the master capture and the stall hook (capture.cpp).
+void defineEngineCapture(pybind11::class_<adx::bindings::EngineHandle>& engine);
+/// Phase 10.5: measure_loudness for adx describe (capture.cpp).
+void registerCaptureBindings(pybind11::module_& m);
+/// Phase 9: hosted plugins on the engine, and what flows back into the project (plugin.cpp).
+void defineEnginePlugins(pybind11::class_<adx::bindings::EngineHandle>& engine);
+/// Phase 9: the project's [MIDI] section (plugin.cpp).
+void defineMidiSettings(pybind11::class_<adx::bindings::ProjectHandle>& project);
+
 /// Registers offline render.
 void registerRenderBindings(pybind11::module_& m);
+
+/// Registers the export matrix, MIDI files, collect-and-save, freeze and the audio
+/// analysis (phase_8.md).
+void registerExportBindings(pybind11::module_& m);
+
+/// Phase 10: the analyzer hub and Engine.frame_with_analyzers (analyzers.cpp). After the
+/// Engine and MeterGeometry classes exist.
+void registerAnalyzerBindings(pybind11::module_& m);
+
+/// Phase 10: the genre suites (generate.cpp).
+void registerGenerateBindings(pybind11::module_& m);
+
+/// Phase 10: key, chords, tempo, timbre, melody and form as AnalysisJobs (analysis.cpp).
+void registerAnalysisBindings(pybind11::module_& m);
+
+/// Registers recording: sessions, comping and loopback calibration (phase_8.md §3.1).
+void registerRecordBindings(pybind11::module_& m);
+/// Phase 9: the plugin host, scanning, the cache and live instances (plugin.cpp).
+void registerPluginBindings(pybind11::module_& m);
 
 /// Registers geometry buffers, builders, hit tests and waveform peaks (phase_5.md §4).
 void registerGeometryBindings(pybind11::module_& m);

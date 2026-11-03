@@ -9,7 +9,8 @@ project(adx
     VERSION 0.1.0
     DESCRIPTION "adX - a music production environment whose project format is text"
     HOMEPAGE_URL "https://github.com/Dhruv23/adX"
-    LANGUAGES CXX
+    # C for the Phase 8 encoders (shine, libFLAC, libvorbis), which are C libraries.
+    LANGUAGES C CXX
 )
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")

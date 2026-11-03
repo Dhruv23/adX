@@ -74,7 +74,7 @@ void Delay::processWet(std::span<const float> inLeft, std::span<const float> inR
                 seconds = kDelaySyncWholes[sync] * 4.0 * 60.0 / std::max(bpm, 1.0);
             }
             // Whole samples, as v1 truncated them: a static delay is an exact one.
-            m_target = std::clamp(std::floor(static_cast<float>(seconds * context.sampleRate)),
+            m_target = std::clamp(dsp::floorExact(static_cast<float>(seconds * context.sampleRate)),
                                   1.0F, maxDelay);
             if (!m_primed) {
                 m_delay = m_target;

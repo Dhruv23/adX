@@ -59,6 +59,13 @@ void CallbackCore::render(float* out, const float* in, std::uint32_t frames,
         m_processStep(m_processUser, out, in, frames, m_outputChannels, time, m_arena);
 
         writeTaps(out, frames);
+
+        const std::uint32_t stall = m_stallUs.load(std::memory_order_relaxed);
+        if (stall != 0) {
+            const auto until = startedAt + std::chrono::microseconds(stall);
+            while (std::chrono::steady_clock::now() < until) {
+            }
+        }
     }
 
     const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -90,7 +97,9 @@ void CallbackCore::writeTaps(const float* out, std::uint32_t frames) noexcept {
         const float left = out[base];
         const float right = m_outputChannels > 1 ? out[base + 1] : left;
 
-        m_scopeTap.write(rt::StereoFrame{.left = left, .right = right});
+        if (m_scopeTap != nullptr) {
+            m_scopeTap->write(rt::StereoFrame{.left = left, .right = right});
+        }
 
         peakLeft = std::max(peakLeft, std::abs(left));
         peakRight = std::max(peakRight, std::abs(right));

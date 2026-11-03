@@ -327,6 +327,39 @@ DirtyMask SetChannelOutput::dirty() const noexcept {
     return dirty::kChannels | dirty::kRouting;
 }
 
+// --- SetChannelFrozen --------------------------------------------------------
+
+SetChannelFrozen::SetChannelFrozen(core::ChannelId id, std::string path)
+    : m_id(id), m_path(std::move(path)) {}
+
+void SetChannelFrozen::apply(Project& project) {
+    Channel* channel = project.find(m_id);
+    if (channel == nullptr) {
+        return;
+    }
+    m_previous = channel->frozen;
+    channel->frozen = m_path;
+}
+
+void SetChannelFrozen::revert(Project& project) {
+    Channel* channel = project.find(m_id);
+    if (channel != nullptr) {
+        channel->frozen = m_previous;
+    }
+}
+
+std::string_view SetChannelFrozen::name() const noexcept {
+    return m_path.empty() ? "Unfreeze channel" : "Freeze channel";
+}
+
+CommandId SetChannelFrozen::kind() const noexcept {
+    return CommandId::kSetChannelFrozen;
+}
+
+DirtyMask SetChannelFrozen::dirty() const noexcept {
+    return dirty::kChannels;
+}
+
 // --- SetInstrumentType -------------------------------------------------------
 
 SetInstrumentType::SetInstrumentType(core::ChannelId id, std::string type)

@@ -7,6 +7,9 @@
 #include <limits>
 #include <variant>
 
+#include "engine/clip/ClipEdit.h"
+#include "engine/clip/ClipRenderCache.h"
+#include "engine/format/audio/SamplePool.h"
 #include "engine/geometry/AutomationGeometry.h"
 #include "engine/geometry/ClipPeakCache.h"
 #include "engine/geometry/ColorPalette.h"
@@ -91,6 +94,8 @@ void PlaylistGeometry::build(const project::Project& project, const PlaylistView
     m_visible.clear();
     m_pending = false;
     m_detailed = 0;
+    m_renderRate = options.renderRate;
+    m_nextPins.clear();
     layoutTracks(project.playlist, m_rows);
 
     buildLanes(viewport);
@@ -116,6 +121,8 @@ void PlaylistGeometry::build(const project::Project& project, const PlaylistView
             buffer(layer).resize(scratch.size() / kFloatsPerVertex, kFloatsPerVertex);
         std::ranges::copy(scratch, out.begin());
     }
+    // This build's renders are pinned now; the last build's can go.
+    m_renderPins.swap(m_nextPins);
 }
 
 void PlaylistGeometry::buildLanes(const PlaylistViewport& viewport) {
@@ -280,19 +287,32 @@ void PlaylistGeometry::previewAudio(const project::Project& project,
     if (sample == nullptr) {
         return;
     }
-    std::filesystem::path path(sample->path);
-    if (path.is_relative() && !project.resources.baseDirectory.empty()) {
-        path = std::filesystem::path(project.resources.baseDirectory) / path;
+    // The buffer the clip plays (ClipRenderCache), keyed exactly as the engine keys it:
+    // every edit, the reverse, the stretch, the pitch and the warp. Its peaks are keyed
+    // by the same text, so one change invalidates the audio and the drawing together
+    // (warp_cache_key). Until it has rendered, the decoded file is drawn as the old
+    // mapping reads it - the same stand-in the engine plays.
+    format::SamplePool& pool = format::SamplePool::global();
+    const clip::ClipRenderKey renderKey = clip::renderKeyFor(project, item, m_renderRate, pool);
+    const std::shared_ptr<const clip::ClipRenderEntry> rendered =
+        clip::ClipRenderCache::global().request(renderKey, pool);
+    // The cache holds entries weakly and drops a render nobody wants. The engine pins
+    // what it plays; the drawing pins what it draws, until the next build has its own.
+    m_nextPins.push_back(rendered);
+    const std::shared_ptr<const format::SampleBuffer> buffer = rendered->buffer();
+    const bool processed = buffer != nullptr;
+    std::shared_ptr<const ClipPeaks> clipPeaks;
+    if (processed) {
+        clipPeaks = peaks.request(PeakKey{.path = renderKey.text()}, buffer);
+    } else {
+        m_pending = m_pending || rendered->handle().state() == format::SampleState::Loading;
+        clipPeaks = peaks.request(PeakKey{.path = renderKey.path.generic_string(),
+                                          .pitchSemitones = audio.pitchSemitones,
+                                          .stretch = audio.stretch,
+                                          .reversed = audio.reverse,
+                                          .sourceOffset = item.sourceOffset.value,
+                                          .gain = 1.0F});
     }
-    // Every field of the key that changes what the clip sounds like makes a new entry,
-    // so changing one redraws the clip (P5-4).
-    const std::shared_ptr<const ClipPeaks> clipPeaks =
-        peaks.request(PeakKey{.path = path.generic_string(),
-                              .pitchSemitones = audio.pitchSemitones,
-                              .stretch = audio.stretch,
-                              .reversed = audio.reverse,
-                              .sourceOffset = item.sourceOffset.value,
-                              .gain = 1.0F});
     if (!clipPeaks->sourceReady() || clipPeaks->frames() == 0) {
         m_pending = m_pending || !clipPeaks->failed();
         return;
@@ -312,9 +332,13 @@ void PlaylistGeometry::previewAudio(const project::Project& project,
     const double rate = clipPeaks->sampleRate();
     const double stretch = std::max(0.01, static_cast<double>(audio.stretch));
     const auto frames = static_cast<double>(clipPeaks->frames());
+    const double renderedStart = processed ? clip::renderedStartSeconds(project, item) : 0.0;
     const auto frameAt = [&](double tick) {
         const double seconds =
             project.tempo.secondsAt(core::Ticks{static_cast<std::int64_t>(tick)}) - startSeconds;
+        if (processed) {
+            return std::clamp((renderedStart + seconds) * rate, 0.0, frames);
+        }
         double frame = (offsetSeconds + (seconds / stretch)) * rate;
         if (audio.reverse) {
             frame = frames - frame;

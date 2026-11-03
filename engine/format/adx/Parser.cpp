@@ -26,10 +26,12 @@
 #include "engine/project/commands/AutomationCommands.h"
 #include "engine/project/commands/ChannelCommands.h"
 #include "engine/project/commands/CommandStack.h"
+#include "engine/project/commands/MidiCommands.h"
 #include "engine/project/commands/MixerCommands.h"
 #include "engine/project/commands/NoteCommands.h"
 #include "engine/project/commands/PatternCommands.h"
 #include "engine/project/commands/PlaylistCommands.h"
+#include "engine/project/commands/PluginCommands.h"
 #include "engine/project/commands/ProjectCommands.h"
 
 namespace adx::format {
@@ -191,8 +193,20 @@ private:
     /// declared range (P2-4). Both keep the value. With no known type, the name is
     /// checked against the generic table instead.
     void checkParam(const project::TypeInfo* type, const Token& token, double value);
+    /// A plugin's STATE value without its `base64:` prefix; reported when the prefix
+    /// is missing, and kept either way (the plugin decides what it can load).
+    [[nodiscard]] std::string pluginState(const std::string& text, Span span);
     void parseClipEnvelope(const BlockNode& node, project::PlaylistItem& item);
+    void parseClipEdits(const Token& token, project::AudioClipRef& audio);
+    /// A `WARP` line under an AUDIO item; false when the line is something else.
+    [[nodiscard]] bool parseWarpMarker(const BlockNode& node, project::AudioClipRef& audio);
     void parseMarkers(Section& section);
+    void parseMidi(Section& section);
+    /// One SLOT line of an insert, with its STATE child if it has one.
+    void parseSlotLine(core::InsertId insert, const BlockNode& child, Line& line,
+                       const std::vector<Token>& tokens);
+    /// "lo..hi" of integers within [0, 127]; false (reported) otherwise.
+    bool parseByteRange(const Token& token, std::uint8_t& low, std::uint8_t& high);
 
     [[nodiscard]] bool resolveInsert(std::string_view text, Span span, core::InsertId& out);
     [[nodiscard]] bool resolveChannel(std::string_view text, Span span, core::ChannelId& out);
@@ -400,6 +414,21 @@ void V2Parser::parseProject(Section& section) {
     if (Line* line = keys.take(lines(), "CREATED")) {
         meta.created = decodeValue(line->value);
     }
+    if (Line* line = keys.take(lines(), "SAMPLE_PATHS")) {
+        // Semicolon-separated, the way Windows writes a PATH: a folder name may hold a
+        // comma or a space, and almost never a semicolon.
+        const std::string joined = decodeValue(line->value);
+        std::string_view rest = joined;
+        while (!rest.empty()) {
+            const std::size_t semicolon = rest.find(';');
+            const std::string_view part = rest.substr(0, semicolon);
+            if (!part.empty()) {
+                m_project.resources.searchPaths.emplace_back(part);
+            }
+            rest = semicolon == std::string_view::npos ? std::string_view{}
+                                                       : rest.substr(semicolon + 1);
+        }
+    }
     if (Line* line = keys.take(lines(), "TUNING")) {
         double tuning = 440.0;
         if (parseDouble(line->value, line->valueSpan, m_diag, tuning)) {
@@ -448,6 +477,167 @@ void V2Parser::parseMarkers(Section& section) {
         execute(std::move(command));
         source(project::SourceKind::Marker, raw->created().value, line.contentSpan());
         line.claimed = true;
+    }
+}
+
+// --- MIDI ---------------------------------------------------------------------
+
+bool V2Parser::parseByteRange(const Token& token, std::uint8_t& low, std::uint8_t& high) {
+    const std::string_view text = token.value;
+    const std::size_t dots = text.find("..");
+    std::int64_t lo = 0;
+    std::int64_t hi = 0;
+    const std::string first(text.substr(0, dots));
+    const std::string second(dots == std::string_view::npos ? text : text.substr(dots + 2));
+    if (!parseInt64(first, token.valueSpan, m_diag, lo) ||
+        !parseInt64(second, token.valueSpan, m_diag, hi)) {
+        return false;
+    }
+    if (lo < 0 || hi > 127 || lo > hi) {
+        m_diag.add(code::kValueOutOfRange, token.valueSpan, "a range is 'low..high' within 0..127");
+        return false;
+    }
+    low = static_cast<std::uint8_t>(lo);
+    high = static_cast<std::uint8_t>(hi);
+    return true;
+}
+
+void V2Parser::parseMidi(Section& section) {
+    section.claimed = true;
+    std::vector<project::MidiRouteSetting> routes;
+    for (const BlockNode& node : buildBlocks(lines(), section)) {
+        Line& line = lines()[node.line];
+        const std::vector<Token> tokens = tokenize(line, m_diag);
+        if (tokens.empty()) {
+            continue;
+        }
+        if (tokens.front().text == "ROUTE") {
+            // ROUTE <channel> [device=..] [channels=1,2] [keys=lo..hi] [vel=lo..hi]
+            //       [transpose=n] [curve=x]
+            if (tokens.size() < 2 || tokens[1].isKeyValue()) {
+                m_diag.add(code::kWrongFieldCount, line.contentSpan(),
+                           "a MIDI route is 'ROUTE <channel> [key=value...]'");
+                continue;
+            }
+            const project::Channel* channel = m_project.findChannelByName(tokens[1].text);
+            if (channel == nullptr) {
+                m_diag.add(code::kUnknownChannelRef, tokens[1].span,
+                           "no channel named '" + tokens[1].text + "'");
+                continue;
+            }
+            project::MidiRouteSetting route;
+            route.target = channel->id;
+            for (std::size_t i = 2; i < tokens.size(); ++i) {
+                const Token& token = tokens[i];
+                double number = 0.0;
+                if (token.text == "device") {
+                    route.device = token.value;
+                } else if (token.text == "channels") {
+                    route.channels = 0;
+                    std::string_view rest = token.value;
+                    while (!rest.empty()) {
+                        const std::size_t comma = rest.find(',');
+                        std::int64_t c = 0;
+                        if (parseInt64(std::string(rest.substr(0, comma)), token.valueSpan, m_diag,
+                                       c) &&
+                            c >= 1 && c <= 16) {
+                            route.channels |=
+                                static_cast<std::uint16_t>(1U << static_cast<unsigned>(c - 1));
+                        }
+                        rest = comma == std::string_view::npos ? std::string_view{}
+                                                               : rest.substr(comma + 1);
+                    }
+                } else if (token.text == "keys") {
+                    static_cast<void>(parseByteRange(token, route.keyLow, route.keyHigh));
+                } else if (token.text == "vel") {
+                    static_cast<void>(parseByteRange(token, route.velocityLow, route.velocityHigh));
+                } else if (token.text == "transpose" &&
+                           parseDouble(token.value, token.valueSpan, m_diag, number)) {
+                    route.transpose = static_cast<std::int8_t>(std::clamp(number, -127.0, 127.0));
+                } else if (token.text == "curve" &&
+                           parseDouble(token.value, token.valueSpan, m_diag, number)) {
+                    route.curve = static_cast<float>(std::clamp(number, -1.0, 1.0));
+                } else if (token.text != "transpose" && token.text != "curve") {
+                    m_diag.add(code::kUnknownInlineKey, token.span,
+                               "unknown key '" + token.text + "' on a MIDI ROUTE line");
+                }
+            }
+            routes.push_back(route);
+            line.claimed = true;
+            continue;
+        }
+        if (tokens.front().text == "LEARN") {
+            // LEARN <cc|note|bend|pressure> <number> <parameter> [channel=1..16]
+            //       [device=..] [min=..] [max=..] [toggle=yes]
+            if (tokens.size() < 4) {
+                m_diag.add(
+                    code::kWrongFieldCount, line.contentSpan(),
+                    "a learned control is 'LEARN <kind> <number> <parameter> [key=value...]'");
+                continue;
+            }
+            project::MidiBinding binding;
+            if (!project::midiControlKindFromString(tokens[1].text, binding.kind)) {
+                m_diag.add(code::kUnknownInlineKey, tokens[1].span,
+                           "unknown control kind '" + tokens[1].text + "'",
+                           "one of cc, note, bend, pressure");
+                continue;
+            }
+            std::int64_t number = 0;
+            if (!parseInt64(tokens[2].text, tokens[2].span, m_diag, number) || number < 0 ||
+                number > 127) {
+                m_diag.add(code::kValueOutOfRange, tokens[2].span, "a control number is 0..127");
+                continue;
+            }
+            binding.number = static_cast<std::uint8_t>(number);
+            binding.targetPath = tokens[3].text;
+            const project::ParamResolution resolved =
+                project::ParamRegistry::resolve(binding.targetPath, m_project);
+            if (resolved.ok()) {
+                binding.target = resolved.ref;
+            } else {
+                m_diag.add(code::kUnresolvedParamPath,
+                           subSpan(tokens[3].span, resolved.segmentOffset, resolved.segmentLength),
+                           "'" + binding.targetPath + "' does not name a parameter that exists");
+            }
+            for (std::size_t i = 4; i < tokens.size(); ++i) {
+                const Token& token = tokens[i];
+                double value = 0.0;
+                if (token.text == "device") {
+                    binding.device = token.value;
+                } else if (token.text == "toggle") {
+                    bool flag = false;
+                    if (parseBool(token.value, token.valueSpan, m_diag, flag)) {
+                        binding.toggle = flag;
+                    }
+                } else if ((token.text == "channel" || token.text == "min" ||
+                            token.text == "max") &&
+                           parseDouble(token.value, token.valueSpan, m_diag, value)) {
+                    if (token.text == "channel") {
+                        if (value >= 1.0 && value <= 16.0) {
+                            binding.channel = static_cast<std::uint8_t>(value - 1.0);
+                        } else {
+                            m_diag.add(code::kValueOutOfRange, token.valueSpan,
+                                       "a MIDI channel is 1..16");
+                        }
+                    } else if (token.text == "min") {
+                        binding.minimum = static_cast<float>(value);
+                    } else {
+                        binding.maximum = static_cast<float>(value);
+                    }
+                } else if (token.text != "channel" && token.text != "min" && token.text != "max") {
+                    m_diag.add(code::kUnknownInlineKey, token.span,
+                               "unknown key '" + token.text + "' on a LEARN line");
+                }
+            }
+            execute(std::make_unique<project::AddMidiBinding>(std::move(binding)));
+            line.claimed = true;
+            continue;
+        }
+        m_diag.add(code::kUnknownKey, line.contentSpan(),
+                   "unrecognised line in [MIDI]; preserved on save");
+    }
+    if (!routes.empty()) {
+        execute(std::make_unique<project::SetMidiRoutes>(std::move(routes)));
     }
 }
 
@@ -573,6 +763,105 @@ void V2Parser::parseMixer(Section& section) {
     }
 }
 
+void V2Parser::parseSlotLine(core::InsertId insert, const BlockNode& child, Line& line,
+                             const std::vector<Token>& tokens) {
+    if (tokens.size() < 3) {
+        m_diag.add(code::kWrongFieldCount, line.contentSpan(),
+                   "a slot is 'SLOT <id> <Type> [key=value...]'");
+        return;
+    }
+    std::int64_t id = 0;
+    if (!parseInt64(tokens[1].text, tokens[1].span, m_diag, id) || id <= 0) {
+        m_diag.add(code::kZeroId, tokens[1].span, "a slot id must be a positive integer");
+        return;
+    }
+    if (!claimId("slot", id, tokens[1].span, "slot")) {
+        return;
+    }
+    project::Slot slot;
+    slot.id = core::SlotId{static_cast<std::uint32_t>(id)};
+    slot.type = tokens[2].text;
+    for (std::size_t i = 3; i < tokens.size(); ++i) {
+        const Token& token = tokens[i];
+        if (!token.isKeyValue()) {
+            m_diag.add(code::kWrongFieldCount, token.span, "expected key=value");
+            continue;
+        }
+        if (token.text == "bypass") {
+            bool flag = false;
+            if (parseBool(token.value, token.valueSpan, m_diag, flag)) {
+                slot.bypass = flag;
+            }
+            continue;
+        }
+        if (token.text == "sidechain") {
+            core::InsertId key;
+            if (resolveInsert(token.value, token.valueSpan, key)) {
+                slot.sidechain = key;
+            }
+            continue;
+        }
+        if (project::isPluginType(slot.type) &&
+            (token.text == "plugin" || token.text == "name" || token.text == "path")) {
+            if (token.text == "plugin") {
+                slot.plugin.uid = token.value;
+            } else if (token.text == "name") {
+                slot.plugin.name = token.value;
+            } else {
+                slot.plugin.path = token.value;
+            }
+            continue;
+        }
+        if (project::isPluginType(slot.type) && token.text == "isolated") {
+            bool flag = false;
+            if (parseBool(token.value, token.valueSpan, m_diag, flag)) {
+                slot.plugin.isolated = flag;
+            }
+            continue;
+        }
+        if (token.text == "ir") {
+            // One pool entry per file, shared with zones and AUDIO items.
+            if (const project::SampleRef* existing = m_project.resources.findByPath(token.value)) {
+                slot.impulse = existing->id;
+            } else {
+                auto sample = std::make_unique<project::AddSample>(token.value);
+                const project::AddSample* raw = sample.get();
+                execute(std::move(sample));
+                slot.impulse = raw->created();
+            }
+            continue;
+        }
+        double number = 0.0;
+        if (!parseDouble(token.value, token.valueSpan, m_diag, number)) {
+            continue;
+        }
+        if (token.text == "mix") {
+            slot.mix = static_cast<float>(number);
+        } else {
+            // An unknown one is kept, not dropped (FINAL_PLAN §6 rule 4). A
+            // plugin's are the plugin's to declare.
+            if (!project::isPluginType(slot.type)) {
+                checkParam(project::findEffectType(slot.type), token, number);
+            }
+            slot.params.push_back(project::SlotParam{.name = token.text, .value = number});
+        }
+    }
+    source(project::SourceKind::Slot, slot.id.value, line.contentSpan());
+    const core::SlotId slotId = slot.id;
+    execute(std::make_unique<project::AddSlot>(insert, std::move(slot)));
+    line.claimed = true;
+    // A hosted plugin's state, on a line of its own under the slot (§7.5).
+    for (const BlockNode& grandchild : child.children) {
+        Line& stateLine = lines()[grandchild.line];
+        const std::vector<Token> stateTokens = tokenize(stateLine, m_diag);
+        if (stateTokens.size() == 2 && stateTokens[0].text == "STATE") {
+            execute(std::make_unique<project::SetPluginState>(
+                slotId, pluginState(stateTokens[1].text, stateTokens[1].span)));
+            stateLine.claimed = true;
+        }
+    }
+}
+
 void V2Parser::parseInsertChildren(core::InsertId insert, const BlockNode& node) {
     for (const BlockNode& child : node.children) {
         Line& line = lines()[child.line];
@@ -582,70 +871,7 @@ void V2Parser::parseInsertChildren(core::InsertId insert, const BlockNode& node)
         }
 
         if (tokens.front().text == "SLOT") {
-            if (tokens.size() < 3) {
-                m_diag.add(code::kWrongFieldCount, line.contentSpan(),
-                           "a slot is 'SLOT <id> <Type> [key=value...]'");
-                continue;
-            }
-            std::int64_t id = 0;
-            if (!parseInt64(tokens[1].text, tokens[1].span, m_diag, id) || id <= 0) {
-                m_diag.add(code::kZeroId, tokens[1].span, "a slot id must be a positive integer");
-                continue;
-            }
-            if (!claimId("slot", id, tokens[1].span, "slot")) {
-                continue;
-            }
-            project::Slot slot;
-            slot.id = core::SlotId{static_cast<std::uint32_t>(id)};
-            slot.type = tokens[2].text;
-            for (std::size_t i = 3; i < tokens.size(); ++i) {
-                const Token& token = tokens[i];
-                if (!token.isKeyValue()) {
-                    m_diag.add(code::kWrongFieldCount, token.span, "expected key=value");
-                    continue;
-                }
-                if (token.text == "bypass") {
-                    bool flag = false;
-                    if (parseBool(token.value, token.valueSpan, m_diag, flag)) {
-                        slot.bypass = flag;
-                    }
-                    continue;
-                }
-                if (token.text == "sidechain") {
-                    core::InsertId key;
-                    if (resolveInsert(token.value, token.valueSpan, key)) {
-                        slot.sidechain = key;
-                    }
-                    continue;
-                }
-                if (token.text == "ir") {
-                    // One pool entry per file, shared with zones and AUDIO items.
-                    if (const project::SampleRef* existing =
-                            m_project.resources.findByPath(token.value)) {
-                        slot.impulse = existing->id;
-                    } else {
-                        auto sample = std::make_unique<project::AddSample>(token.value);
-                        const project::AddSample* raw = sample.get();
-                        execute(std::move(sample));
-                        slot.impulse = raw->created();
-                    }
-                    continue;
-                }
-                double number = 0.0;
-                if (!parseDouble(token.value, token.valueSpan, m_diag, number)) {
-                    continue;
-                }
-                if (token.text == "mix") {
-                    slot.mix = static_cast<float>(number);
-                } else {
-                    // An unknown one is kept, not dropped (FINAL_PLAN §6 rule 4).
-                    checkParam(project::findEffectType(slot.type), token, number);
-                    slot.params.push_back(project::SlotParam{.name = token.text, .value = number});
-                }
-            }
-            source(project::SourceKind::Slot, slot.id.value, line.contentSpan());
-            execute(std::make_unique<project::AddSlot>(insert, std::move(slot)));
-            line.claimed = true;
+            parseSlotLine(insert, child, line, tokens);
             continue;
         }
 
@@ -730,6 +956,27 @@ V2Parser::ChannelBinding V2Parser::parseChannelHeader(Section& section, std::siz
     }
     if (Line* line = keys.take(lines(), "VOICEBANK")) {
         channel.instrument.voicebank = decodeValue(line->value);
+    }
+    if (Line* line = keys.take(lines(), "PLUGIN")) {
+        channel.instrument.plugin.uid = decodeValue(line->value);
+    }
+    if (Line* line = keys.take(lines(), "PLUGIN_NAME")) {
+        channel.instrument.plugin.name = decodeValue(line->value);
+    }
+    if (Line* line = keys.take(lines(), "PLUGIN_PATH")) {
+        channel.instrument.plugin.path = decodeValue(line->value);
+    }
+    if (Line* line = keys.take(lines(), "PLUGIN_ISOLATED")) {
+        bool flag = false;
+        if (parseBool(line->value, line->valueSpan, m_diag, flag)) {
+            channel.instrument.plugin.isolated = flag;
+        }
+    }
+    if (Line* line = keys.take(lines(), "STATE")) {
+        channel.instrument.plugin.state = pluginState(decodeValue(line->value), line->valueSpan);
+    }
+    if (Line* line = keys.take(lines(), "FROZEN")) {
+        channel.frozen = decodeValue(line->value);
     }
     if (Line* line = keys.take(lines(), "POLYPHONY")) {
         std::int64_t value = channel.maxPolyphony;
@@ -817,7 +1064,9 @@ void V2Parser::parseChannelLines(core::ChannelId id, std::span<const BlockNode> 
             if (!parseDouble(tokens[1].value, tokens[1].valueSpan, m_diag, value)) {
                 continue;
             }
-            if (const project::Channel* channel = m_project.find(id)) {
+            if (const project::Channel* channel = m_project.find(id);
+                channel != nullptr && !project::isPluginType(channel->instrument.type)) {
+                // A plugin's parameters are the plugin's to declare, not the catalog's.
                 checkParam(project::findInstrumentType(channel->instrument.type), tokens[1], value);
             }
             bool hasCurve = false;
@@ -1394,6 +1643,12 @@ void V2Parser::parseTracks(std::span<const BlockNode> nodes, std::string_view wh
                 if (parseInt64(token.value, token.valueSpan, m_diag, group) && group > 0) {
                     track.group = core::PlaylistTrackId{static_cast<std::uint32_t>(group)};
                 }
+            } else if (token.text == "out") {
+                // Where the track's audio clips play; master when absent or unresolved.
+                core::InsertId insert;
+                if (resolveInsert(token.value, token.valueSpan, insert)) {
+                    track.output = insert;
+                }
             } else {
                 m_diag.add(code::kUnknownInlineKey, token.span,
                            "unknown key '" + token.text + "' on a TRACK line");
@@ -1446,7 +1701,7 @@ void V2Parser::parsePlaylistItem(core::PlaylistTrackId track, const BlockNode& n
         auto sample = std::make_unique<project::AddSample>(tokens[1].text);
         const project::AddSample* raw = sample.get();
         execute(std::move(sample));
-        item.content = project::AudioClipRef{.sample = raw->created()};
+        item.content = project::audioClipOf(raw->created());
     } else if (verb == "AUTOMATION") {
         project::AutomationClip clip;
         clip.targetPath = tokens[1].text;
@@ -1493,6 +1748,11 @@ void V2Parser::parsePlaylistItem(core::PlaylistTrackId track, const BlockNode& n
             if (parseBool(token.value, token.valueSpan, m_diag, flag)) {
                 item.muted = flag;
             }
+        } else if (token.text == "lane") {
+            std::int64_t lane = 0;
+            if (parseInt64(token.value, token.valueSpan, m_diag, lane)) {
+                item.lane = static_cast<std::uint16_t>(std::clamp<std::int64_t>(lane, 0, 255));
+            }
         } else if (audio != nullptr && token.text == "stretch") {
             double value = 1.0;
             if (parseDouble(token.value, token.valueSpan, m_diag, value)) {
@@ -1508,6 +1768,24 @@ void V2Parser::parsePlaylistItem(core::PlaylistTrackId track, const BlockNode& n
             if (parseBool(token.value, token.valueSpan, m_diag, flag)) {
                 audio->reverse = flag;
             }
+        } else if (audio != nullptr && (token.text == "fadein" || token.text == "fadeout")) {
+            project::ClipFade& fade = token.text == "fadein" ? audio->fadeIn : audio->fadeOut;
+            (void)parseDuration(token.value, m_project.tempo, token.valueSpan, m_diag, fade.length);
+        } else if (audio != nullptr &&
+                   (token.text == "fadeincurve" || token.text == "fadeoutcurve")) {
+            project::ClipFade& fade = token.text == "fadeincurve" ? audio->fadeIn : audio->fadeOut;
+            (void)parseCurve(token.value, token.valueSpan, m_diag, fade.curve);
+        } else if (audio != nullptr && token.text == "crossfade") {
+            if (token.value == "linear") {
+                audio->crossfade = project::CrossfadeKind::Linear;
+            } else if (token.value == "equal") {
+                audio->crossfade = project::CrossfadeKind::EqualPower;
+            } else {
+                m_diag.add(code::kUnknownInlineKey, token.valueSpan,
+                           "crossfade is 'equal' or 'linear'");
+            }
+        } else if (audio != nullptr && token.text == "edit") {
+            parseClipEdits(token, *audio);
         } else {
             m_diag.add(code::kUnknownInlineKey, token.span,
                        "unknown key '" + token.text + "' on a playlist item");
@@ -1518,7 +1796,13 @@ void V2Parser::parsePlaylistItem(core::PlaylistTrackId track, const BlockNode& n
         // An automation item's children are its breakpoints; anything else's are its
         // clip envelopes (phase_4.md §4.0).
         for (const BlockNode& child : node.children) {
+            if (audio != nullptr && parseWarpMarker(child, *audio)) {
+                continue;
+            }
             parseClipEnvelope(child, item);
+        }
+        if (audio != nullptr) {
+            std::ranges::stable_sort(audio->warps, {}, &project::WarpMarker::at);
         }
     }
 
@@ -1527,6 +1811,15 @@ void V2Parser::parsePlaylistItem(core::PlaylistTrackId track, const BlockNode& n
     execute(std::move(command));
     source(project::SourceKind::Item, raw->created().value, line.contentSpan());
     line.claimed = true;
+}
+
+std::string V2Parser::pluginState(const std::string& text, Span span) {
+    constexpr std::string_view kPrefix = "base64:";
+    if (text.starts_with(kPrefix)) {
+        return text.substr(kPrefix.size());
+    }
+    m_diag.add(code::kMalformedKeyValue, span, "a plugin state is 'base64:' and the encoded bytes");
+    return text;
 }
 
 void V2Parser::checkParam(const project::TypeInfo* type, const Token& token, double value) {
@@ -1546,6 +1839,55 @@ void V2Parser::checkParam(const project::TypeInfo* type, const Token& token, dou
                        formatFloat(descriptor->minimum) + ".." + formatFloat(descriptor->maximum) +
                        "; clamped when played");
     }
+}
+
+void V2Parser::parseClipEdits(const Token& token, project::AudioClipRef& audio) {
+    // edit=reverse,normalize:-0.1,gain:-3 - applied in the order written.
+    std::string_view rest = token.value;
+    while (!rest.empty()) {
+        const std::size_t comma = rest.find(',');
+        const std::string_view part = rest.substr(0, comma);
+        rest = comma == std::string_view::npos ? std::string_view{} : rest.substr(comma + 1);
+        const std::size_t colon = part.find(':');
+        project::ClipEdit edit;
+        if (!project::editKindFromString(part.substr(0, colon), edit.kind)) {
+            m_diag.add(code::kUnknownInlineKey, token.valueSpan,
+                       "unknown edit '" + std::string(part.substr(0, colon)) +
+                           "'; edits are reverse, normalize, dc, gain and trim");
+            continue;
+        }
+        if (colon != std::string_view::npos) {
+            double amount = 0.0;
+            if (parseDouble(part.substr(colon + 1), token.valueSpan, m_diag, amount)) {
+                edit.amount = static_cast<float>(amount);
+            }
+        } else if (edit.kind == project::EditKind::Normalize) {
+            edit.amount = 0.0F;
+        } else if (edit.kind == project::EditKind::TrimSilence) {
+            edit.amount = -60.0F;
+        }
+        audio.edits.push_back(edit);
+    }
+}
+
+bool V2Parser::parseWarpMarker(const BlockNode& node, project::AudioClipRef& audio) {
+    Line& line = lines()[node.line];
+    const std::vector<Token> tokens = tokenize(line, m_diag);
+    if (tokens.empty() || tokens.front().text != "WARP") {
+        return false;
+    }
+    line.claimed = true;
+    if (tokens.size() != 3) {
+        m_diag.add(code::kWrongFieldCount, line.contentSpan(),
+                   "WARP is 'WARP <source seconds> <item-relative position>'");
+        return true;
+    }
+    project::WarpMarker marker;
+    if (parseDouble(tokens[1].text, tokens[1].span, m_diag, marker.source) &&
+        parseDuration(tokens[2].text, m_project.tempo, tokens[2].span, m_diag, marker.at)) {
+        audio.warps.push_back(marker);
+    }
+    return true;
 }
 
 void V2Parser::parseClipEnvelope(const BlockNode& node, project::PlaylistItem& item) {
@@ -1648,6 +1990,8 @@ void V2Parser::run() {
     forEach("ARRANGEMENT", [this](Section& s) { parseArrangement(s); });
     forEach("CONTROLLER", [this](Section& s) { parseController(s); });
     forEach("MARKERS", [this](Section& s) { parseMarkers(s); });
+    // Last: a learned control may name any parameter the sections above created.
+    forEach("MIDI", [this](Section& s) { parseMidi(s); });
 
     for (const Section& section : m_doc.sections()) {
         if (!section.isPreamble() && !section.claimed) {

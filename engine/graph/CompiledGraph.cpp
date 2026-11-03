@@ -125,6 +125,7 @@ CompiledGraph::CompiledGraph(const Graph& graph, const TopoResult& order, const 
         step.node = source.node.get();
         step.id = source.id;
         step.eventTrack = source.eventTrack;
+        step.audioTrack = source.audioTrack;
         step.timeSource = source.timeSource;
         step.paramBase = source.paramBase;
         step.paramCount = source.paramCount;

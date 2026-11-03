@@ -211,7 +211,8 @@ bool SamplerInstrument::renderVoice(graph::Voice& voice, std::span<float> left,
                 state.direction = 1.0;
             }
         } else if (looping && state.position >= loopEnd) {
-            state.position -= loopLength * std::floor((state.position - loopStart) / loopLength);
+            state.position -=
+                loopLength * dsp::floorExact((state.position - loopStart) / loopLength);
         }
 
         float sampleLeft = 0.0F;

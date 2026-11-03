@@ -45,7 +45,10 @@ std::string renderHash(const std::filesystem::path& path) {
     adx::project::Project project;
     adx::project::CommandStack stack;
     adx::format::DiagnosticList diagnostics;
-    adx::format::load(text, project, stack, diagnostics);
+    // From its own folder, so its samples resolve: the corpus is self-contained
+    // (phase_8.md §3.7), and its audio clips are part of what it sounds like.
+    adx::format::load(text, project, stack, diagnostics,
+                      adx::format::ParseOptions{.baseDirectory = path.parent_path().string()});
     REQUIRE_FALSE(diagnostics.hasErrors());
 
     adx::render::OfflineRenderOptions options;

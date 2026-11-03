@@ -27,6 +27,7 @@
 #include "bindings/PendingCommand.h"
 #include "bindings/ProjectHandle.h"
 #include "engine/format/adx/Diagnostics.h"
+#include "engine/format/adx/Value.h"
 #include "engine/preset/Preset.h"
 #include "engine/project/ParamRegistry.h"
 #include "engine/project/TypeCatalog.h"
@@ -36,11 +37,13 @@
 #include "engine/project/commands/MixerCommands.h"
 #include "engine/project/commands/PatternCommands.h"
 #include "engine/project/commands/PlaylistCommands.h"
+#include "engine/project/commands/PluginCommands.h"
 #include "engine/project/commands/ProjectCommands.h"
 
 namespace py = pybind11;
 namespace project = adx::project;
 namespace core = adx::core;
+namespace format = adx::format;
 
 using adx::bindings::parseColorText;
 using adx::bindings::PendingCommand;
@@ -411,6 +414,7 @@ void playlistCommands(py::module_& c) {
             const auto soloed = get("soloed");
             const auto group = get("group");
             const auto collapsed = get("collapsed");
+            const auto output = get("output");
             std::optional<std::string> nameValue;
             std::optional<std::string> colorValue;
             std::optional<std::uint16_t> heightValue;
@@ -418,6 +422,10 @@ void playlistCommands(py::module_& c) {
             std::optional<bool> soloValue;
             std::optional<std::uint32_t> groupValue;
             std::optional<bool> collapsedValue;
+            std::optional<std::uint32_t> outputValue;
+            if (output) {
+                outputValue = output->cast<std::uint32_t>();
+            }
             if (name) {
                 nameValue = name->cast<std::string>();
             }
@@ -458,12 +466,16 @@ void playlistCommands(py::module_& c) {
                     value.group = core::PlaylistTrackId{*groupValue};
                 }
                 value.collapsed = collapsedValue.value_or(value.collapsed);
+                if (outputValue) {
+                    value.output = core::InsertId{*outputValue};
+                }
                 return make<project::SetPlaylistTrack>(core::PlaylistTrackId{track},
                                                        std::move(value));
             });
         },
         py::arg("track"), py::arg("fields"),
-        "Set any of name, color, height, muted, soloed, group (0: none), collapsed.");
+        "Set any of name, color, height, muted, soloed, group (0: none), collapsed, output "
+        "(the insert its audio clips play into; 0: the master).");
     // GIL: trivial - builds a closure
     c.def(
         "MovePlaylistTrack",
@@ -474,6 +486,8 @@ void playlistCommands(py::module_& c) {
         },
         py::arg("track"), py::arg("index"));
 }
+
+void setPlaylistItemCommand(py::module_& c);
 
 /// Placements on the playlist's tracks: pattern, automation and audio items.
 void placementCommands(py::module_& c) {
@@ -520,6 +534,11 @@ void placementCommands(py::module_& c) {
             });
         },
         py::arg("track"), py::arg("item"));
+    setPlaylistItemCommand(c);
+}
+
+/// SetPlaylistItem: every field of one placement, Phase 8's clip edits among them.
+void setPlaylistItemCommand(py::module_& c) {
     // GIL: trivial - builds a closure
     c.def(
         "SetPlaylistItem",
@@ -538,6 +557,42 @@ void placementCommands(py::module_& c) {
             const auto muted = number("muted");
             const auto reverse = number("reverse");
             const auto destination = number("track");
+            const auto lane = number("lane");
+            const auto fadeIn = number("fade_in");
+            const auto fadeOut = number("fade_out");
+            const auto text = [&fields](const char* key) -> std::optional<std::string> {
+                if (fields.contains(key) && !fields[key].is_none()) {
+                    return fields[key].cast<std::string>();
+                }
+                return std::nullopt;
+            };
+            const auto fadeInCurve = text("fade_in_curve");
+            const auto fadeOutCurve = text("fade_out_curve");
+            const auto crossfade = text("crossfade");
+            std::optional<std::vector<project::ClipEdit>> edits;
+            if (fields.contains("edits")) {
+                edits.emplace();
+                for (const py::handle& entry : fields["edits"].cast<py::list>()) {
+                    const auto pair = entry.cast<py::tuple>();
+                    project::ClipEdit edit;
+                    if (!project::editKindFromString(pair[0].cast<std::string>(), edit.kind)) {
+                        throw std::invalid_argument("unknown edit " + pair[0].cast<std::string>());
+                    }
+                    edit.amount = pair.size() > 1 ? pair[1].cast<float>() : 0.0F;
+                    edits->push_back(edit);
+                }
+            }
+            std::optional<std::vector<project::WarpMarker>> warps;
+            if (fields.contains("warps")) {
+                warps.emplace();
+                for (const py::handle& entry : fields["warps"].cast<py::list>()) {
+                    const auto pair = entry.cast<py::tuple>();
+                    warps->push_back(
+                        project::WarpMarker{.source = pair[0].cast<double>(),
+                                            .at = core::Ticks{pair[1].cast<std::int64_t>()}});
+                }
+                std::ranges::stable_sort(*warps, {}, &project::WarpMarker::at);
+            }
             return made("SetPlaylistItem", [=](const project::Project& p) {
                 const project::PlaylistTrack* owner = p.playlist.find(core::PlaylistTrackId{track});
                 const project::PlaylistItem* found = nullptr;
@@ -565,6 +620,9 @@ void placementCommands(py::module_& c) {
                 if (muted) {
                     value.muted = *muted != 0.0;
                 }
+                if (lane) {
+                    value.lane = static_cast<std::uint16_t>(std::clamp(*lane, 0.0, 255.0));
+                }
                 if (auto* audio = std::get_if<project::AudioClipRef>(&value.content)) {
                     if (stretch) {
                         audio->stretch = static_cast<float>(std::clamp(*stretch, 0.05, 20.0));
@@ -575,6 +633,35 @@ void placementCommands(py::module_& c) {
                     if (reverse) {
                         audio->reverse = *reverse != 0.0;
                     }
+                    if (fadeIn) {
+                        audio->fadeIn.length = ticks(*fadeIn);
+                    }
+                    if (fadeOut) {
+                        audio->fadeOut.length = ticks(*fadeOut);
+                    }
+                    const auto curveOf = [](const std::string& spelled, core::Curve& out) {
+                        format::DiagnosticList ignored;
+                        if (!format::parseCurve(spelled, format::Span{}, ignored, out)) {
+                            throw std::invalid_argument("not a curve: " + spelled);
+                        }
+                    };
+                    if (fadeInCurve) {
+                        curveOf(*fadeInCurve, audio->fadeIn.curve);
+                    }
+                    if (fadeOutCurve) {
+                        curveOf(*fadeOutCurve, audio->fadeOut.curve);
+                    }
+                    if (crossfade) {
+                        audio->crossfade = *crossfade == "linear"
+                                               ? project::CrossfadeKind::Linear
+                                               : project::CrossfadeKind::EqualPower;
+                    }
+                    if (edits) {
+                        audio->edits = *edits;
+                    }
+                    if (warps) {
+                        audio->warps = *warps;
+                    }
                 }
                 const core::PlaylistTrackId to{
                     destination ? static_cast<std::uint32_t>(*destination) : track};
@@ -583,8 +670,11 @@ void placementCommands(py::module_& c) {
             });
         },
         py::arg("track"), py::arg("item"), py::arg("fields"),
-        "Set any of start, length, offset, muted, stretch, pitch, reverse, and move to "
-        "`track`. Consecutive edits of one item coalesce into one undo step.");
+        "Set any of start, length, offset, muted, lane, and for an audio clip stretch, pitch, "
+        "reverse, fade_in, fade_out (ticks), fade_in_curve, fade_out_curve (curve text), "
+        "crossfade (equal, linear), edits ([(kind, amount)]: reverse normalize dc gain trim), "
+        "warps ([(source seconds, item ticks)]); and move to `track`. Consecutive edits of one "
+        "item coalesce into one undo step.");
 }
 
 void mixerCommands(py::module_& c) {
@@ -967,6 +1057,44 @@ void projectCommands(py::module_& c) {
         "Change any controller fields (see AddController).");
 }
 
+/// Phase 9: hosted plugins, as a new slot or as a channel's instrument.
+void pluginCommands(py::module_& c) {
+    // GIL: trivial - builds a closure
+    c.def(
+        "AddPluginSlot",
+        [](std::uint32_t insert, const std::string& format, const std::string& uid,
+           const std::string& path, const std::string& name) {
+            if (!project::isPluginType(format)) {
+                throw std::invalid_argument("a plugin format is 'clap' or 'vst3'");
+            }
+            return made("Add " + name, [=](const project::Project&) {
+                project::Slot prototype;
+                prototype.type = format;
+                prototype.plugin = project::PluginRef{
+                    .uid = uid, .path = path, .name = name, .state = {}, .isolated = false};
+                return make<project::AddSlot>(core::InsertId{insert}, std::move(prototype));
+            });
+        },
+        py::arg("insert"), py::arg("format"), py::arg("uid"), py::arg("path"), py::arg("name"));
+    // GIL: trivial - builds a closure
+    c.def(
+        "SetPluginInstrument",
+        [](std::uint32_t channel, const std::string& format, const std::string& uid,
+           const std::string& path, const std::string& name) {
+            if (!project::isPluginType(format)) {
+                throw std::invalid_argument("a plugin format is 'clap' or 'vst3'");
+            }
+            return made("Use " + name, [=](const project::Project&) {
+                project::InstrumentSpec spec;
+                spec.type = format;
+                spec.plugin = project::PluginRef{
+                    .uid = uid, .path = path, .name = name, .state = {}, .isolated = false};
+                return make<project::SetInstrument>(core::ChannelId{channel}, std::move(spec));
+            });
+        },
+        py::arg("channel"), py::arg("format"), py::arg("uid"), py::arg("path"), py::arg("name"));
+}
+
 // NOLINTEND(bugprone-exception-escape)
 
 } // namespace
@@ -984,6 +1112,7 @@ void registerEditCommands(py::module_& m) {
     routingCommands(commands);
     automationCommands(commands);
     projectCommands(commands);
+    pluginCommands(commands);
 }
 
 } // namespace adx::bindings

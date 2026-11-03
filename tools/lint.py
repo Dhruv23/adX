@@ -651,6 +651,74 @@ def cmd_rules(_args: argparse.Namespace) -> int:
     return 0
 
 
+#: A definition-of-done box that asks a person to check something (phase_10.5.md 4.7).
+_USER_PHRASES = (
+    "the user",
+    "a human",
+    "needs the user",
+    "demonstrated live",
+    "on the user's machine",
+)
+_PLAN_TAGS = ("(hardware half)", "(judgement)")
+
+
+def _done_boxes(text: str) -> list[tuple[int, str]]:
+    """(line, text) of each unchecked box under a "Definition of done" heading."""
+    boxes: list[tuple[int, str]] = []
+    inside = False
+    current: list[str] = []
+    start = 0
+    for number, line in enumerate(text.splitlines(), 1):
+        if line.startswith("#"):
+            if current:
+                boxes.append((start, " ".join(current)))
+                current = []
+            inside = "definition of done" in line.lower()
+            continue
+        if not inside:
+            continue
+        stripped = line.strip()
+        if stripped.startswith("- ["):
+            if current:
+                boxes.append((start, " ".join(current)))
+            current = [stripped] if stripped.startswith("- [ ]") else []
+            start = number
+        elif current and stripped and line.startswith(" "):
+            current.append(stripped)
+        elif current:
+            boxes.append((start, " ".join(current)))
+            current = []
+    if current:
+        boxes.append((start, " ".join(current)))
+    return boxes
+
+
+def plan_findings(plans: Path) -> list[str]:
+    """Each untagged unchecked box, in every phase file, that asks a person to check."""
+    out = []
+    for path in sorted(plans.glob("phase_*.md")):
+        for line, box in _done_boxes(path.read_text(encoding="utf-8")):
+            lower = box.lower()
+            if any(tag in lower for tag in _PLAN_TAGS):
+                continue
+            hit = next((p for p in _USER_PHRASES if p in lower), None)
+            if hit:
+                out.append(
+                    f"{path.name}:{line}: asks {hit!r} with no (hardware half) or (judgement) tag"
+                )
+    return out
+
+
+def cmd_plans(args: argparse.Namespace) -> int:
+    findings = plan_findings(Path(args.root) if args.root else REPO_ROOT / "plans")
+    for finding in findings:
+        print(finding, file=sys.stderr)
+    if findings:
+        return _fail(f"{len(findings)} plan box(es) need the user untagged (phase_10.5.md 4.7).")
+    print("plans: every box a person checks is tagged")
+    return 0
+
+
 _GATES = {
     "rules": cmd_rules,
     "format": cmd_format,
@@ -659,6 +727,7 @@ _GATES = {
     "format-safety": cmd_format_safety,
     "positions": cmd_positions,
     "dsp-math": cmd_dsp_math,
+    "plans": cmd_plans,
 }
 
 
@@ -690,6 +759,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     subparsers.add_parser("dsp-math", help="no library transcendentals in DSP code")
     subparsers.add_parser("rules", help="FINAL_PLAN 2.2's three rules (phase_5.md 3)")
+    plans_parser = subparsers.add_parser(
+        "plans", help="definition-of-done boxes that need a person"
+    )
+    plans_parser.add_argument(
+        "--root", help="a plans folder other than plans/ (the gate's own test)"
+    )
 
     args = parser.parse_args(argv)
     return _GATES[str(args.gate)](args)

@@ -4,10 +4,12 @@ target_sources(adx_engine_static PRIVATE
     ChannelCommands.cpp
     CommandStack.cpp
     EditNotes.cpp
+    MidiCommands.cpp
     MixerCommands.cpp
     NoteCommands.cpp
     PatchCommands.cpp
     PatternCommands.cpp
     PlaylistCommands.cpp
+    PluginCommands.cpp
     ProjectCommands.cpp
 )

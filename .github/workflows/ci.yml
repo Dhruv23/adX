@@ -226,3 +226,9 @@ jobs:
       - name: Deterministic DSP math
         if: ${{ !cancelled() }}
         run: python tools/lint.py dsp-math
+
+      # 16. Phase 10.5: a definition-of-done box that asks the user to check software is
+      # a gap in the agent's tests; only hardware halves and judgement gates may.
+      - name: Plans gate
+        if: ${{ !cancelled() }}
+        run: python tools/lint.py plans

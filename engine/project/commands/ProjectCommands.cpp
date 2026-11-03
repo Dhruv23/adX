@@ -352,4 +352,66 @@ DirtyMask AddSample::dirty() const noexcept {
     return dirty::kResources;
 }
 
+// --- SetSamplePath -----------------------------------------------------------
+
+SetSamplePath::SetSamplePath(core::SampleId id, std::string path)
+    : m_id(id), m_path(std::move(path)) {}
+
+void SetSamplePath::apply(Project& project) {
+    for (SampleRef& sample : project.resources.samples) {
+        if (sample.id == m_id) {
+            m_previous = sample.path;
+            sample.path = m_path;
+        }
+    }
+}
+
+void SetSamplePath::revert(Project& project) {
+    for (SampleRef& sample : project.resources.samples) {
+        if (sample.id == m_id) {
+            sample.path = m_previous;
+        }
+    }
+}
+
+std::string_view SetSamplePath::name() const noexcept {
+    return "Relink sample";
+}
+
+CommandId SetSamplePath::kind() const noexcept {
+    return CommandId::kSetSamplePath;
+}
+
+DirtyMask SetSamplePath::dirty() const noexcept {
+    // Channels too: a sampler zone on this entry resolves its file when its node is
+    // built, and only a graph rebuild asks again.
+    return dirty::kResources | dirty::kChannels;
+}
+
+// --- SetSampleSearchPaths ----------------------------------------------------
+
+SetSampleSearchPaths::SetSampleSearchPaths(std::vector<std::string> paths)
+    : m_paths(std::move(paths)) {}
+
+void SetSampleSearchPaths::apply(Project& project) {
+    m_previous = project.resources.searchPaths;
+    project.resources.searchPaths = m_paths;
+}
+
+void SetSampleSearchPaths::revert(Project& project) {
+    project.resources.searchPaths = m_previous;
+}
+
+std::string_view SetSampleSearchPaths::name() const noexcept {
+    return "Set sample folders";
+}
+
+CommandId SetSampleSearchPaths::kind() const noexcept {
+    return CommandId::kSetSampleSearchPaths;
+}
+
+DirtyMask SetSampleSearchPaths::dirty() const noexcept {
+    return dirty::kResources | dirty::kChannels;
+}
+
 } // namespace adx::project

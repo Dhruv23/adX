@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -20,9 +21,17 @@ class RtAudio;
 
 namespace adx::audio {
 
+/// Which of the system's audio APIs a backend opens. WASAPI is the default on Windows;
+/// ASIO only when asked for, and only when the build compiled it (ADX_ENABLE_ASIO).
+enum class AudioApi : std::uint8_t { Default, Wasapi, Asio };
+
 class RtAudioBackend final : public AudioBackend {
 public:
-    RtAudioBackend();
+    explicit RtAudioBackend(AudioApi api = AudioApi::Default);
+    /// True when this build has RtAudio's ASIO backend.
+    [[nodiscard]] static bool asioCompiled() noexcept;
+    /// The API the backend opened, by RtAudio's display name ("ASIO", "WASAPI").
+    [[nodiscard]] std::string apiName() const;
     ~RtAudioBackend() override;
 
     RtAudioBackend(const RtAudioBackend&) = delete;

@@ -69,6 +69,7 @@ class BrowserPanel(DockPanel):
         bar.addWidget(self.tag)
         layout.addWidget(bar)
         self.tree = EntryTree()
+        self.tree.setObjectName("browser.tree")
         self.tree.itemClicked.connect(self._clicked)
         self.tree.itemActivated.connect(self._activated)
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)

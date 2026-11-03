@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 #include <vector>
 
 namespace adx::project {
@@ -28,7 +29,7 @@ namespace {
 } // namespace
 
 void appendCurveSegment(std::vector<Knot>& out, std::int64_t t0, float v0, std::int64_t t1,
-                        float v1, const core::Curve& curve, float tolerance) {
+                        float v1, const core::Curve& curve, float tolerance, int maxPieces) {
     if (t1 <= t0) {
         out.push_back(Knot{.tick = t1, .value = v1});
         return;
@@ -54,14 +55,14 @@ void appendCurveSegment(std::vector<Knot>& out, std::int64_t t0, float v0, std::
     }
 
     // Adaptive: split whichever piece is furthest from the curve, at its midpoint,
-    // until every piece is within tolerance or there are kMaxCurvePieces of them. The
+    // until every piece is within tolerance or there are maxPieces of them. The
     // pieces gather where the curve bends - a Bezier's knee - instead of being spent
     // evenly on stretches that are already straight. A segment shorter than its piece
     // count in ticks cannot be split that finely, so ticks also bound the splitting.
     const std::int64_t length = t1 - t0;
     std::vector<double> cuts{0.0, 1.0};
     std::vector<float> errors{pieceError(curve, v0, v1, 0.0, 1.0)};
-    while (static_cast<int>(errors.size()) < kMaxCurvePieces) {
+    while (std::cmp_less(errors.size(), maxPieces)) {
         const auto worst = std::ranges::max_element(errors);
         if (*worst <= tolerance) {
             break;

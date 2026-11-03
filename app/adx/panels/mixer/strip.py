@@ -49,11 +49,13 @@ class SlotRow(QWidget):
         super().__init__(parent)
         self.index = index
         self.slot = 0
+        self.setObjectName(f"slot:{index}")
         self.setAcceptDrops(True)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(1)
         self.button = QPushButton("—")
+        self.button.setObjectName(f"slot:{index}.button")
         self.button.setFixedHeight(18)
         self.button.setToolTip("Click: edit (or add) the effect. Drag: reorder.")
         self.button.clicked.connect(lambda: self.clicked.emit(self.index, self.slot))
@@ -132,11 +134,13 @@ class MixerStrip(QWidget):
     def __init__(self, insert: int, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.insert = insert
+        self.setObjectName(f"mixer.strip:{insert}")
         self.setFixedWidth(STRIP_WIDTH)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(2, 2, 2, 2)
         layout.setSpacing(2)
         self.name = QLabel()
+        self.name.setObjectName(f"mixer.strip:{insert}.name")
         self.name.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.name.setToolTip("Double-click to rename")
         self.slots: list[SlotRow] = []

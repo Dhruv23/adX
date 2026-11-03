@@ -132,6 +132,9 @@ private:
     std::array<float, kBins> m_frequency{};
     std::array<float, kBins> m_synthMagnitude{};
     std::array<float, kBins> m_synthFrequency{};
+    /// Where each bin moves at m_targetsFor: rebuilt only when the ratio changes.
+    std::array<std::size_t, kBins> m_targets{};
+    float m_targetsFor{0.0F};
     float m_ratio{1.0F};
 };
 

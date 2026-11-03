@@ -18,7 +18,7 @@ The unit and scale choose the widget and its formatting (``generic_editor_units`
 Every control turns through :meth:`Session.set_param` - heard next block, recorded as a
 command, coalesced so a drag is one undo step - and offers the same context menu:
 automate (one command: a lane on this parameter, starting at its current value), MIDI
-learn (Phase 9's; present and disabled), and reset.
+learn (Phase 9: the next control that moves is bound to it), and reset.
 """
 
 from __future__ import annotations
@@ -119,6 +119,26 @@ def _none() -> dict[str, str]:
     return {}
 
 
+#: Arms MIDI learn on a parameter path: the main window sets it (PluginRuntime.arm), so
+#: an editor built anywhere offers learn without being handed the runtime.
+LEARN_HOOK: list[Callable[[str], None]] = []
+
+
+def set_learn_hook(hook: Callable[[str], None] | None) -> None:
+    """Install (or, with None, remove) what "MIDI learn" calls."""
+    LEARN_HOOK.clear()
+    if hook is not None:
+        LEARN_HOOK.append(hook)
+
+
+def arm_learn(path: str) -> bool:
+    """Arm learn on ``path``; False when nothing listens (no MIDI, a test)."""
+    if not LEARN_HOOK:
+        return False
+    LEARN_HOOK[0](path)
+    return True
+
+
 @dataclass(slots=True)
 class ParamTarget:
     """Where an editor's parameters live and how it changes them. Reads are batched:
@@ -132,6 +152,8 @@ class ParamTarget:
     turn: Callable[[str, float], None]
     #: "Create automation" on a parameter, by name; None disables the entry.
     automate: Callable[[str], None] | None = None
+    #: "MIDI learn" on a parameter, by name: makes it addressable, then arms learn.
+    learn: Callable[[str], None] | None = None
     #: Every automated path, read now, with its lane's colour.
     automated_paths: Callable[[], dict[str, str]] = _none
 
@@ -222,6 +244,7 @@ class GenericEditor(QScrollArea):
         if str(descriptor.get("rate", "")) == "baked":
             control.setToolTip(control.toolTip() + " - re-renders the voice when changed")
         control.setProperty("paramPath", path)
+        control.setObjectName(f"param:{path}")
 
     def _context_menu(self, name: str, descriptor: dict[str, Any], point: QPoint) -> None:
         menu = self.context_menu(name, descriptor)
@@ -236,8 +259,11 @@ class GenericEditor(QScrollArea):
             callback = self.target.automate
             automate.triggered.connect(lambda: callback(name))
         learn = menu.addAction("MIDI learn")
-        learn.setEnabled(False)
-        learn.setToolTip("MIDI learn arrives with MIDI input in Phase 9 (plans/phase_9.md)")
+        learn.setEnabled(self.target.learn is not None and bool(LEARN_HOOK))
+        if self.target.learn is not None:
+            learner = self.target.learn
+            learn.triggered.connect(lambda: learner(name))
+        learn.setToolTip("Move a control on a MIDI input to bind it to this parameter")
         reset = menu.addAction("Reset to default")
         default = float(descriptor["default"])
         reset.triggered.connect(lambda: self.target.turn(name, default))

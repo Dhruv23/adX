@@ -1,14 +1,22 @@
 pybind11_add_module(adx_engine MODULE
     module.cpp
+    analysis.cpp
+    analyzers.cpp
     audio.cpp
+    capture.cpp
     edit.cpp
+    export.cpp
     format.cpp
+    generate.cpp
     geometry.cpp
     meters.cpp
+    midi.cpp
     mini.cpp
     notes.cpp
+    plugin.cpp
     panels.cpp
     project.cpp
+    record.cpp
     render.cpp
     script.cpp
     session.cpp

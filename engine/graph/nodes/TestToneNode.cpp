@@ -42,7 +42,7 @@ constexpr std::size_t kReleaseStep = 3;
 float sineOfTurns(float turns) noexcept {
     // Reduce to a quarter wave by symmetry, then an odd Taylor polynomial to z^11:
     // on [0, pi/2] the next term is below 6e-8, i.e. below float resolution.
-    float x = turns - std::floor(turns);
+    float x = turns - dsp::floorExact(turns);
     float sign = 1.0F;
     if (x >= 0.5F) {
         x -= 0.5F;

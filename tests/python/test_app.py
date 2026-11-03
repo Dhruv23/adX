@@ -52,11 +52,22 @@ def test_opens_plays_and_moves_the_playhead(window: object, repo_root: pathlib.P
         "mixer",
         "automation",
         "waveform",
+        "clip_editor",
         "instrument",
         "effect",
         "inspector",
         "editor",
         "console",
+        "plugins",
+        "midi",
+        "analysis",
+        "generate",
+        "spectrum",
+        "spectrogram",
+        "scope",
+        "vectorscope",
+        "loudness",
+        "particles",
     }
 
     window.toggle_play()

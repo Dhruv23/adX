@@ -23,11 +23,10 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Any, NamedTuple, Protocol, cast
 
 import numpy as np
 import numpy.typing as npt
-from PySide6.QtCore import QObject, QTimer, Signal
 
 import adx_engine as _native
 
@@ -37,11 +36,11 @@ __all__ = [
     "NOTE_DTYPE",
     "PPQ",
     "Engine",
-    "FrameClock",
     "GeometryView",
     "PeakCache",
     "Peaks",
     "PianoRollGeometry",
+    "Plugins",
     "Project",
     "QuickPluginError",
     "WaveformGeometry",
@@ -385,6 +384,11 @@ class Project:
         """Wall-clock seconds at ``ticks``."""
         return float(self.native.seconds_at(ticks))
 
+    @_ffi
+    def ticks_at_seconds(self, seconds: float) -> int:
+        """The tick that sounds ``seconds`` in: seconds_at's inverse."""
+        return int(self.native.ticks_at_seconds(seconds))
+
     def apply(self, command: Native) -> None:
         """Execute a command built by :data:`commands` (the build was its own call)."""
         self.execute(command)
@@ -400,6 +404,41 @@ class Project:
     def mixer_info(self) -> dict[str, Any]:
         """Inserts (with slots and sends), routes and the master's id."""
         return dict(self.native.mixer_info())
+
+    @_ffi
+    def midi_bindings(self) -> list[dict[str, Any]]:
+        """Learned MIDI controls: kind, number, path, channel (0 any), device, range."""
+        return [dict(d) for d in self.native.midi_bindings()]
+
+    @_ffi
+    def add_midi_binding(
+        self,
+        kind: str,
+        number: int,
+        path: str,
+        channel: int = 0,
+        device: str = "",
+        minimum: float = 0.0,
+        maximum: float = 1.0,
+        toggle: bool = False,
+    ) -> None:
+        """Bind a control to a parameter path, replacing whatever that control drove."""
+        self.native.add_midi_binding(kind, number, path, channel, device, minimum, maximum, toggle)
+
+    @_ffi
+    def remove_midi_binding(self, index: int) -> None:
+        """Forget the binding at ``index``."""
+        self.native.remove_midi_binding(index)
+
+    @_ffi
+    def midi_routes(self) -> list[dict[str, Any]]:
+        """The project's MIDI input routes (empty: every input plays the selection)."""
+        return [dict(d) for d in self.native.midi_routes()]
+
+    @_ffi
+    def set_midi_routes(self, routes: list[dict[str, Any]]) -> None:
+        """Replace the routes (one command)."""
+        self.native.set_midi_routes(routes)
 
     @_ffi
     def patterns_info(self) -> list[dict[str, Any]]:
@@ -442,6 +481,13 @@ class Project:
     def markers(self) -> list[tuple[int, int, str]]:
         """(id, tick, name) per marker."""
         return [(int(i), int(t), str(n)) for i, t, n in self.native.markers()]
+
+    @_ffi
+    def audio_item(self, track: int, item: int) -> dict[str, Any] | None:
+        """An audio placement's fades, curves, crossfade, edits, warps and lane; None when
+        the item is not audio."""
+        info = self.native.audio_item(track, item)
+        return None if info is None else dict(info)
 
     @_ffi
     def samples(self) -> list[tuple[int, str, str]]:
@@ -512,6 +558,13 @@ class Project:
     def add_audio_item(self, track: int, path: str, start: int, length: int = 0) -> int:
         """A sample on the playlist: pool entry and placement, one step. The item id."""
         return int(self.native.add_audio_item(track, path, start, length))
+
+    @_ffi
+    def split_item(self, track: int, item: int, at: int, length: int) -> int | None:
+        """Cut a placement in two at ``at``, every property kept on both halves, one
+        step. ``length`` is its length as the playlist shows it. The new item's id."""
+        created = self.native.split_item(track, item, at, length)
+        return None if created is None else int(created)
 
     @_ffi
     def add_sampler_channel(self, name: str, path: str, output: int = 0) -> int:
@@ -586,11 +639,72 @@ LEVEL_COLUMNS = 9
 class Engine:
     """The render engine and its transport. Every method is one engine call."""
 
-    def __init__(self, null_backend: bool = False, sample_rate: int = 48000) -> None:
+    def __init__(
+        self,
+        null_backend: bool = False,
+        sample_rate: int = 48000,
+        block_frames: int = 256,
+        input_channels: int = 0,
+        input_device: int | None = None,
+        loopback: int | None = None,
+        exclusive: bool = False,
+    ) -> None:
+        """``input_channels`` > 0 opens an input for recording. ``loopback`` makes a
+        test's engine: no device, rendered by :meth:`render_offline`, its outputs wired
+        back to its inputs that many frames later. ``exclusive`` plays the default
+        output in WASAPI exclusive mode (output only; other apps lose the device)."""
         CALLS.count += 1
-        self.native = _native.Engine(sample_rate=sample_rate, null_backend=null_backend)
+        self.native = _native.Engine(
+            sample_rate=sample_rate,
+            block_frames=block_frames,
+            null_backend=null_backend,
+            input_channels=input_channels,
+            input_device=input_device,
+            loopback=loopback,
+            exclusive=exclusive,
+        )
         self.null_backend = null_backend
+        #: Inputs the stream was opened with: 0 means it cannot record.
+        self.input_channels = input_channels
         self._sample_rate = sample_rate
+
+    @property
+    @_ffi
+    def audio_pending(self) -> bool:
+        """An audio clip still plays a silent stand-in (decoding, or rendering its
+        stretch); :meth:`commit` swaps the real buffer in once it is ready."""
+        return bool(self.native.audio_pending)
+
+    @_ffi
+    def midi_inputs(self) -> list[str]:
+        """The system's MIDI input ports (after start())."""
+        return [str(name) for name in self.native.midi_inputs()]
+
+    @_ffi
+    def open_midi(self, name: str) -> None:
+        """Open a MIDI input (raises RuntimeError); it plays the MIDI target channel."""
+        self.native.open_midi(name)
+
+    @_ffi
+    def close_midi(self, name: str) -> None:
+        """Close a MIDI input."""
+        self.native.close_midi(name)
+
+    @property
+    @_ffi
+    def midi_opened(self) -> list[str]:
+        """The open MIDI inputs."""
+        return [str(name) for name in self.native.midi_opened]
+
+    @_ffi
+    def set_midi_target(self, channel: int) -> None:
+        """The channel live MIDI plays (0: none)."""
+        self.native.set_midi_target(channel)
+
+    @_ffi
+    def render_offline(self, frames: int) -> None:
+        """A loopback engine only: render ``frames`` now, as a device would have."""
+        self.native.render_offline(frames)
 
     @_ffi
     def start(self) -> None:
@@ -679,6 +793,35 @@ class Engine:
         )
 
     @_ffi
+    def frame_with_analyzers(
+        self,
+        levels: npt.NDArray[np.float32],
+        meters: MeterGeometry | None,
+        analyzers: Analyzers,
+        dt: float,
+    ) -> AnalyzerFrame:
+        """frame(), the meters (or none) and every open analyzer built - still ONE call
+        (visualizer_one_ffi_call). Upload what it returns before any other engine call."""
+        ticks, rolling, strips, samples, meter, layers, image, readouts = (
+            self.native.frame_with_analyzers(
+                levels, meters.native if meters is not None else None, analyzers.native, dt
+            )
+        )
+        return AnalyzerFrame(
+            int(ticks),
+            bool(rolling),
+            int(strips),
+            int(samples),
+            None if meter is None else (int(meter[0]), int(meter[1]), int(meter[2])),
+            {
+                name: (int(a), int(c), int(r))
+                for name, (a, c, r) in zip(ANALYZER_LAYERS, layers, strict=True)
+            },
+            (int(image[0]), int(image[1]), int(image[2]), int(image[3]), int(image[4])),
+            (float(readouts[0]), float(readouts[1]), float(readouts[2]), float(readouts[3])),
+        )
+
+    @_ffi
     def set_param(self, project: Project, path: str, value: float) -> bool:
         """A knob turn: into the project and undo, and to the audio thread with no
         rebuild. Consecutive turns of one control coalesce into one step."""
@@ -714,73 +857,103 @@ class Engine:
         """Latency along the slowest path: the preferences' readout."""
         return int(self.native.latency_samples)
 
+    @property
+    @_ffi
+    def stream(self) -> dict[str, Any]:
+        """What the device actually opened: block size, output latency, xruns, and the
+        exclusive-mode sample format ("" otherwise)."""
+        return {
+            "exclusive": bool(self.native.exclusive),
+            "block_frames": int(self.native.stream_block_frames),
+            "output_latency_ms": float(self.native.stream_output_latency_ms),
+            "xruns": int(self.native.stream_xruns),
+            "format": str(self.native.output_format),
+        }
 
-class FrameClock(QObject):
-    """The 60 Hz UI frame: one :meth:`Engine.frame` call per tick (phase_5.md 4.8).
+    @_ffi
+    def xruns(self) -> int:
+        """Underruns since the stream opened: read before and after; any rise is a glitch."""
+        return int(self.native.xruns())
 
-    Emits ``frame(position_ticks, rolling)`` and keeps the latest meter rows in
-    :attr:`levels`, a buffer allocated once and refilled in place. With :attr:`meters`
-    set (the mixer sets it), the same one call also builds every strip's meter vertices,
-    and :attr:`meter_upload` holds (address, vertex count, revision) for this frame's
-    upload - which must happen before any other engine call (phase_6.md 4.3).
-    """
+    @_ffi
+    def callback_timings(self, since: int) -> tuple[npt.NDArray[np.uint32], int, int]:
+        """Callback durations (ns) from ring position ``since``: (durations, next, lost)."""
+        durations, following, lost = self.native.callback_timings(since)
+        return durations, int(following), int(lost)
 
-    frame = Signal(int, bool)
+    @_ffi
+    def late_callbacks(self) -> int:
+        """Callbacks that overran their block's real-time duration."""
+        return int(self.native.late_callbacks())
 
-    def __init__(
-        self, engine: Engine, interval_ms: int = 16, parent: QObject | None = None
-    ) -> None:
-        super().__init__(parent)
-        self._engine = engine
-        self.levels: npt.NDArray[np.float32] = np.zeros((32, LEVEL_COLUMNS), dtype=np.float32)
-        self.strips = 0
-        self.position_ticks = 0
-        self.position_seconds = 0.0
-        self.rolling = False
-        self.meters: MeterGeometry | None = None
-        self.meter_upload: tuple[int, int, int] = (0, 0, 0)
-        self._timer = QTimer(self)
-        self._timer.setInterval(interval_ms)
-        self._timer.timeout.connect(self.tick)
+    @_ffi
+    def capture_start(self) -> None:
+        """Start capturing the master bus (phase_10.5.md 4.5)."""
+        self.native.capture_start()
 
-    def start(self) -> None:
-        """Start ticking."""
-        self._timer.start()
+    @_ffi
+    def capture_frames(self) -> int:
+        """Frames captured so far."""
+        return int(self.native.capture_frames())
 
-    def stop(self) -> None:
-        """Stop ticking."""
-        self._timer.stop()
+    @_ffi
+    def capture_stop(self, path: str | None = None) -> dict[str, Any]:
+        """Stop; a float WAV at ``path``, or the samples (interleaved) without one.
+        ``lost`` is 0 for a whole capture."""
+        return dict(self.native.capture_stop(path))
 
-    def tick(self) -> None:
-        """One frame: exactly one engine call."""
-        if self.meters is not None:
-            ticks, rolling, strips, samples, address, count, revision = (
-                self._engine.frame_with_meters(self.levels, self.meters)
-            )
-            self.meter_upload = (address, count, revision)
-        else:
-            ticks, rolling, strips, samples = self._engine.frame(self.levels)
-        if strips > self.levels.shape[0]:
-            # Too small: grow once (no engine call); the next frame fills every strip.
-            self.levels = np.zeros((strips * 2, LEVEL_COLUMNS), dtype=np.float32)
-        self.strips = min(strips, self.levels.shape[0])
-        self.position_ticks = ticks
-        self.position_seconds = samples / self._engine.sample_rate
-        self.rolling = rolling
-        self.frame.emit(ticks, rolling)
+    @_ffi
+    def set_callback_stall_us(self, microseconds: int) -> None:
+        """Fault injection for tests: each callback spins this long (0 is off)."""
+        self.native.set_callback_stall_us(microseconds)
 
+    @_ffi
+    def arm_output_onset(self, threshold: float) -> None:
+        """Exclusive mode only: note the next output frame louder than ``threshold``."""
+        self.native.arm_output_onset(threshold)
 
-class ErrorChannel(QObject):
-    """Engine errors as a Qt signal, so a panel never has to catch them itself."""
+    @_ffi
+    def output_onset_time(self) -> int:
+        """When the armed onset plays by the device clock (QPC, 100 ns); 0 until heard."""
+        return int(self.native.output_onset_time())
 
-    error = Signal(str, str)
+    # --- hosted plugins and MIDI learn (phase_9.md) ----------------------------------
 
-    def report(self, context: str, error: BaseException) -> None:
-        """Turn ``error`` into an ``error(context, message)`` signal."""
-        self.error.emit(context, str(error))
+    @_ffi
+    def plugin_instance_of_slot(self, slot: int) -> int:
+        """The live plugin instance in a slot, or 0."""
+        return int(self.native.plugin_instance_of_slot(slot))
 
+    @_ffi
+    def plugin_instance_of_channel(self, channel: int) -> int:
+        """A channel's live plugin instrument, or 0."""
+        return int(self.native.plugin_instance_of_channel(channel))
 
-errors = ErrorChannel()
+    @_ffi
+    def sync_plugin_states(self, project: Project) -> int:
+        """Store every live plugin's state in the project; how many changed."""
+        return int(self.native.sync_plugin_states(project.native))
+
+    @_ffi
+    def apply_plugin_echoes(self, project: Project) -> int:
+        """Put parameter changes made in plugins' own editors into the project."""
+        return int(self.native.apply_plugin_echoes(project.native))
+
+    @_ffi
+    def apply_learned(self, project: Project) -> int:
+        """Put the values learned MIDI controls wrote into the project."""
+        return int(self.native.apply_learned(project.native))
+
+    @_ffi
+    def midi_last_control(self) -> dict[str, Any] | None:
+        """The newest controller message since the last call, or None."""
+        control = self.native.midi_last_control()
+        return None if control is None else dict(control)
+
+    @_ffi
+    def refresh(self, project: Project) -> bool:
+        """Rebuild the whole graph (a plugin's latency changed)."""
+        return bool(self.native.refresh(project.native))
 
 
 # --- geometry ------------------------------------------------------------------------
@@ -1191,6 +1364,52 @@ class MeterGeometry(_Builder):
         self.native.reset_clips()
 
 
+#: Analyzers' layers, in the order frame_with_analyzers returns their uploads.
+ANALYZER_LAYERS: tuple[str, ...] = tuple(str(name) for name in _native.Analyzers.layers)
+
+
+class AnalyzerFrame(NamedTuple):
+    """What Engine.frame_with_analyzers returns."""
+
+    ticks: int
+    rolling: bool
+    strips: int
+    samples: int
+    #: (address, vertex count, revision), or None without meters.
+    meters: tuple[int, int, int] | None
+    #: Per ANALYZER_LAYERS name: (address, vertex count, revision).
+    layers: dict[str, tuple[int, int, int]]
+    #: The spectrogram image: (address, rows, columns, head, rows pushed).
+    spectrogram: tuple[int, int, int, int, int]
+    #: (phase correlation, momentary, short-term, integrated LUFS).
+    readouts: tuple[float, float, float, float]
+
+
+class Analyzers:
+    """The analyzers on an engine's master tap (engine/geometry/AnalyzerHub.h); the FFT
+    runs on its own worker. Engine.frame_with_analyzers builds them."""
+
+    def __init__(self, engine: Engine) -> None:
+        CALLS.count += 1
+        self.native = _native.Analyzers(engine.native)
+
+    @_ffi
+    def configure(self, **settings: object) -> None:
+        """Open or close analyzers and set them (keys: bindings/analyzers.cpp)."""
+        self.native.configure(settings)
+
+    @_ffi
+    def settings(self) -> dict[str, Any]:
+        """The current settings."""
+        return dict(self.native.settings())
+
+    @property
+    @_ffi
+    def transforms(self) -> int:
+        """FFTs the worker has run."""
+        return int(self.native.transforms)
+
+
 class EqCurveGeometry(_Builder):
     """engine/geometry/EqCurveGeometry.h."""
 
@@ -1550,3 +1769,373 @@ def script_add_effect(
 ) -> int:
     """Add an effect with its parameters: one command. Returns the slot id."""
     return int(_native.script.add_effect(project.native, insert, effect, params, mix))
+
+
+# --- export, MIDI files, bundles, freeze (phase_8.md) ---------------------------------
+
+#: The export formats ``export_project`` takes, as the CLI and the dialog spell them.
+EXPORT_FORMATS: tuple[str, ...] = ("wav16", "wav24", "wav32f", "mp3", "flac", "ogg")
+
+
+@_ffi
+def export_project(project: Project, request: dict[str, Any]) -> dict[str, Any]:
+    """Export as ``request`` describes and wait (keys: bindings/export.cpp). The result
+    has ok, cancelled, error, files (path, label, frames, sample_rate, peak, rms,
+    hash), gain_db and loudness."""
+    return dict(_native.export_project(project.native, request))
+
+
+class ExportJob:
+    """An export on its own thread with its own copy of the project."""
+
+    def __init__(self, project: Project, request: dict[str, Any]) -> None:
+        CALLS.count += 1
+        self.native = _native.ExportJob(project.native, request)
+
+    @property
+    @_ffi
+    def progress(self) -> float:
+        """0 to 1."""
+        return float(self.native.progress)
+
+    @property
+    @_ffi
+    def done(self) -> bool:
+        """Finished, failed or cancelled."""
+        return bool(self.native.done)
+
+    @_ffi
+    def cancel(self) -> None:
+        """Ask the job to stop; result() then reports cancelled."""
+        self.native.cancel()
+
+    @_ffi
+    def result(self) -> dict[str, Any]:
+        """Wait, then what export_project would have returned."""
+        return dict(self.native.result())
+
+
+@_ffi
+def import_midi(project: Project, path: str) -> dict[str, Any]:
+    """A Standard MIDI File into ``project``, one undo step: pattern, tracks, division."""
+    return dict(_native.import_midi(project.native, path))
+
+
+@_ffi
+def export_midi(project: Project, path: str) -> None:
+    """The arrangement as a type-1 Standard MIDI File."""
+    _native.export_midi(project.native, path)
+
+
+@_ffi
+def bundle_project(
+    path: str, destination: str, zip_it: bool = False, library: list[str] | None = None
+) -> dict[str, Any]:
+    """Collect-and-save: ok, error, project, zip, copied, missing, rewritten."""
+    return dict(_native.bundle_project(path, destination, zip_it, library or []))
+
+
+@_ffi
+def freeze_channel(project: Project, channel: int) -> dict[str, Any]:
+    """Render a channel to audio and play that in its place, one undo step."""
+    return dict(_native.freeze_channel(project.native, channel))
+
+
+@_ffi
+def unfreeze_channel(project: Project, channel: int) -> None:
+    """Put a frozen channel's instrument and effects back."""
+    _native.unfreeze_channel(project.native, channel)
+
+
+@_ffi
+def estimate_bpm(path: str) -> float | None:
+    """An audio file's tempo, or None when it has no steady pulse."""
+    bpm = _native.estimate_bpm(path)
+    return None if bpm is None else float(bpm)
+
+
+@_ffi
+def detect_onsets(path: str) -> npt.NDArray[np.float64]:
+    """Onset times of an audio file, in seconds."""
+    return cast(npt.NDArray[np.float64], _native.detect_onsets(path))
+
+
+# --- analysis (phase_10.md 4.1) --------------------------------------------------------
+
+#: What AnalysisJob runs (bindings/analysis.cpp).
+ANALYSIS_KINDS: tuple[str, ...] = ("key", "chords", "bpm", "timbre", "melody", "form")
+
+
+class AnalysisJob:
+    """One analysis on its own thread: ``kind`` is one of ANALYSIS_KINDS and ``params``
+    its inputs (bindings/analysis.cpp). Nothing it does touches a project; the caller
+    applies the result."""
+
+    def __init__(self, kind: str, params: dict[str, Any]) -> None:
+        CALLS.count += 1
+        self.kind = kind
+        self.native = _native.AnalysisJob(kind, params)
+
+    @property
+    @_ffi
+    def progress(self) -> float:
+        """0 to 1."""
+        return float(self.native.progress)
+
+    @property
+    @_ffi
+    def done(self) -> bool:
+        """Finished, failed or cancelled."""
+        return bool(self.native.done)
+
+    @_ffi
+    def cancel(self) -> None:
+        """Ask the job to stop; result() then reports cancelled."""
+        self.native.cancel()
+
+    @_ffi
+    def result(self) -> dict[str, Any]:
+        """Wait; then ok, cancelled, error and the kind's own fields."""
+        return dict(self.native.result())
+
+
+@_ffi
+def analyze(kind: str, params: dict[str, Any]) -> dict[str, Any]:
+    """AnalysisJob(kind, params).result(), waited for in one call."""
+    return dict(_native.analyze(kind, params))
+
+
+@_ffi
+def melody_extractor_available() -> bool:
+    """True when this build has the ONNX melody extractor."""
+    return bool(_native.melody_extractor_available())
+
+
+@_ffi
+def suggest_chords(key: str, previous: str = "") -> list[dict[str, Any]]:
+    """Ranked next chords in ``key`` ("A minor") after ``previous`` ("F"), best first."""
+    return [dict(s) for s in _native.suggest_chords(key, previous)]
+
+
+@_ffi
+def scale_of(key: str) -> list[int]:
+    """The key's seven pitch classes, tonic first."""
+    return [int(c) for c in _native.scale_of(key)]
+
+
+@_ffi
+def measure_loudness(audio: npt.NDArray[np.float32], rate: int) -> dict[str, float]:
+    """BS.1770-4 integrated, max momentary and max short-term LUFS of (N, 2) audio."""
+    return {k: float(v) for k, v in _native.measure_loudness(audio, rate).items()}
+
+
+# --- the genre suites (phase_10.md 4.6) ------------------------------------------------
+
+
+@_ffi
+def genre_styles() -> list[dict[str, Any]]:
+    """id, name, description and pack of every suite."""
+    return [dict(s) for s in _native.genre_styles()]
+
+
+@_ffi
+def generate_track(
+    style: str, packs: str, seed: int, bars: int, bpm: float | None, key: str | None
+) -> dict[str, Any]:
+    """A whole track's text, bpm, key and notes (bindings/generate.cpp)."""
+    return dict(_native.generate_track(style, packs, seed, bars, bpm, key))
+
+
+@_ffi
+def style_template(
+    style: str, packs: str, seed: int, bars: int, bpm: float | None, key: str | None
+) -> dict[str, Any]:
+    """The same without notes."""
+    return dict(_native.style_template(style, packs, seed, bars, bpm, key))
+
+
+# --- recording (phase_8.md 3.1) -------------------------------------------------------
+
+
+class RecordSession:
+    """One take on a playlist track. ``settings``: track, from, punch_in, punch_out,
+    count_in_bars, click, monitor, project_directory, name, round_trip."""
+
+    def __init__(self, engine: Engine, project: Project, settings: dict[str, Any]) -> None:
+        CALLS.count += 1
+        self.native = _native.RecordSession(engine.native, project.native, settings)
+
+    @_ffi
+    def start(self) -> None:
+        """Arm, count in and roll (raises RuntimeError when the take cannot start)."""
+        self.native.start()
+
+    @_ffi
+    def stop(self) -> dict[str, Any]:
+        """Stop and place the take: ok, error, item, file, frames, overran, latency, lane."""
+        return dict(self.native.stop())
+
+    @property
+    @_ffi
+    def latency(self) -> dict[str, int]:
+        """input, output, graph, measured and compensation, in samples."""
+        return {str(k): int(v) if v is not None else -1 for k, v in self.native.latency.items()}
+
+    @property
+    @_ffi
+    def frames(self) -> int:
+        """Frames captured so far."""
+        return int(self.native.frames)
+
+    @property
+    @_ffi
+    def overruns(self) -> int:
+        """Samples the writer fell behind by; anything above 0 marks the take."""
+        return int(self.native.overruns)
+
+
+class Calibration:
+    """Loopback calibration: output wired to input, begin(), run the engine, finish()."""
+
+    def __init__(self, engine: Engine) -> None:
+        CALLS.count += 1
+        self.native = _native.Calibration(engine.native)
+
+    @_ffi
+    def begin(self, project: Project, ping_at: int = 4800) -> None:
+        """Send the ping ``ping_at`` samples from now."""
+        self.native.begin(project.native, ping_at)
+
+    @_ffi
+    def finish(self) -> int | None:
+        """The measured round trip in samples, or None when nothing came back."""
+        value = self.native.finish()
+        return None if value is None else int(value)
+
+
+@_ffi
+def comp_takes(project: Project, track: int, ranges: list[tuple[int, int, int]]) -> None:
+    """Build lane 0 of ``track`` from (from, to, take item) ranges, one undo step."""
+    _native.comp_takes(project.native, track, ranges)
+
+
+# --- hosted plugins (phase_9.md 4.2-4.6) -------------------------------------------------
+
+
+class Plugins:
+    """The plugin host: scanning, the cache, live instances. Every method is one call;
+    the ones that talk to a sandbox process release the GIL in the engine."""
+
+    @staticmethod
+    @_ffi
+    def host_path() -> str:
+        return str(_native.plugin_host_path())
+
+    @staticmethod
+    @_ffi
+    def set_host(path: str) -> None:
+        _native.set_plugin_host(path)
+
+    @staticmethod
+    @_ffi
+    def available() -> bool:
+        """adx_plugin_host.exe is where the engine looks for it."""
+        return bool(_native.plugin_host_available())
+
+    @staticmethod
+    @_ffi
+    def load_cache(path: str = "") -> tuple[bool, str]:
+        ok, error = _native.plugin_load_cache(path)
+        return bool(ok), str(error)
+
+    @staticmethod
+    @_ffi
+    def scan(directories: list[str] | None = None, force: bool = False) -> int:
+        """Scan out of process into the cache; how many files were scanned."""
+        return int(_native.plugin_scan(directories or [], force))
+
+    @staticmethod
+    @_ffi
+    def rescan(format_name: str, path: str) -> dict[str, Any]:
+        return dict(_native.plugin_rescan(format_name, path))
+
+    @staticmethod
+    @_ffi
+    def forget(path: str) -> bool:
+        return bool(_native.plugin_forget(path))
+
+    @staticmethod
+    @_ffi
+    def listing() -> list[dict[str, Any]]:
+        """Every plugin the cache knows that scanned cleanly."""
+        return [dict(d) for d in _native.plugin_list()]
+
+    @staticmethod
+    @_ffi
+    def scan_results() -> list[dict[str, Any]]:
+        """Every scanned file, failed ones (the blacklist) included."""
+        return [dict(d) for d in _native.plugin_scan_results()]
+
+    @staticmethod
+    @_ffi
+    def describe(format_name: str, uid: str, path: str = "") -> dict[str, Any] | None:
+        found = _native.plugin_describe(format_name, uid, path)
+        return None if found is None else dict(found)
+
+    @staticmethod
+    @_ffi
+    def notices() -> list[dict[str, Any]]:
+        """Crashes, hangs, mutes and latency changes since the last call."""
+        return [dict(d) for d in _native.plugin_notices()]
+
+    @staticmethod
+    @_ffi
+    def restart(instance: int = 0) -> int:
+        return int(_native.plugin_restart(instance))
+
+    @staticmethod
+    @_ffi
+    def instances() -> list[dict[str, Any]]:
+        return [dict(d) for d in _native.plugin_instances()]
+
+    @staticmethod
+    @_ffi
+    def param_values(instance: int) -> list[tuple[int, float]]:
+        return [(int(i), float(v)) for i, v in _native.plugin_param_values(instance)]
+
+    @staticmethod
+    @_ffi
+    def param_text(instance: int, param: int, value: float) -> str | None:
+        text = _native.plugin_param_text(instance, param, value)
+        return None if text is None else str(text)
+
+    @staticmethod
+    @_ffi
+    def open_editor(instance: int) -> tuple[int, int, int] | None:
+        opened = _native.plugin_open_editor(instance)
+        return None if opened is None else (int(opened[0]), int(opened[1]), int(opened[2]))
+
+    @staticmethod
+    @_ffi
+    def close_editor(instance: int) -> None:
+        _native.plugin_close_editor(instance)
+
+    @staticmethod
+    @_ffi
+    def reenable(instance: int) -> None:
+        _native.plugin_reenable(instance)
+
+    @staticmethod
+    @_ffi
+    def set_isolated(instance: int, isolated: bool) -> None:
+        _native.plugin_set_isolated(instance, isolated)
+
+    @staticmethod
+    @_ffi
+    def check_latency(instance: int) -> int:
+        return int(_native.plugin_check_latency(instance))
+
+    @staticmethod
+    @_ffi
+    def search_paths() -> list[str]:
+        return [str(p) for p in _native.plugin_search_paths()]

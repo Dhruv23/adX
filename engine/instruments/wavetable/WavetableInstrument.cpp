@@ -15,7 +15,7 @@ using P = WavetableParam;
 }
 
 [[nodiscard]] int stepped(const graph::VoiceRender& render, P param, std::uint32_t frame) noexcept {
-    return static_cast<int>(std::floor(render.paramAt(idx(param), frame) + 0.5F));
+    return static_cast<int>(dsp::floorExact(render.paramAt(idx(param), frame) + 0.5F));
 }
 
 [[nodiscard]] std::uint32_t voiceSeed(const graph::Voice& voice) noexcept {
@@ -101,7 +101,7 @@ void WavetableInstrument::startVoice(graph::Voice& voice, const graph::BlockEven
     WavetableVoice& state = stateOf(voice);
     for (std::uint32_t u = 0; u < kWavetableMaxUnison; ++u) {
         const float phase = static_cast<float>(u) * 0.618034F;
-        state.phase[u] = phase - std::floor(phase);
+        state.phase[u] = phase - dsp::floorExact(phase);
     }
     for (auto& filter : state.filter) {
         filter.reset();
@@ -140,6 +140,7 @@ bool WavetableInstrument::renderVoice(graph::Voice& voice, std::span<float> left
 
     bool alive = true;
     float env = state.env.level();
+    dsp::MidiHz hzOf; // the pitch's Hz, again only when it moves
     for (std::uint32_t i = 0; i < left.size(); ++i) {
         if (!alive) {
             left[i] = 0.0F;
@@ -152,7 +153,7 @@ bool WavetableInstrument::renderVoice(graph::Voice& voice, std::span<float> left
         const float lfo = state.lfo.next(dsp::LfoShape::Triangle, lfoIncrement);
         const float position = render.paramAt(idx(P::Position), i) + (0.5F * lfoDepth * lfo);
         const float cents = i < render.pitchCents.size() ? render.pitchCents[i] : 0.0F;
-        const float base = dsp::midiToHz(pitch + (cents * 0.01F)) * inverseRate;
+        const float base = hzOf(pitch + (cents * 0.01F)) * inverseRate;
         float l = 0.0F;
         float r = 0.0F;
         for (std::uint32_t u = 0; u < state.unison; ++u) {
@@ -160,7 +161,7 @@ bool WavetableInstrument::renderVoice(graph::Voice& voice, std::span<float> left
             const float s =
                 readTable(table, position, dsp::waveTableLevel(increment), state.phase[u]);
             state.phase[u] += increment;
-            state.phase[u] -= std::floor(state.phase[u]);
+            state.phase[u] -= dsp::floorExact(state.phase[u]);
             l += s * state.panLeft[u];
             r += s * state.panRight[u];
         }

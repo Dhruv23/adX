@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The adX MSI (phase_10.md 4.8). Built by build_installer.ps1, which stages the files
+  and harvests them into files.wxs (ComponentGroup AppFiles).
+
+  Per user, no administrator prompt: everything goes under
+  %LOCALAPPDATA%\Programs\adX. A Start-menu entry, and .adx files open with adX.
+  Uninstalling removes what was installed and nothing else: projects, presets and the
+  settings adX keeps in the user's profile are never under the install folder.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="adX" Language="1033" Version="$(var.Version)" Manufacturer="adX"
+           UpgradeCode="5B1E6F0A-3C2D-4E8B-9A71-ADC0FFEE0001">
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perUser" InstallPrivileges="limited"
+             Description="adX - a music production environment whose project format is a text file" />
+    <Property Id="ALLUSERS" Secure="yes" Value="2" />
+    <Property Id="MSIINSTALLPERUSER" Secure="yes" Value="1" />
+    <MajorUpgrade DowngradeErrorMessage="A newer adX is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="LocalAppDataFolder">
+        <Directory Id="ProgramsFolder_" Name="Programs">
+          <Directory Id="INSTALLDIR" Name="adX" />
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder" />
+    </Directory>
+
+    <!-- The Start-menu entry and the file association, keyed by registry values so the
+         per-user install has a key path ICE38 accepts. -->
+    <DirectoryRef Id="ProgramMenuFolder">
+      <Component Id="StartMenu" Guid="9C5A0E11-7B3D-4F62-8E10-ADC0FFEE0002">
+        <Shortcut Id="AdxShortcut" Name="adX" Description="Open adX"
+                  Target="[INSTALLDIR]python\pythonw.exe" Arguments="-m adx gui"
+                  WorkingDirectory="INSTALLDIR" Icon="AdxIcon" />
+        <RegistryValue Root="HKCU" Key="Software\adX" Name="StartMenu" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="Association" Guid="2F7B9D44-1A6C-4B83-9D25-ADC0FFEE0003">
+        <RegistryValue Root="HKCU" Key="Software\Classes\.adx" Value="adX.Project" Type="string" KeyPath="yes" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\adX.Project" Value="adX project" Type="string" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\adX.Project\shell\open\command"
+                       Value="&quot;[INSTALLDIR]python\pythonw.exe&quot; -m adx gui &quot;%1&quot;" Type="string" />
+      </Component>
+    </DirectoryRef>
+
+    <Icon Id="AdxIcon" SourceFile="$(var.Stage)\python\pythonw.exe" />
+    <Property Id="ARPPRODUCTICON" Value="AdxIcon" />
+
+    <Feature Id="Main" Title="adX" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="StartMenu" />
+      <ComponentRef Id="Association" />
+    </Feature>
+  </Product>
+</Wix>

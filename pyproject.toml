@@ -71,6 +71,10 @@ faulthandler_timeout = 240
 markers = [
     # phase_5.md 4.9: needs a real GPU and display. Non-blocking: CI runs `-m "not gpu"`.
     "gpu: measures real frame times on a GPU; deselected in CI",
+    # phase_10.5.md 4.8: the local-only WannaCry corpus; CI runs -m "not wannacry".
+    "wannacry: plays or writes the WannaCry corpus, which only this machine has",
+    # phase_10.5.md 4.6: pinned open-source plugins from tools/fetch_test_plugins.py.
+    "realplugin: hosts the fetched test plugins",
 ]
 
 [tool.ruff]

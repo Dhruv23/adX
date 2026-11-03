@@ -301,3 +301,29 @@ TEST_CASE("rtaudio_enumerate_does_not_crash", "[rt][audio][.device]") {
         CHECK((device.maxOutputChannels > 0 || device.maxInputChannels > 0));
     }
 }
+
+TEST_CASE("rtaudio_default_api_is_not_asio", "[rt][audio]") {
+    // Compiling ASIO in must not move anyone to it: RtAudio's own default would.
+    RtAudioBackend const backend;
+    CHECK(backend.apiName() != "ASIO");
+}
+
+TEST_CASE("asio_device_enumeration", "[rt][audio][.device]") {
+    // phase_9.md §5: ASIO devices enumerate, through the same backend class. Needs a real
+    // ASIO driver; a machine without one (every CI runner) has nothing to list.
+    if (!RtAudioBackend::asioCompiled()) {
+        SUCCEED("this build has no ASIO (ADX_ENABLE_ASIO=OFF)");
+        return;
+    }
+    RtAudioBackend backend(adx::audio::AudioApi::Asio);
+    CHECK(backend.apiName() == "ASIO");
+    const auto devices = backend.enumerate();
+    if (devices.empty()) {
+        SUCCEED("no ASIO driver installed");
+        return;
+    }
+    for (const auto& device : devices) {
+        CHECK(device.apiName.view() == "ASIO");
+        CHECK_FALSE(device.sampleRates.empty());
+    }
+}

@@ -26,6 +26,7 @@
 #include "engine/project/Automation.h"
 #include "engine/project/Channel.h"
 #include "engine/project/Controller.h"
+#include "engine/project/MidiSettings.h"
 #include "engine/project/Mixer.h"
 #include "engine/project/Pattern.h"
 #include "engine/project/Playlist.h"
@@ -100,6 +101,8 @@ public:
     Resources resources;
     std::vector<Marker> markers;
     std::vector<Controller> controllers;
+    /// Input routes and learned controls: the [MIDI] section (phase_9.md §3 step 2).
+    MidiSettings midi;
 
     /// Everything the parser did not understand, carried so the writer can put it
     /// back. This is the one place the project layer depends on the format layer,

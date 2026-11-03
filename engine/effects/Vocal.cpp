@@ -17,7 +17,7 @@ constexpr float kMakeup = 6.0F;
 
 [[nodiscard]] int stepped(const EffectContext& context, std::uint32_t index,
                           std::uint32_t frame) noexcept {
-    return static_cast<int>(std::floor(context.paramAt(index, frame) + 0.5F));
+    return static_cast<int>(dsp::floorExact(context.paramAt(index, frame) + 0.5F));
 }
 
 [[nodiscard]] float pole(float ms, std::uint32_t rate) noexcept {

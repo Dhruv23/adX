@@ -17,7 +17,7 @@ using P = GranularParam;
 }
 
 [[nodiscard]] int stepped(const graph::VoiceRender& render, P param, std::uint32_t frame) noexcept {
-    return static_cast<int>(std::floor(render.paramAt(idx(param), frame) + 0.5F));
+    return static_cast<int>(dsp::floorExact(render.paramAt(idx(param), frame) + 0.5F));
 }
 
 [[nodiscard]] std::uint32_t voiceSeed(const graph::Voice& voice) noexcept {
@@ -134,7 +134,7 @@ void GranularInstrument::spawn(graph::Voice& voice, GranularVoice& state,
         const double scanned = static_cast<double>(render.paramAt(idx(P::Position), frame)) +
                                (static_cast<double>(render.paramAt(idx(P::Scan), frame)) *
                                 static_cast<double>(state.frames) / rate);
-        const double start = ((scanned - std::floor(scanned)) * frames) +
+        const double start = ((scanned - dsp::floorExact(scanned)) * frames) +
                              (static_cast<double>(render.paramAt(idx(P::Spray), frame)) *
                               sprayDraw * static_cast<double>(view.sampleRate));
         // Keep the whole grain inside the sample.

@@ -18,7 +18,8 @@ import numpy as np
 import pytest
 
 from adx import engine_bridge
-from adx.engine_bridge import CALLS, Engine, FrameClock, PianoRollGeometry, Project
+from adx.engine_bridge import CALLS, Engine, PianoRollGeometry, Project
+from adx.frame_clock import FrameClock
 from conftest import dispose
 
 

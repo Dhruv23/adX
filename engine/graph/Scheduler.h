@@ -17,8 +17,10 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <span>
+#include <string_view>
 
 #include "engine/graph/Audition.h"
 #include "engine/graph/Node.h"
@@ -29,6 +31,20 @@
 #include "engine/transport/TransportSet.h"
 
 namespace adx::graph {
+
+/// Time per graph step, for the optimization pass (bench/profile_nodes.py). Off unless
+/// a profiling render switches it on; then each step's process() is timed and filed
+/// under its position. One per process, written by the one thread rendering.
+struct NodeProfile {
+    static constexpr std::size_t kSteps = 4096;
+    std::atomic<bool> enabled{false};
+    std::array<std::string_view, kSteps> names{};
+    std::array<std::uint64_t, kSteps> nanoseconds{};
+    std::array<std::uint64_t, kSteps> calls{};
+    std::size_t used{0};
+};
+
+[[nodiscard]] NodeProfile& nodeProfile() noexcept;
 
 /// Work counters. Not atomics: the audio thread writes them and a test reads them
 /// after the stream has stopped. These are what make "amortised" an assertion rather
@@ -59,9 +75,20 @@ public:
     /// Applies every in-use source's pending requests at the top of the block, splits
     /// the block wherever any of them reaches a loop end or a tempo change, runs every
     /// step once per piece, and publishes each source's position at the end.
+    /// `in` is the device input for the block, `inChannels` wide, or null; it reaches
+    /// only the node of the track being monitored (Snapshot::monitorTable).
     void render(project::Snapshot& snapshot, transport::TransportSet& transport,
-                rt::BlockArena& arena, float* out, std::uint32_t frames,
-                std::uint32_t outChannels) noexcept;
+                rt::BlockArena& arena, float* out, std::uint32_t frames, std::uint32_t outChannels,
+                const float* in = nullptr, std::uint32_t inChannels = 0) noexcept;
+
+    /// Where the arrangement was at the start of the last block, after its requests
+    /// applied, and whether it was rolling: where that block's input belongs.
+    [[nodiscard]] std::int64_t blockStart() const noexcept {
+        return m_blockStart;
+    }
+    [[nodiscard]] bool blockRolling() const noexcept {
+        return m_blockRolling;
+    }
 
     /// Positions `cursor` for `time` and walks it across the next `frames`, returning
     /// the events that fall inside. `wrapped` means the source wrapped its loop at the
@@ -91,8 +118,10 @@ public:
     /// audio thread is running this scheduler.
     void reset() noexcept;
 
-    /// The audition events the next render() delivers, at the start of its first piece,
-    /// to the steps of the channels they name (Audition.h). Audio thread.
+    /// The audition and live-input events the next render() delivers to the steps of the
+    /// channels they name (Audition.h). Each event's offset is from the block's start;
+    /// it reaches the piece that contains it, at its offset within that piece, merged
+    /// into the arrangement's events in order. Audio thread.
     void setAudition(std::span<const AuditionEvent> events) noexcept {
         m_audition = events;
     }
@@ -101,6 +130,11 @@ private:
     void runPiece(project::Snapshot& snapshot, transport::TransportSet& transport,
                   rt::BlockArena& arena, float* out, std::uint32_t offset, std::uint32_t frames,
                   std::uint32_t outChannels) noexcept;
+
+    const float* m_input{nullptr};
+    std::uint32_t m_inputChannels{0};
+    std::int64_t m_blockStart{0};
+    bool m_blockRolling{false};
     static void applyAutomation(project::Snapshot& snapshot,
                                 const transport::TimeSource& arrangement) noexcept;
     /// The per-frame values of the automated parameters among a step's, from the
@@ -124,6 +158,8 @@ private:
     std::array<bool, transport::kMaxTimeSources> m_releasePending{};
     std::array<bool, transport::kMaxTimeSources> m_wrapPending{};
     std::span<const AuditionEvent> m_audition;
+    /// Where the piece being run starts in its block, for placing audition events.
+    std::uint32_t m_pieceStart{0};
 };
 
 } // namespace adx::graph

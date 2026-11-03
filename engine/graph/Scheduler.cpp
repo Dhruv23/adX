@@ -1,6 +1,7 @@
 #include "engine/graph/Scheduler.h"
 
 #include <algorithm>
+#include <chrono>
 #include <limits>
 
 #include "engine/core/Config.h"
@@ -8,6 +9,16 @@
 #include "engine/transport/Seek.h"
 
 namespace adx::graph {
+
+namespace {
+// At namespace scope, built before main: a function-local static could take its
+// initialisation lock on the audio thread's first block.
+NodeProfile g_nodeProfile;
+} // namespace
+
+NodeProfile& nodeProfile() noexcept {
+    return g_nodeProfile;
+}
 namespace {
 
 /// What a node reads from an input port nothing is routed to.
@@ -264,9 +275,14 @@ EventView Scheduler::eventsFor(const NodeStep& step, project::Snapshot& snapshot
     const std::uint32_t channel = step.eventTrack < snapshot.trackChannels.size()
                                       ? snapshot.trackChannels[step.eventTrack]
                                       : kNone;
+    // The audition and live events that fall in this piece.
+    const auto inPiece = [this, channel, frames](const AuditionEvent& audition) {
+        return audition.channel == channel && audition.event.offset >= m_pieceStart &&
+               audition.event.offset - m_pieceStart < frames;
+    };
     std::uint32_t auditions = 0;
     for (const AuditionEvent& audition : m_audition) {
-        auditions += audition.channel == channel ? 1U : 0U;
+        auditions += inPiece(audition) ? 1U : 0U;
     }
     const std::uint32_t special = (release ? 1U : 0U) + (wrapped ? 1U : 0U) + auditions;
     const std::uint32_t count = (range.end - range.begin) + special;
@@ -307,15 +323,34 @@ EventView Scheduler::eventsFor(const NodeStep& step, project::Snapshot& snapshot
                                        .pitch = 0,
                                        .velocity = 0};
     }
-    // Auditions at offset 0, before the arrangement's events: sorted, as a node expects.
-    for (const AuditionEvent& audition : m_audition) {
-        if (audition.channel == channel) {
-            events[written++] = audition.event;
-        }
-    }
+    const std::uint32_t specials = written;
     if (step.eventTrack < snapshot.eventTracks.size()) {
         written =
             fillEvents(time, source, snapshot.eventTracks[step.eventTrack], range, events, written);
+    }
+    // Auditions and live notes, each moved back past the arrangement's later events so
+    // the whole stays sorted by offset, as a node expects. An audition at offset 0 lands
+    // just after the release and wrap, before the arrangement's events at 0 - where it
+    // always went. In place: there are a handful, and nothing here may allocate.
+    for (const AuditionEvent& audition : m_audition) {
+        if (!inPiece(audition)) {
+            continue;
+        }
+        BlockEvent placed = audition.event;
+        placed.offset -= m_pieceStart;
+        std::uint32_t at = written++;
+        while (at > specials && events[at - 1].offset > placed.offset) {
+            events[at] = events[at - 1];
+            --at;
+        }
+        if (placed.offset == 0) {
+            while (at > specials && events[at - 1].offset == 0 &&
+                   events[at - 1].timeSource != kAuditionSource) {
+                events[at] = events[at - 1];
+                --at;
+            }
+        }
+        events[at] = placed;
     }
     return EventView{events.data(), written};
 }
@@ -381,6 +416,9 @@ void Scheduler::runPiece(project::Snapshot& snapshot, transport::TransportSet& t
     const BufferPool& buffers = graph.buffers;
     const std::span<const float> silence{kSilence.data(), frames};
 
+    NodeProfile& profile = nodeProfile();
+    const bool profiling = profile.enabled.load(std::memory_order_relaxed);
+    std::size_t stepIndex = 0;
     for (const NodeStep& step : graph.steps) {
         // Everything this step takes from the arena - its events, its instrument's
         // scratch - is dead once its edges have been applied.
@@ -433,8 +471,31 @@ void Scheduler::runPiece(project::Snapshot& snapshot, transport::TransportSet& t
             .automation = automation,
             .arena = arena,
             .tuningCents = snapshot.tuningCents,
+            .regions = step.audioTrack < snapshot.audioTracks.size()
+                           ? snapshot.audioTracks[step.audioTrack].regions
+                           : std::span<const AudioRegion>{},
+            .input =
+                m_input != nullptr && step.audioTrack != kNone &&
+                        step.audioTrack == snapshot.monitorTable
+                    ? std::span<const float>{m_input + (static_cast<std::size_t>(offset) *
+                                                        m_inputChannels),
+                                             static_cast<std::size_t>(frames) * m_inputChannels}
+                    : std::span<const float>{},
+            .inputChannels = m_inputChannels,
         };
-        step.node->process(context);
+        if (profiling && stepIndex < NodeProfile::kSteps) {
+            const auto began = std::chrono::steady_clock::now();
+            step.node->process(context);
+            const auto took = std::chrono::steady_clock::now() - began;
+            profile.nanoseconds[stepIndex] += static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(took).count());
+            profile.calls[stepIndex] += 1;
+            profile.names[stepIndex] = step.node->profileName();
+            profile.used = std::max(profile.used, stepIndex + 1);
+        } else {
+            step.node->process(context);
+        }
+        ++stepIndex;
         if (float value = 0.0F;
             step.modulates < snapshot.params.size() && step.node->modulation(value)) {
             snapshot.params[step.modulates] = value;
@@ -482,8 +543,11 @@ void Scheduler::runPiece(project::Snapshot& snapshot, transport::TransportSet& t
 
 void Scheduler::render(project::Snapshot& snapshot, transport::TransportSet& transport,
                        rt::BlockArena& arena, float* out, std::uint32_t frames,
-                       std::uint32_t outChannels) noexcept {
+                       std::uint32_t outChannels, const float* in,
+                       std::uint32_t inChannels) noexcept {
     ++m_stats.blocks;
+    m_input = in;
+    m_inputChannels = inChannels;
 
     // Every in-use source applies its requests at the same block boundary.
     for (std::uint32_t s = 0; s < transport::kMaxTimeSources; ++s) {
@@ -502,6 +566,9 @@ void Scheduler::render(project::Snapshot& snapshot, transport::TransportSet& tra
         }
     }
 
+    m_blockStart = transport.arrangement().positionSamples();
+    m_blockRolling = transport.arrangement().rolling();
+
     std::uint32_t done = 0;
     while (done < frames) {
         // The piece ends at the nearest boundary of any source. Each source's boundary
@@ -519,9 +586,8 @@ void Scheduler::render(project::Snapshot& snapshot, transport::TransportSet& tra
             piece = frames - done;
         }
 
+        m_pieceStart = done;
         runPiece(snapshot, transport, arena, out, done, piece, outChannels);
-        // Auditions start in the block's first piece only.
-        m_audition = {};
 
         for (std::uint32_t s = 0; s < transport::kMaxTimeSources; ++s) {
             const transport::TimeSourceId id{s};
@@ -534,6 +600,10 @@ void Scheduler::render(project::Snapshot& snapshot, transport::TransportSet& tra
         }
         done += piece;
     }
+
+    // Delivered: a block that is not handed new ones plays none.
+    m_audition = {};
+    m_pieceStart = 0;
 
     for (std::uint32_t s = 0; s < transport::kMaxTimeSources; ++s) {
         const transport::TimeSourceId id{s};

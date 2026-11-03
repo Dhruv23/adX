@@ -24,7 +24,7 @@ void Audition::start(std::uint32_t channel, std::uint8_t pitch, std::uint8_t vel
         // own voice stealing takes care of a voice that is never released.
         slot = &*std::ranges::min_element(m_voices, {}, &Voice::noteId);
     }
-    m_nextId = (m_nextId + 1) & (kAuditionNoteBit - 1U);
+    m_nextId = (m_nextId + 1) & (kLiveNoteBit - 1U);
     *slot = Voice{.channel = channel,
                   .noteId = kAuditionNoteBit | m_nextId,
                   .remaining = std::max<std::uint32_t>(frames, 1),

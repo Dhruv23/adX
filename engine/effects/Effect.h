@@ -58,6 +58,9 @@ struct EffectContext {
     /// The sidechain input, `frames` long; silence when nothing is routed to it.
     std::span<const float> sideLeft;
     std::span<const float> sideRight;
+    /// The key is the sidechain input whatever the effect's own key setting: a stem copy
+    /// following the full mix (SlotNode::canFollowKey).
+    bool followKey{false};
     /// Frames this effect has processed before this call: its own clock, for the
     /// control grid. Never a block boundary - so the output does not depend on the
     /// block size.

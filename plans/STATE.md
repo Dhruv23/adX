@@ -5,7 +5,8 @@ agent reads when picking up work, and the last thing it writes before finishing.
 
 ## How this file works
 
-This is a checklist of all twelve phases (0 through 11). The agent that
+This is a checklist of all twenty-one phases (0 through 19 and 10.5; 12–19, the
+sound library, were added 2026-10-25, and 10.5, agent-run testing, 2026-11-01). The agent that
 implements a phase implements it, then marks that phase's checkbox done **and,
 underneath it, lists any open issues for the agent who does the next phase to
 fix.**
@@ -19,9 +20,18 @@ either fixing them or explicitly re-carrying them forward with a reason.
 ### When you finish a phase
 
 1. Verify every box in that phase's **Definition of done** section is actually
-   checked — not "should pass", *observed to pass*.
+   checked — not "should pass", *observed to pass*. A box that needs physical
+   hardware counts as checked once its emulated half has passed and is marked `[~]`
+   (FINAL_PLAN §9, "Hardware testing is done at the end"); add its hardware half to the
+   **Final review** list at the bottom of this file. Don't ask the user to run hardware
+   checks before that review. **Every other box is agent-run** (FINAL_PLAN §9, set
+   2026-11-01): if a box tests the software but needs someone at the keyboard, that is a
+   plan bug. Build the software path (a CLI command, Phase 10.5's driver, a capture and a
+   glitch measurement) and run it. Only `(judgement)` boxes, such as listening sessions and
+   pack approvals, wait for the user's own words. `tools/lint.py plans` checks this
+   once Phase 10.5 lands.
 2. Change the phase heading's `[ ]` to `[x]` and set **Status** to `Done` with
-   the date.
+   the date - or `Done (hardware deferred)` if any box is `[~]`.
 3. Fill in **Open issues for Phase N+1**. If there are genuinely none, write
    `none` — do not leave the placeholder text.
 4. Set the same phase's row in [FINAL_PLAN.md](../FINAL_PLAN.md) §10 to Done
@@ -102,11 +112,21 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 4 — Instruments & effects | XL | **Done** 2026-10-04 (CI green, run 37269752424; full check run 37273504347) |
 | 5 — Frontend foundation | L | **Done** 2026-10-06 (CI green, run 37509766570; full check run 37512932612) |
 | 6 — The DAW proper | XL | **Done** 2026-10-21 (CI green, run 39422153732; full check run 39430247203; human gate P6-1 closed by the user) |
-| 7 — Text-first layer | M | **Built** 2026-10-21 - every automated §7 box observed locally; human gate (P7-1) closed 2026-10-25; CI (P7-0) open, first push failed and fixed |
-| 8 — Audio & export | M | Not started |
-| 9 — Plugins & MIDI | L | Not started |
-| 10 — Analysis, visualization, polish | L | Not started |
+| 7 — Text-first layer | M | **Done** 2026-10-25 (CI green, run 40243278857; full check run 40248449713; human gate P7-1 closed by the user) |
+| 8 — Audio & export | M | **Built** 2026-10-29 - every automated §6 box observed locally; latency gate `[~]` (P8-1, hardware half in the final review); CI (P8-0) open |
+| 9 — Plugins & MIDI | L | **Built** 2026-10-30 - every automated §6 box observed locally; CI (P9-0), MIDI latency (P9-1, emulated half fails: P9-9), ASIO emulated half (P9-4), real plugins and live crash (P9-2, P9-3; agent-run, closed by Phase 10.5) open |
+| 10 — Analysis, visualization, polish | L | In progress 2026-10-30 - §3 steps 1-6 and P10-2 done 2026-11-02 (analyses as jobs in the app, six analyzers, genre suites); optimization, docs and installer open |
+| 10.5 — Agent-run testing | L | **Built** 2026-11-03 - every §5 test observed locally, 26 scenarios incl. WannaCry; CI and full check (P10.5-0) open |
 | 11 — Live performance | L | Not started |
+| 12 — Sound-design foundation | XL | Not started |
+| 13 — Core Drums & Machines | M | Not started |
+| 14 — Hyperpop | L | Not started |
+| 15 — Hardcore | L | Not started |
+| 16 — Classical | XL | Not started |
+| 17 — Ambient | M | Not started |
+| 18 — Breakcore / Jungle / DnB | M | Not started |
+| 19 — Phonk + Vocal | M | Not started |
+| Final review | — | Not started - after Phase 19; every deferred hardware half, then every Done phase re-checked |
 
 ---
 
@@ -780,15 +800,15 @@ The rest re-carried below with reasons.
 
 ---
 
-## [ ] Phase 7 — Text-first layer · M
+## [x] Phase 7 — Text-first layer · M
 
 | | |
 |---|---|
 | **Plan** | [phase_7.md](phase_7.md) |
 | **Entry** | Phase 6 §6 complete |
 | **Done when** | [phase_7.md](phase_7.md) §7 |
-| **Status** | In progress: built 2026-10-21. Every automated [phase_7.md](phase_7.md) §7 box observed locally on Debug, RelWithDebInfo and Release; the human gate (P7-1) closed 2026-10-25. **Not done:** CI (P7-0) is open, so the checkbox above stays empty and Phase 8's entry is not met |
-| **Completed** | — |
+| **Status** | Done (2026-10-25). Built 2026-10-21; every automated [phase_7.md](phase_7.md) §7 box observed locally on Debug, RelWithDebInfo and Release; the human gate (P7-1) closed by the user. At `be487fe` (tag `phase-7`): per-push CI green (run 40243278857, and 40248449731 on the tag), full check green (run 40248449713) |
+| **Completed** | 2026-10-25 |
 
 > The half no other DAW has (FINAL_PLAN §1). Deferred scope here costs more than
 > deferred scope anywhere else — be specific in the open issues.
@@ -842,14 +862,13 @@ and plays); **P6-1**, **P6-0** were closed in Phase 6. The rest re-carried below
 
 **Open issues for Phase 8:**
 
-- **P7-0** · **BLOCKER for marking Phase 7 done** · The first push (7083e72, CI run
-  40174263448) failed. `incremental_budget` measured 6.1-6.6 ms against its 5 ms budget
-  on the optimised runners. pytest hung on all three jobs until the six-hour limit, in a
-  modal "Save changes?" box opened by `test_external_tempo_edit_shows_in_the_transport`.
-  Both are fixed and a hang now fails fast with its stack
-  ([phase_7.md](phase_7.md) §11, 17-19). Fixed when: CI is green on all three jobs
-  after the fix, and the full check is green on a `phase-7` tag; record both run ids
-  here.
+- **P7-0** · **Closed 2026-10-25** · The first push (7083e72, CI run 40174263448)
+  failed. `incremental_budget` measured 6.1-6.6 ms against its 5 ms budget on the
+  optimised runners. pytest hung on all three jobs until the six-hour limit, in a modal
+  "Save changes?" box opened by `test_external_tempo_edit_shows_in_the_transport`. Both
+  fixed in `be487fe` ([phase_7.md](phase_7.md) §11, 17-19): CI green on all three jobs
+  (run 40243278857; 40248449731 on the tag), full check green on `phase-7` (run
+  40248449713 - fuzz, clang-tidy over every file in Debug and Release).
 - **P7-1** · **Closed 2026-10-25** · the human gate ([phase_7.md](phase_7.md) §7
   box 3). The user, in their words: "i personally checked the live edit barrier."
 - **P7-2** · A node handing over renders only its own block, so a second effect-type
@@ -898,12 +917,78 @@ and plays); **P6-1**, **P6-0** were closed in Phase 6. The rest re-carried below
 | **Plan** | [phase_8.md](phase_8.md) |
 | **Entry** | Phase 7 §7 complete |
 | **Done when** | [phase_8.md](phase_8.md) §6 |
-| **Status** | Not started |
+| **Status** | In progress: built 2026-10-29. Every automated [phase_8.md](phase_8.md) §6 box observed locally on Debug, RelWithDebInfo and Release; the latency gate half checked (`[~]`, P8-1). **Not done:** CI (P8-0), so the checkbox above stays empty. Once P8-0 is green this phase is Done (hardware deferred) |
 | **Completed** | — |
+
+**What exists.** adX records, edits and delivers. Audio clips play (`AudioTrackNode`,
+stateless in position) with slip, trim, fades, crossfades, clip envelopes, destructive
+edits on a cached copy, RubberBand stretch, pitch and warp markers seeded from onsets; a
+channel freezes bit-identically and thaws exactly. Export covers WAV 16/24/32f (RF64),
+MP3, FLAC and OGG, ranges, tail-until-silence, split at markers, peak/LUFS normalise,
+resample, TPDF/shaped dither, stems per channel/insert/pattern that sum to the master,
+a MIDI side file, and runs as a job with progress and cancel. MIDI files import and
+export (3840 PPQ, exact round trip). Collect-and-save rewrites paths in the text and
+zips. Recording: capture ring, disk writer with header checkpoints, punch, count-in,
+takes on lanes, comping, monitoring, loopback calibration. In the app: the export
+dialog, a record toolbar, a clip editor panel, MIDI import/export, collect-and-save and
+freeze in the menus, `adx render` headless. Twenty-two corrections: phase_8.md §11.
+
+**Observed locally (2026-10-29).** ctest 100% on Debug (426, `-LE slow`), RelWithDebInfo
+(427) and Release (427). Phase completion in Debug: `ADX_FULL_EVIDENCE=1 ctest --preset
+windows-x64-debug -L slow` passed in 1374.74 s (before the clang-tidy clean-up, which
+changed no behaviour). On the final tree (after that clean-up): ctest 100% on Debug (427, `-LE slow`),
+RelWithDebInfo (428) and Release (428); pytest 237 passed with `CI=1` (GPU tests
+deselected); clang-tidy clean over all 292 files on all three compile databases;
+clang-format, headers, format-safety, positions, dsp-math, `rules`, ruff, ruff format
+and mypy `--strict` clean. Launcher: `check_launcher: adX.cmd opened adX 0.1.0 - 14
+panels, audio device open`.
+
+Inherited issues: **P4-9** fixed (RubberBand offline stretch, pitch and warp:
+`engine/clip/Stretch`; the realtime PitchShifter stays the phase vocoder, which is the
+right tool for a live effect). **P1-1** advanced: `capture_no_alloc` and
+`midi_input_no_alloc` run under the allocator guard with zero violations; the handover
+tests still do not count. Re-carried below.
 
 **Open issues for Phase 9:**
 
-- _to be filled in by the agent that completes this phase_
+- **P8-0** · **BLOCKER for marking Phase 8 done** · Nothing is committed or pushed. Fixed
+  when: per-push CI is green on all three jobs, and the full check - including the new
+  `three-builds` job, which is `three_clean_builds_identical` - is green on a `phase-8`
+  tag; record both run ids here and in phase_8.md §10.
+- **P8-1** · **HALF CHECKED `[~]`; hardware half deferred to the final review; no longer
+  blocks Phase 8** · The latency gate, `record_latency_alignment` at 3 buffer sizes. The
+  emulated half passed 2026-10-30: the simulated cable, and VB-Audio Virtual Cable (offset 0
+  at all three sizes after 5 s of settling, phase_8.md §10). The physical loopback is
+  listed under "Final review" at the bottom of this file. Also open from that run, not
+  hardware: calibration can be taken before a device's path settles, and the engine's
+  xrun count isn't exposed to Python, so a shift after calibration goes unnoticed.
+- **P8-2** · A cut inside a fade is not continuous (phase_8.md §11, 16): each half keeps
+  its own side of the fade, shortened. Fixed when: a fade can be split into a gain
+  envelope segment, or someone hears it matter.
+- **P8-3** · No VBR MP3 (shine is CBR), no automation-as-CC in MIDI export (needs MIDI
+  learn's mapping, Phase 9), no loop recording (Phase 11's performance recording is the
+  natural owner), comp offsets exact only at constant tempo, a stop cuts audio clips
+  instead of fading. phase_8.md §11, 5-9.
+- **P8-4** · The record toolbar punches over the selected clips' span because the
+  playlist has no loop region of its own; the recording input is a preference applied
+  at the next start. Fixed when: the playlist has a loop/time selection, and the engine
+  can reopen its stream with an input without a restart.
+- **P8-5** · Found 2026-11-02 by Phase 10's STAKILLAZ golden fixture · MP3 export of a
+  full-scale, hard-clipped, bass-heavy master is wrong: shine's subband filter sums 64
+  fixed-point products in 32 bits and overflows, so the decoded file peaks at 2.3 with
+  +20 dB below 50 Hz. LAME on the same samples is within 0.1 dB. `golden_all_formats`
+  names the fixture as known-bad and checks the overflow is still there, so a fix fails
+  it. Fixed when: shine is given headroom in its fixed-point path (and its global gain
+  compensated), or the MP3 encoder is LAME; then the entry comes out of the test.
+- **P7-2** … **P7-6** · `CARRIED` · Unchanged by Phase 8 (handover chains, incremental
+  diagnostics outside patterns, MINI cursor link, three-way merge, non-Windows watcher).
+- **P6-2** · `CARRIED`, grown · Over §3 rule 1's ~400 lines: `piano_roll/panel.py` (840),
+  `playlist/panel.py`, `editor/panel.py`, and `mainwindow.py` (now ~690). Phase 8 put
+  its window actions in `adx/delivery.py` rather than grow the window further.
+- **P6-3**, **P5-6**, **P4-10**, **P4-4**, **P4-5**, **P4-7**, **P4-8**, **P4-6** ·
+  `CARRIED` · Untouched by Phase 8.
+- **P1-1** · `CARRIED` · `_CrtSetAllocHook` is not installed; the handover and departure
+  tests do not run under the guard. As before.
 
 ---
 
@@ -914,16 +999,109 @@ and plays); **P6-1**, **P6-0** were closed in Phase 6. The rest re-carried below
 | **Plan** | [phase_9.md](phase_9.md) |
 | **Entry** | Phase 8 §6 complete |
 | **Done when** | [phase_9.md](phase_9.md) §6 |
-| **Status** | Not started |
+| **Status** | Built 2026-10-30, started at the user's request before Phase 8's entry was met (P8-0 open). Every automated [phase_9.md](phase_9.md) §6 box observed locally on Debug, RelWithDebInfo and Release. **Not done:** CI (P9-0); the MIDI-latency gate, whose emulated half fails (P9-1, P9-9); the ASIO gate's emulated half, not yet run (P9-4); two human gates (P9-2, P9-3). Hardware halves go to the final review. The checkbox above stays empty |
 | **Completed** | — |
 
 > FINAL_PLAN §10 names this the single largest risk in the project: the only
 > phase whose failure modes are controlled by third-party code. Open issues here
 > are likely to be about *containment*, not features.
 
+**What exists.** adX hosts CLAP and VST3 effects and instruments, every one of them in a
+sandbox process (`adx_plugin_host.exe`): scanning is out of process with a cache and a
+visible blacklist; audio crosses in shared memory against a deadline the audio thread
+never waits past; a crash bypasses the insert and offers a restart, a hang is killed and
+restarted with its state, a run of late blocks bypasses, NaN mutes. Plugin parameters
+are laid out, automated, text-addressed and MIDI-learned like native ones; state saves as
+one quoted base64 line beside the named parameters; PDC follows a plugin's latency,
+including a change mid-play. MIDI learn binds any control to any parameter and saves in
+a new `[MIDI]` section with the project's input routes. ASIO is compiled in (WASAPI stays
+the default). In the app: a Plugins panel, a plugin window (embedded editor and the
+generic one), a MIDI panel, MIDI learn in every parameter's menu, plugin state synced on
+save and export. `adx_test_plugin` (CLAP and VST3) misbehaves in every way §4.8 lists and
+each has a test. Fifteen corrections: phase_9.md §11.
+
+**Observed locally (2026-10-30, the final tree).** ctest 100% on Debug (466, `-LE slow`),
+RelWithDebInfo (467) and Release (467), the slow suite included in the optimised builds;
+Phase completion in Debug: `ADX_FULL_EVIDENCE=1 ctest --preset windows-x64-debug -L slow`
+passed in 1419.69 s; the 28 `[plugin]` tests three times back to back in Release; pytest 248
+passed with `CI=1` (GPU tests deselected, nothing skipped); clang-tidy clean over all 331
+files on all three compile databases; clang-format, headers, format-safety, positions,
+dsp-math, `rules`, ruff, ruff format and mypy `--strict` clean. Launcher: `check_launcher:
+adX.cmd opened adX 0.1.0 - 16 panels, audio device open`.
+
+Inherited issues: **P8-3**'s "no automation-as-CC in MIDI export (needs MIDI learn's
+mapping)" is unblocked - learn's bindings exist - but not built; re-carried in P8-3.
+**P8-0**, **P8-1**, **P8-2**, **P8-4** untouched by Phase 9 and re-carried. **P1-1**
+advanced: `plugin_alloc_does_not_affect_host` renders under the allocator guard with zero
+violations while the plugin allocates in its process.
+
 **Open issues for Phase 10:**
 
-- _to be filled in by the agent that completes this phase_
+- **P9-0** · **BLOCKER for marking Phase 9 done** · Nothing is committed or pushed (and
+  Phase 8 is in the same tree). Fixed when: per-push CI is green, and the full check is
+  green on a `phase-9` tag - including `headless_render_with_plugins` - with both run ids
+  recorded here and in phase_9.md §10. CI must build the fixture plugins and
+  `adx_plugin_host` (they come with the test build) for the Python plugin tests not to
+  skip there.
+- **P9-1** · **BLOCKER until its emulated half passes; hardware half deferred to the final
+  review** · `midi_roundtrip_latency`: a hardware keyboard to an audible note, measured
+  under 10 ms. The emulated half is the loopMIDI run below; it becomes `[~]` when that
+  measures under 10 ms (P9-9). The keyboard itself is listed under "Final review".
+  The user has no MIDI keyboard (2026-10-30), so the software half has a tool:
+  `tools/measure_midi_latency.py` drives `tools/midi_latency_probe.cpp`, which sends notes
+  into a loopMIDI port and stamps them against WASAPI loopback of the output mix (both on
+  QPC). It covers driver + input thread + callback + output buffer up to the mix, not a
+  keyboard's USB link or the device buffer after the mix (printed as "endpoint"; 10 ms,
+  shared mode's period, on this machine). Ran 2026-10-30 with loopMIDI: 67.75 / 69.45 /
+  74.24 ms median to the mix at blocks 64 / 128 / 256 - **far over 10 ms**, nearly all of
+  it audio output, not MIDI (P9-9). Numbers in phase_9.md §10. Evidence, not P9-1's close.
+- **P9-9** · **open; blocks P9-1** · Output latency on WASAPI shared mode is about 60 ms
+  on this machine: `Engine.audition` to the Windows mix measured 62.85 ms at block 64.
+  MIDI in adds about 5 ms. Cause: the driver's only shared period is 480 frames with a
+  1056-frame buffer; RtAudio 6.0.1 keeps that buffer and its own equal-size ring full,
+  then the mix adds 10 ms. Shared mode cannot reach 10 ms on this device. Fix options: a
+  WASAPI exclusive-mode backend (miniaudio is already a dependency and supports it), or
+  ASIO (P9-4; FlexASIO in exclusive mode needs no hardware interface). Fixed when: the
+  same tool measures under 10 ms on this machine.
+- **P9-2** · **BLOCKER; agent-run since 2026-11-01** (FINAL_PLAN §9) · Three real
+  third-party plugins, VST3 and CLAP, instrument and effect: load, automate, save, reload
+  (and the editor embeds or falls back). No longer waits for the user. Fixed when:
+  `scenario_real_plugins` passes over the pinned open-source plugins of
+  `tools/test_plugins.toml` (phase_10.5.md §4.6), with the list and output recorded in
+  phase_9.md §10.
+- **P9-3** · **BLOCKER; agent-run since 2026-11-01** · A plugin crashing during playback,
+  shown in the running app (load `adx_test_plugin`, set its `mode` to 1 while playing):
+  playback of the rest continues, the notice appears, Restart brings it back. Fixed when:
+  `scenario_live_plugin_crash` passes (phase_10.5.md §4.6).
+- **P9-4** · **BLOCKER until its emulated half passes; hardware half deferred to the final
+  review** · ASIO: the latency readout against a measured loopback. Emulated half, not yet
+  run: FlexASIO (an open-source ASIO driver over WASAPI) with VB-Audio Virtual Cable as
+  the loopback, `tools/measure_latency.py` opening the engine with `Engine(asio=True)`
+  (the tool needs an `--asio` flag; the app has no audio-API preference yet). Installing
+  FlexASIO needs the user's approval at the UAC prompt. A real interface's own driver is
+  listed under "Final review".
+- **P9-5** · MIDI output, sending clock to a device, clock follow wired to the
+  arrangement's time source, and MTC (§3 step 3, §4.10). `MidiClock`'s sender and
+  follower exist and are tested; nothing drives a device with them. Phase 11's LED
+  feedback needs output.
+- **P9-6** · Pitch bend and MPE into `Note.pitchCurve` on input and import, and slides
+  out as per-note bend on export (§4.1: `midi_bend_import_roundtrip`,
+  `midi_export_slide_mpe`); UST/USTX/VSQX import.
+- **P9-7** · A plugin editor's own parameter changes become values in the project, never
+  automation lanes; there is no "write automation" mode. And plugin instruments ignore
+  the channel's pitch offset and per-note glides (a plugin does its own pitch).
+- **P9-8** · The app's plugin UI is functional, not finished: no per-plugin "never embed"
+  preference, no restart button in the notice (the menu's restart restarts every crashed
+  child), no latency-check action (the engine has `plugin_check_latency`), no late-block
+  counter in the mixer (the engine reports it: `Plugins.instances()`). FINAL_PLAN §5.6's
+  "which plugin is making it stutter" belongs in Phase 10's polish.
+- **P8-0**, **P8-1**, **P8-2**, **P8-3**, **P8-4** · `CARRIED` · As Phase 8 left them;
+  P8-3's automation-as-CC is now buildable on learn's bindings.
+- **P7-2** … **P7-6**, **P6-2**, **P6-3**, **P5-6**, **P4-10**, **P4-4**, **P4-5**,
+  **P4-7**, **P4-8**, **P4-6** · `CARRIED` · Untouched by Phase 9. P6-2 grew:
+  `mainwindow.py` gained two panels and the runtime.
+- **P1-1** · `CARRIED` · `_CrtSetAllocHook` is not installed; the handover and departure
+  tests do not run under the guard.
 
 ---
 
@@ -934,7 +1112,7 @@ and plays); **P6-1**, **P6-0** were closed in Phase 6. The rest re-carried below
 | **Plan** | [phase_10.md](phase_10.md) |
 | **Entry** | Phase 9 §6 complete |
 | **Done when** | [phase_10.md](phase_10.md) §7 — **including `bench_full_project`** |
-| **Status** | Not started |
+| **Status** | In progress (2026-10-30), started at the user's request before Phase 9's gates closed (P9-0 to P9-4). §3 steps 1-6 done 2026-11-02, P10-1 and P10-2 closed. Steps 7-9 built 2026-11-03: the benchmark and its profiler, the docs, the installer script; **`bench_full_project` fails (P10-5)**, so Phase 11 is blocked - see [phase_10.md](phase_10.md) §11 |
 | **Completed** | — |
 
 > `bench_full_project` is a hard prerequisite for Phase 11, not a soft one. Do
@@ -942,6 +1120,103 @@ and plays); **P6-1**, **P6-0** were closed in Phase 6. The rest re-carried below
 >
 > This file sizes the phase **L**; FINAL_PLAN §7 sizes it **M**. See
 > [phase_10.md](phase_10.md) for why.
+
+**Open so far (for whoever continues Phase 10):**
+
+- **P10-1** · **Closed 2026-11-02, target revised** · Synthesized corpus 70 % -> 92.5 %
+  exact (100 % with relatives) once minor keys also score against natural minor. The
+  recorded corpus is GiantSteps Key (604 EDM previews, fetched and MD5-checked by
+  `tools/fetch_key_corpus.py`, never committed): 39.2 % exact, 51.3 % with relatives,
+  51.7 % MIREX weighted, which is where profile methods sit on it (the best CNNs reach
+  about 75 % weighted). phase_10.md §6 and §11 revise the target with the numbers; the
+  key is shown as a ranked suggestion with confidence, which tracks accuracy (24.5 % ->
+  54.3 % exact from the lowest to the highest quartile).
+- **P10-2** · **Closed 2026-11-02** · `AnalysisJob` and `bindings/analysis.cpp`; the
+  Analysis panel runs key, chords, tempo, timbre, form and (ONNX builds) melody on notes or
+  a file, each applied as one undo group (`tests/python/test_analysis_jobs.py`).
+- **P10-3** · The spectrum analyzer reads the master only; §4.4's per-insert source needs
+  a sample tap per insert (phase_10.md §11, 14). Fixed when: an insert's tap can feed the
+  hub, or the source select is struck from §4.4.
+- **P10-4** · Key accuracy on recordings is 51.7 % weighted. Improvements to try, measured
+  with `tools/measure_key_corpus.py`: EDM-specific profiles, a tuning estimate, bass
+  weighting tuned on recordings. Fixed when: measured better, or accepted as is.
+- **P10-5** · **BLOCKER for Phase 11; the user's decision** · `bench_full_project` misses
+  two of §4.5's targets: audio-thread CPU 58.9 % (< 50 %) and the worst block 96.8 % of
+  the period (< 60 %), measured 2026-11-03 on an idle machine. Load, rebuild, xruns and
+  allocations pass. The bit-exact optimizations are done (about 4 points); the rest is
+  per-sample arithmetic, profiled per node type by `bench/profile_nodes.py` (FM, the pitch
+  shifter, Overdrive, MultibandComp lead). The options, each with its cost, are in
+  phase_10.md §11: output-changing DSP work with every changed hash re-blessed and
+  reviewed (reaches the CPU target, not the worst block), a parallel scheduler that keeps
+  the fixed summation order (a Phase 3-sized change), or a revised target. Fixed when:
+  the bench passes, or the user revises §4.5's targets.
+- **P10-6** · Not yet run: `bench/bench_ui.py` (UI p99 with every panel open, on the GPU),
+  `bench_one_hour_soak`, and the MSI's build and `installer_clean_install` on a fresh hosted
+  runner (WiX 3.14 needs no install; the CI job is written with the full check). Fixed when:
+  each has been run and recorded in phase_10.md §11.
+
+**Open issues for Phase 11:**
+
+- _to be filled in by the agent that completes this phase_
+
+---
+
+## [ ] Phase 10.5 — Agent-run testing · L
+
+| | |
+|---|---|
+| **Plan** | [phase_10.5.md](phase_10.5.md) |
+| **Entry** | Phase 9 built (it may run beside Phase 10's remaining work) |
+| **Done when** | [phase_10.5.md](phase_10.5.md) §6 |
+| **Status** | Built 2026-11-03: every §5 test observed locally, the scenarios included (WannaCry, nothing skipped); CI and the full check not yet run (P10.5-0). The code was written 2026-11-01/02 without this entry; the 2026-11-03 session verified it and fixed what failed (phase_10.5.md §10) |
+| **Completed** | — |
+
+> Added for FINAL_PLAN §9's rule "Every phase-ending check is agent-run". Software
+> checks that used to need the user get a software path here. Listening and approval
+> gates stay the user's.
+
+**Inherits:** P9-2 and P9-3 (closed by this phase's scenarios); P8-1's leftover "the
+engine's xrun count isn't exposed to Python" (`Engine.xruns()`, §3 step 1).
+
+- P9-2: **closed locally** by `scenario_real_plugins`: Dexed, Surge XT (and its Effects
+  bundle) and Airwindows Consolidated, VST3 and CLAP, on the stand-in and on WannaCry,
+  through the GUI. 16 of 16 pass. To be recorded in phase_9.md §10 once CI agrees.
+- P9-3: **closed locally** by `scenario_live_plugin_crash`, stand-in and WannaCry.
+- P8-1's leftover: `Engine.xruns()` exists and is read by every scenario.
+
+Evidence, 2026-11-03, this machine:
+- ctest `-LE slow` 489/489 in Debug, RelWithDebInfo and Release;
+- `ADX_FULL_EVIDENCE=1 ctest --preset windows-x64-debug -L slow` passed in 1797 s (P10.5-4);
+- `CI=1 pytest tests/python`: all pass (3 skips are the ONNX and hardware cases);
+- `pytest tests/scenarios`: 26 passed, 0 skipped;
+- ruff, `mypy --strict`, and lint gates format/headers/format-safety/positions/dsp-math/rules/plans: clean;
+- `check_launcher.py`: adX.cmd opened 24 panels, then drove the app, playing a project
+  and capturing 48,384 frames with 0 xruns, and quit cleanly.
+
+**Open issues (for whoever closes this phase):**
+
+- **P10.5-0** · BLOCKER for Done · Nothing since `be487fe` is committed, so neither
+  per-push CI nor the full check (with its new `scenarios` job) has seen this phase, or
+  Phases 8-10 (P8-0, P9-0). Fixed when: committed and pushed with the user's go-ahead, and
+  both runs are green with their ids recorded.
+- **P10.5-2** · adX calls a CLAP plugin's `params.flush()` on the main thread while it is
+  active but not yet processing; CLAP says the audio thread then (Airwindows logs
+  "Host called the method clap_plugin_params.flush() on wrong thread"). Moving the flush
+  into `process()` was tried and reverted. It exposed a second gap: values a plugin reports
+  itself (`PluginCore`'s echoes) become project edits whether they come from its editor or
+  from its post-load value report, so a reopened Airwindows project gained 22 "Set effect
+  value" steps. Fixed when: echoes outside a CLAP gesture (or equal to the loaded state's
+  values) are not recorded, and the flush moves to the audio thread with
+  `test_real_plugins` still passing.
+- **P10.5-3** · Two fresh launches can come up with docks tabbed differently. Seen as an
+  extra QMainWindow tab bar and the piano roll's Slide button on or off screen, in
+  `test_control_tree_names_stable`, in 2 of 6 full runs. The test now compares every
+  interactive widget, shown or not. The layout difference itself is unexplained. Fixed
+  when: the default layout is the same on every launch, or the cause is found and accepted.
+- **P10.5-4** · The Debug `[.slow]` suite takes 1797 s against ctest's 1800 s default.
+  Under load it times out, and its 60 s realtime gate misses deadlines (167 callbacks over
+  5.33 ms, seen while other jobs ran). Run it on an idle machine. Fixed when: it has a
+  timeout with headroom, or the suite is split.
 
 **Open issues for Phase 11:**
 
@@ -956,8 +1231,8 @@ and plays); **P6-1**, **P6-0** were closed in Phase 6. The rest re-carried below
 | | |
 |---|---|
 | **Plan** | [phase_11.md](phase_11.md) |
-| **Entry** | Phase 10 §7 complete, **including `bench_full_project`** |
-| **Done when** | [phase_11.md](phase_11.md) §6 |
+| **Entry** | Phase 10 §7 complete, **including `bench_full_project`**, and Phase 10.5 §6 complete |
+| **Done when** | [phase_11.md](phase_11.md) §6 - the pad-controller boxes by their emulated halves; the physical controller is in the final review |
 | **Status** | Not started |
 | **Completed** | — |
 
@@ -968,5 +1243,172 @@ and plays); **P6-1**, **P6-0** were closed in Phase 6. The rest re-carried below
 
 - _to be filled in by the agent that completes this phase_
 
-There is no Phase 12. Anything still open when this phase closes is either fixed
-here or promoted to a FINAL_PLAN-level decision about what adX does next.
+Phase 11 closes the DAW. Anything still open when it closes is fixed here or
+carried into Phase 12 with a reason, like any other handoff.
+
+---
+
+## [ ] Phase 12 — Sound-design foundation · XL
+
+| | |
+|---|---|
+| **Plan** | [phase_12.md](phase_12.md) |
+| **Entry** | Phase 11 §6 complete; the post-Phase-11 golden set recorded as the baseline |
+| **Done when** | [phase_12.md](phase_12.md) §6, including its human gate |
+| **Status** | Not started |
+| **Completed** | — |
+
+> Tranches A (format/model), B (DSP), C (tooling). Phase 13 may start once
+> phase_12.md §8's handoff items are done.
+
+**Open issues for Phase 13:**
+
+- _to be filled in by the agent that completes this phase_
+
+---
+
+## [ ] Phase 13 — Core Drums & Machines · M
+
+| | |
+|---|---|
+| **Plan** | [phase_13.md](phase_13.md) |
+| **Entry** | phase_12.md §8 handoff items |
+| **Done when** | [phase_13.md](phase_13.md) §6 |
+| **Status** | Not started |
+| **Completed** | — |
+
+**Open issues for Phase 14:**
+
+- _to be filled in by the agent that completes this phase_
+
+---
+
+## [ ] Phase 14 — Hyperpop · L
+
+| | |
+|---|---|
+| **Plan** | [phase_14.md](phase_14.md) |
+| **Entry** | Phase 13 §6 complete; Phase 12 fully done |
+| **Done when** | [phase_14.md](phase_14.md) §7 |
+| **Status** | Not started |
+| **Completed** | — |
+
+**Open issues for Phase 15:**
+
+- _to be filled in by the agent that completes this phase_
+
+---
+
+## [ ] Phase 15 — Hardcore · L
+
+| | |
+|---|---|
+| **Plan** | [phase_15.md](phase_15.md) |
+| **Entry** | Phase 14 §7 complete |
+| **Done when** | [phase_15.md](phase_15.md) §7 |
+| **Status** | Not started |
+| **Completed** | — |
+
+**Open issues for Phase 16:**
+
+- _to be filled in by the agent that completes this phase_
+
+---
+
+## [ ] Phase 16 — Classical · XL
+
+| | |
+|---|---|
+| **Plan** | [phase_16.md](phase_16.md) |
+| **Entry** | Phase 15 §7 complete; libraries fetched and verified |
+| **Done when** | [phase_16.md](phase_16.md) §7 |
+| **Status** | Not started |
+| **Completed** | — |
+
+**Open issues for Phase 17:**
+
+- _to be filled in by the agent that completes this phase_
+
+---
+
+## [ ] Phase 17 — Ambient · M
+
+| | |
+|---|---|
+| **Plan** | [phase_17.md](phase_17.md) |
+| **Entry** | Phase 16 §7 complete |
+| **Done when** | [phase_17.md](phase_17.md) §7 |
+| **Status** | Not started |
+| **Completed** | — |
+
+**Open issues for Phase 18:**
+
+- _to be filled in by the agent that completes this phase_
+
+---
+
+## [ ] Phase 18 — Breakcore / Jungle / DnB · M
+
+| | |
+|---|---|
+| **Plan** | [phase_18.md](phase_18.md) |
+| **Entry** | Phase 17 §7 complete |
+| **Done when** | [phase_18.md](phase_18.md) §7 |
+| **Status** | Not started |
+| **Completed** | — |
+
+**Open issues for Phase 19:**
+
+- _to be filled in by the agent that completes this phase_
+
+---
+
+## [ ] Phase 19 — Phonk + Vocal · M
+
+| | |
+|---|---|
+| **Plan** | [phase_19.md](phase_19.md) |
+| **Entry** | Phase 18 §7 complete |
+| **Done when** | [phase_19.md](phase_19.md) §8 |
+| **Status** | Not started |
+| **Completed** | — |
+
+**Open issues remaining at completion:**
+
+- _to be filled in by the agent that completes this phase_
+
+---
+
+## [ ] Final review — after Phase 19
+
+| | |
+|---|---|
+| **Plan** | [FINAL_PLAN.md](../FINAL_PLAN.md) §7 "Final review", §9 "Hardware testing is done at the end" |
+| **Entry** | Phase 19 done |
+| **Done when** | every deferred hardware half below has passed on real hardware with its output in its phase log, and every Done phase still meets its own definition of done on the finished tree |
+| **Status** | Not started |
+| **Completed** | — |
+
+Set 2026-10-30, at the user's request: hardware testing happens here, all of it, and
+nowhere earlier. A hardware check's emulated half runs in its own phase; once that passes
+the box is `[~]`, counts toward the phase being done, and its hardware half is listed
+here. Until this review starts, nobody asks the user to run one.
+
+**Deferred hardware halves** (run in this order; each line says what the emulated half
+already showed and what the hardware run must add):
+
+| Id | Phase box | Emulated half | Hardware half still to run |
+|---|---|---|---|
+| P8-1 | phase_8.md §6 `record_latency_alignment` | `[~]` passed 2026-10-30: VB-Audio Virtual Cable, offset 0 at 64/256/1024 after 5 s of settling (phase_8.md §10) | a physical loopback (interface out 1 → in 1, or a 3.5 mm headphone-to-mic cable), direct monitoring off: `py -3.12 tools/measure_latency.py` |
+| P9-4 | phase_9.md §6 ASIO | **not yet run**: FlexASIO (an ASIO driver over WASAPI) with VB-Cable as its loopback, the readout against `tools/measure_latency.py` through `Engine(asio=True)` | a real interface's own ASIO driver, against a physical loopback |
+| P9-1 | phase_9.md §6 `midi_roundtrip_latency` | **ran 2026-10-30 and fails**: loopMIDI to the output mix, ~68-74 ms median, almost all of it shared-mode output (P9-9). Becomes `[~]` when the same tool measures under 10 ms | a hardware MIDI keyboard to an audible note, under 10 ms |
+| P11 | phase_11.md §6 the 20-minute set; the `docs/performance.md` walkthrough | not built yet: the emulated pad controller (phase_11.md §6) | the same set and walkthrough on a physical pad controller with LED feedback |
+
+**Then the review of every Done phase:** each phase's §6/§7 checked again on the finished
+tree, by an agent. The human gates the user closed before 2026-11-01 (P6-1, P7-1) are
+re-checked through their Phase 10.5 stand-ins, not by asking the user again. Anything that no longer holds reopens as an open issue against that phase, with a
+`FR-` id (FR-1, FR-2, ...).
+
+**Findings:**
+
+- _to be filled in by the agent that runs the review_

@@ -43,8 +43,15 @@ class InspectorPanel(DockPanel):
         selection.changed.connect(self.refresh)
 
     def _clear(self) -> None:
+        # takeRow + deleteLater, not removeRow: a refresh runs from a field's own signal
+        # (Enter in Velocity applies it), and deleting that field mid-event crashes.
         while self.form.rowCount():
-            self.form.removeRow(0)
+            row = self.form.takeRow(0)
+            for item in (row.labelItem, row.fieldItem):
+                widget = item.widget() if item is not None else None
+                if widget is not None:
+                    widget.hide()
+                    widget.deleteLater()
 
     def _number(
         self,
@@ -56,6 +63,8 @@ class InspectorPanel(DockPanel):
         decimals: int = 0,
     ) -> None:
         spin = QDoubleSpinBox()
+        # inspector.velocity, inspector.start ...: the label's first word.
+        spin.setObjectName(f"inspector.{label.split()[0].lower()}")
         spin.setRange(low, high)
         spin.setDecimals(decimals)
         spin.setValue(value)

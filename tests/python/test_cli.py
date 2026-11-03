@@ -100,18 +100,6 @@ def test_info(examples: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> Non
     assert "unknown type" not in out
 
 
-def test_render_is_declared_but_unavailable() -> None:
-    """``render`` exists and says when it arrives, rather than being absent."""
-    result = subprocess.run(
-        [sys.executable, "-m", "adx", "render", "x.adx"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 2
-    assert "Phase 8" in result.stderr
-
-
 def test_fmt_stdout_preserves_crlf(tmp_path: pathlib.Path) -> None:
     """A CRLF file formatted to stdout keeps CRLF, and does not gain a second CR.
 

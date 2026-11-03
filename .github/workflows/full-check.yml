@@ -9,6 +9,17 @@ name: Full check
 #   fuzz   the whole .adx loader over randomly mutated input for ten minutes, from a
 #          seed that is new every run and printed in the log (Phase 2's P2-1). A crash
 #          fails the step; a hang is caught by timeout-minutes.
+#   three-builds  Release built from clean three times, the golden corpus regenerated
+#          after each and compared with the committed files (phase_8.md's
+#          three_clean_builds_identical).
+#   installer  the MSI built from a clean checkout and installed, launched, used and
+#          uninstalled on the fresh runner, which is the clean machine phase_10.md §7
+#          asks for (installer_clean_install).
+#   scenarios  phase_10.5.md's agent-run scenarios: adX launched through adX.cmd and
+#          driven over its control channel, null audio, real plugins from
+#          tools/test_plugins.toml (fetched once, cached). The WannaCry cases need a
+#          corpus that lives only on the user's machine, so here they run on the
+#          committed stand-in (-m "not wannacry"; phase_10.5.md 4.8).
 #
 # The [.slow] suite in Debug, which this file's predecessor (nightly.yml) also ran, is
 # run locally at phase completion instead (plans/STATE.md, "Phase completion").
@@ -95,3 +106,127 @@ jobs:
         env:
           ADX_FUZZ_SECONDS: '600'
         run: build/windows-x64-relwithdebinfo/tests/cpp/adx_tests.exe "[.fuzz]"
+
+  # phase_8.md's second gate, three_clean_builds_identical: build Release from nothing
+  # three times and regenerate every golden file each time. Each run must reproduce
+  # the committed hashes exactly - so the three agree with each other and with the
+  # reference - or `git diff` fails the step and shows which fixture moved.
+  three-builds:
+    name: three clean builds, identical corpus (Release)
+    runs-on: windows-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - uses: actions/cache@v4
+        with:
+          path: .deps
+          key: deps-${{ runner.os }}-${{ hashFiles('cmake/AdxDependencies.cmake') }}
+          restore-keys: |
+            deps-${{ runner.os }}-
+      - uses: actions/cache@v4
+        with:
+          path: .qt/dl
+          key: qt-${{ runner.os }}-${{ hashFiles('tools/fetch_qt.py') }}
+      - name: Fetch the Qt SDK
+        run: python tools/fetch_qt.py
+      - name: Build three times from clean, regenerating the corpus each time
+        shell: bash
+        env:
+          ADX_UPDATE_GOLDEN: '1'
+        run: |
+          set -euo pipefail
+          for build in 1 2 3; do
+            echo "::group::clean build $build"
+            rm -rf build/windows-x64-release
+            cmake --preset windows-x64-release
+            cmake --build --preset windows-x64-release
+            build/windows-x64-release/tests/cpp/adx_tests.exe "[golden]"
+            echo "::endgroup::"
+            sha256sum tests/golden/*.txt | sed "s/^/build $build: /"
+            if ! git diff --exit-code --stat tests/golden; then
+              git diff tests/golden | head -60 | while IFS= read -r l; do echo "::error title=build $build::${l:0:300}"; done
+              exit 1
+            fi
+          done
+
+  installer:
+    name: MSI built, installed and removed on a clean machine
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - uses: actions/cache@v4
+        with:
+          path: .qt/dl
+          key: qt-${{ runner.os }}-${{ hashFiles('tools/fetch_qt.py') }}
+      - name: Fetch the Qt SDK
+        run: python tools/fetch_qt.py
+      - name: Build the MSI
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File installer/build_installer.ps1
+      - name: Install, launch, render, uninstall
+        shell: pwsh
+        run: |
+          python -m pip install pytest
+          $env:ADX_INSTALLER_MSI = (Get-ChildItem build/installer -Filter "adX-*.msi" | Select-Object -First 1).FullName
+          python -m pytest tests/python/test_installer.py -v -p no:cacheprovider -o addopts=""
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: adx-msi
+          path: build/installer/*.msi
+          if-no-files-found: ignore
+
+  scenarios:
+    name: agent-run scenarios (Release, null audio, real plugins)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - uses: actions/cache@v4
+        with:
+          path: .deps
+          key: deps-${{ runner.os }}-${{ hashFiles('cmake/AdxDependencies.cmake') }}
+          restore-keys: |
+            deps-${{ runner.os }}-
+      - uses: actions/cache@v4
+        with:
+          path: .qt/dl
+          key: qt-${{ runner.os }}-${{ hashFiles('tools/fetch_qt.py') }}
+      # The pinned archives, so a run does not download them again (phase_10.5.md 4.6).
+      - uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\adx-test-plugins
+          key: test-plugins-${{ hashFiles('tools/test_plugins.toml') }}
+      - name: Fetch the Qt SDK
+        run: python tools/fetch_qt.py
+      # The crash scenario hosts adx_test_plugin.clap from the Release tree.
+      - name: Configure
+        run: cmake --preset windows-x64-release
+      - name: Build
+        run: cmake --build --preset windows-x64-release
+      - name: Install the Python package
+        run: pip install -e ".[dev]"
+      - name: Fetch the test plugins
+        run: python tools/fetch_test_plugins.py
+      - name: Scenarios
+        run: python -m pytest tests/scenarios -m "not wannacry" -v -rs -p no:cacheprovider

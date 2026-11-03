@@ -21,11 +21,18 @@ PYBIND11_MODULE(adx_engine, m) {
     registerFormatBindings(m);
     registerTransportBindings(m);
     registerRenderBindings(m);
+    registerExportBindings(m);
+    registerAnalysisBindings(m);
+    registerGenerateBindings(m);
+    registerCaptureBindings(m);
+    registerRecordBindings(m);
+    registerPluginBindings(m);
     registerGeometryBindings(m);
     adx::bindings::registerCatalog(m);
     adx::bindings::registerEditCommands(m);
     adx::bindings::registerPresets(m);
     adx::bindings::registerPanelGeometry(m);
+    registerAnalyzerBindings(m);
     adx::bindings::registerSync(m);
     adx::bindings::registerMini(m);
     adx::bindings::registerScript(m);

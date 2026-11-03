@@ -224,7 +224,8 @@ OfflineRig::OfflineRig(std::uint32_t blockFrames, std::uint32_t sampleRate) {
     engine = std::make_unique<render::RenderEngine>(
         std::move(owned), render::EngineOptions{.sampleRate = sampleRate,
                                                 .blockFrames = blockFrames,
-                                                .outputChannels = 2});
+                                                .outputChannels = 2,
+                                                .offline = true});
     REQUIRE(engine->open().code == audio::Error::Code::None);
     REQUIRE(engine->start().code == audio::Error::Code::None);
 }

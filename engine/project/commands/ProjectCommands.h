@@ -198,4 +198,38 @@ private:
     bool m_inserted{false};
 };
 
+/// Points a pool entry at another path: what "locate missing samples" does once it has
+/// found a file (phase_8.md §3.7). Every clip, zone and impulse on that entry follows.
+class SetSamplePath final : public Command {
+public:
+    SetSamplePath(core::SampleId id, std::string path);
+
+    void apply(Project& project) override;
+    void revert(Project& project) override;
+    [[nodiscard]] std::string_view name() const noexcept override;
+    [[nodiscard]] CommandId kind() const noexcept override;
+    [[nodiscard]] DirtyMask dirty() const noexcept override;
+
+private:
+    core::SampleId m_id;
+    std::string m_path;
+    std::string m_previous;
+};
+
+/// Replaces the project's SAMPLE_PATHS.
+class SetSampleSearchPaths final : public Command {
+public:
+    explicit SetSampleSearchPaths(std::vector<std::string> paths);
+
+    void apply(Project& project) override;
+    void revert(Project& project) override;
+    [[nodiscard]] std::string_view name() const noexcept override;
+    [[nodiscard]] CommandId kind() const noexcept override;
+    [[nodiscard]] DirtyMask dirty() const noexcept override;
+
+private:
+    std::vector<std::string> m_paths;
+    std::vector<std::string> m_previous;
+};
+
 } // namespace adx::project

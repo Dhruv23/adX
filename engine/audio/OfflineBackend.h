@@ -49,11 +49,23 @@ public:
     /// exactly what this class exists to avoid.
     std::span<const float> renderFrames(std::uint64_t frames);
 
+    /// A cable from the outputs back to the inputs, `delayFrames` long: the input of
+    /// every block is the output of `delayFrames` earlier (silence before there was
+    /// any). What the recording tests use in place of an interface with a loopback - the
+    /// round trip a real one would report or a calibration would measure (phase_8.md
+    /// §3.1). Main thread, before rendering. The delay must be at least one block, as
+    /// a real round trip is.
+    void setLoopback(std::uint32_t delayFrames);
+
 private:
     std::vector<DeviceInfo> m_devices;
     std::vector<float> m_block;
     std::vector<float> m_input;
     std::vector<float> m_rendered;
+    /// Every frame of output so far, for the loopback; empty without one.
+    std::vector<float> m_history;
+    std::uint32_t m_loopbackDelay{0};
+    bool m_loopback{false};
 
     StreamConfig m_config{};
     RenderCallback m_callback{nullptr};

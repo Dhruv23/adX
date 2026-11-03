@@ -37,7 +37,7 @@ public:
     /// Sync mode: the phase for a timeline position of `cycles` cycles of the LFO, plus
     /// the offset. Call once per sample (or per control frame) before value().
     void syncTo(double cycles, float offset) noexcept {
-        const double whole = std::floor(cycles);
+        const double whole = floorExact(cycles);
         const auto next = wrap(static_cast<float>(cycles - whole) + offset);
         if (next < m_phase) {
             m_held = m_noise.next(); // a new cycle: a new held value
@@ -84,7 +84,7 @@ public:
 
 private:
     [[nodiscard]] static float wrap(float x) noexcept {
-        return x - std::floor(x);
+        return x - floorExact(x);
     }
 
     float m_phase{0.0F};

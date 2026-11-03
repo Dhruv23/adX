@@ -10,6 +10,7 @@ target_sources(adx_engine_static PRIVATE
     Scheduler.cpp
     TopoSort.cpp
     VoicePool.cpp
+    nodes/AudioTrackNode.cpp
     nodes/ChannelNode.cpp
     nodes/DepartingNode.cpp
     nodes/InsertNode.cpp

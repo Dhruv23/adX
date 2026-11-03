@@ -217,6 +217,11 @@ void ChannelNode::renderBlock(ProcessContext& context) noexcept {
     const std::span<float> right = context.outputs[1];
     std::ranges::fill(left, 0.0F);
     std::ranges::fill(right, 0.0F);
+    if (renderWhole(context, left, right, m_releaseWhole)) {
+        m_releaseWhole = false;
+        applyChannelStrip(context);
+        return;
+    }
 
     const std::span<float> scratchLeft = context.arena.allocate<float>(frames);
     const std::span<float> scratchRight = context.arena.allocate<float>(frames);
@@ -281,6 +286,7 @@ bool ChannelNode::renderDeparture(ProcessContext& context) noexcept {
         for (Voice& voice : m_pool.voices()) {
             VoicePool::release(voice);
         }
+        m_releaseWhole = true;
         m_departing = true;
     }
     ProcessContext own{.time = context.time,
@@ -294,7 +300,7 @@ bool ChannelNode::renderDeparture(ProcessContext& context) noexcept {
                        .arena = context.arena,
                        .tuningCents = context.tuningCents};
     renderBlock(own);
-    return m_pool.soundingCount() > 0;
+    return m_pool.soundingCount() > 0 || wholeSounding();
 }
 
 void ChannelNode::ringOutOld(ProcessContext& context) noexcept {
@@ -311,6 +317,7 @@ void ChannelNode::ringOutOld(ProcessContext& context) noexcept {
         for (Voice& voice : old.m_pool.voices()) {
             VoicePool::release(voice);
         }
+        old.m_releaseWhole = true;
         m_handover.started = true;
     }
     const std::array<std::span<float>, 2> outputs{oldLeft, oldRight};
@@ -335,7 +342,7 @@ void ChannelNode::ringOutOld(ProcessContext& context) noexcept {
         right[i] += oldRight[i];
     }
     m_handover.remaining -= std::min(frames, m_handover.remaining);
-    if (m_handover.remaining == 0 || old.m_pool.soundingCount() == 0) {
+    if (m_handover.remaining == 0 || (old.m_pool.soundingCount() == 0 && !old.wholeSounding())) {
         m_handover.finish();
     }
 }

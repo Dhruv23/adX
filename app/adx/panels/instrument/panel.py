@@ -3,7 +3,8 @@
 Every instrument gets the generic editor; the ones a grid of knobs cannot do justice
 (additive, sampler, slicer, FM, wavetable, and the envelopes anywhere) add a hand-built
 overview beside it (``editors/``). The header switches the instrument type, loads a
-preset (its samples included, one undo step) and auditions a note.
+preset (its samples included, one undo step) and auditions a note. A hosted plugin's own
+editor opens from the header too, as an effect slot's does (phase_9.md 4.6).
 """
 
 from __future__ import annotations
@@ -22,7 +23,8 @@ from PySide6.QtWidgets import (
 from adx import engine_bridge
 from adx.panels.base import DockPanel
 from adx.panels.instrument.editors import editor_for
-from adx.panels.instrument.generic_editor import channel_info
+from adx.panels.instrument.generic_editor import channel_info, generic_for
+from adx.panels.plugins.window import PluginWindow
 from adx.selection import Kind, Selection
 from adx.session import Session
 from adx.theme.tokens import Theme
@@ -64,6 +66,15 @@ class InstrumentPanel(DockPanel):
         audition.setToolTip("Audition the instrument")
         audition.clicked.connect(lambda: self.session.engine.audition(self.channel, 60, 100, 0.5))
         bar.addWidget(audition)
+        self.plugin_button = QPushButton("Plugin window")
+        self.plugin_button.setObjectName("instrument.plugin_window")
+        self.plugin_button.setToolTip("Open the hosted plugin's own editor")
+        self.plugin_button.clicked.connect(self.open_plugin_window)
+        # Shown and hidden through its toolbar action: a widget hidden before addWidget
+        # stays disabled for good (Qt's QToolBar documents the action as the switch).
+        self.plugin_action = bar.addWidget(self.plugin_button)
+        self.plugin_action.setVisible(False)
+        self.plugin_windows: dict[int, PluginWindow] = {}
         self.layout_.addWidget(bar)
         self.editor: QWidget | None = None
         self.setWidget(body)
@@ -94,6 +105,7 @@ class InstrumentPanel(DockPanel):
         self.name.setText(f"  {info['name']}  ")
         instrument = str(info["instrument"])
         self.type_box.setCurrentText(instrument)
+        self.plugin_action.setVisible(info.get("plugin") is not None)
         if self._shown != (self.channel, instrument) or self.editor is None:
             if self.editor is not None:
                 self.editor.setParent(None)
@@ -105,6 +117,27 @@ class InstrumentPanel(DockPanel):
             refresh = getattr(self.editor, "refresh", None)
             if refresh is not None:
                 refresh()
+
+    def open_plugin_window(self) -> PluginWindow | None:
+        """The channel's plugin in a window of its own: its editor if it has one, the
+        generic editor always."""
+        info = channel_info(self.session, self.channel) if self.channel else None
+        if info is None or info.get("plugin") is None:
+            return None
+        existing = self.plugin_windows.get(self.channel)
+        if existing is not None and existing.isVisible():
+            existing.raise_()
+            return existing
+        channel, instrument = self.channel, str(info["instrument"])
+        window = PluginWindow(
+            self.session.engine.plugin_instance_of_channel(channel),
+            str(info["plugin"]["name"]),
+            lambda: generic_for(self.session, channel, instrument),
+            parent=self,
+        )
+        self.plugin_windows[channel] = window
+        window.show()
+        return window
 
     def _type_chosen(self, _index: int) -> None:
         if self.channel:

@@ -25,15 +25,80 @@ struct PatternRef {
     [[nodiscard]] friend bool operator==(const PatternRef&, const PatternRef&) noexcept = default;
 };
 
+/// A fade at one end of an audio clip (phase_8.md §3.2). The curve is the shape of the
+/// gain's travel from silence to unity (fade in) or unity to silence (fade out), through
+/// the same evaluator automation uses; it compiles into the clip's gain envelope.
+struct ClipFade {
+    core::Ticks length;
+    core::Curve curve;
+
+    [[nodiscard]] friend bool operator==(const ClipFade&, const ClipFade&) noexcept = default;
+};
+
+/// How a clip fades in under the end of an earlier clip it overlaps on the same track.
+enum class CrossfadeKind : std::uint8_t {
+    /// sin/cos: the summed power is constant, which is what uncorrelated material wants.
+    EqualPower,
+    /// Gains sum to one: right for the same material either side of a cut.
+    Linear,
+};
+
+/// A destructive edit (phase_8.md §3.2): applied, in list order, to a copy of the
+/// decoded buffer. The file on disk is never written, so removing the edit is the undo.
+enum class EditKind : std::uint8_t {
+    Reverse,
+    /// Scales the peak to `amount` dBFS.
+    Normalize,
+    /// Subtracts the mean of each channel.
+    RemoveDc,
+    /// `amount` dB.
+    Gain,
+    /// Trims leading and trailing audio below `amount` dBFS.
+    TrimSilence,
+};
+
+struct ClipEdit {
+    EditKind kind{EditKind::Reverse};
+    float amount{0.0F};
+
+    [[nodiscard]] friend bool operator==(const ClipEdit&, const ClipEdit&) noexcept = default;
+};
+
+/// One warp marker (phase_8.md §3.3): source time `source` (seconds into the file, as
+/// edited) plays at `at`, item-relative ticks. Between markers the map is linear, so a
+/// clip with markers follows the project's tempo where an unwarped clip keeps its own.
+struct WarpMarker {
+    double source{0.0};
+    core::Ticks at;
+
+    [[nodiscard]] friend bool operator==(const WarpMarker&, const WarpMarker&) noexcept = default;
+};
+
 struct AudioClipRef {
     core::SampleId sample;
     float stretch{1.0F};
     float pitchSemitones{0.0F};
     bool reverse{false};
+    ClipFade fadeIn;
+    ClipFade fadeOut;
+    CrossfadeKind crossfade{CrossfadeKind::EqualPower};
+    std::vector<ClipEdit> edits;
+    /// Sorted by `at`. Fewer than two markers is no warp.
+    std::vector<WarpMarker> warps;
 
     [[nodiscard]] friend bool operator==(const AudioClipRef&,
                                          const AudioClipRef&) noexcept = default;
 };
+
+[[nodiscard]] const char* toString(EditKind kind) noexcept;
+[[nodiscard]] bool editKindFromString(std::string_view name, EditKind& out) noexcept;
+
+/// `sample` played plainly: no stretch, pitch, fades, edits or warps.
+[[nodiscard]] inline AudioClipRef audioClipOf(core::SampleId sample) {
+    AudioClipRef clip;
+    clip.sample = sample;
+    return clip;
+}
 
 /// A placed automation lane. The lane itself lives in Playlist::autoClips, because
 /// a playlist automation clip is not owned by any pattern.
@@ -88,6 +153,10 @@ struct PlaylistItem {
 
     std::variant<PatternRef, AudioClipRef, AutomationRef> content;
     bool muted{false};
+    /// Which lane of its track the item is drawn on (phase_8.md §3.1): recorded takes
+    /// stack on lanes 1, 2, ... and a comp of them sits on lane 0. Drawing only - the
+    /// engine plays every unmuted item whatever its lane.
+    std::uint16_t lane{0};
     std::vector<ClipEnvelope> envelopes;
 
     [[nodiscard]] friend bool operator==(const PlaylistItem&,
@@ -113,6 +182,10 @@ struct PlaylistTrack {
     /// only. One level: a group is not itself a member of a group.
     core::PlaylistTrackId group;
     bool collapsed{false};
+    /// The insert this track's audio clips play into (phase_8.md §3.1); invalid is the
+    /// master. A recording armed on this track lands here too. Pattern items are
+    /// unaffected: their notes play through their channels.
+    core::InsertId output;
     std::vector<PlaylistItem> items;
 
     [[nodiscard]] friend bool operator==(const PlaylistTrack&,

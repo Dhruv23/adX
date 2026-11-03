@@ -379,3 +379,21 @@ def test_lyrics_round_trip(tmp_path: object) -> None:
     assert lyrics[list(ids).index(note)] == "ka"
     assert len(ids) == len(starts) == len(lengths) == len(aliases) == 5
     assert set(aliases) == {""}  # no voicebank on this channel
+
+
+def test_drawing_past_the_end_lengthens_the_pattern() -> None:
+    """A note drawn past the pattern's end grows it to the next bar line, in the same
+    undo step (phase_10.5.md: a long part can be written in the piano roll at all)."""
+    model = make_model()
+    bar = 4 * BEAT
+    assert model.project.pattern_length("Roll") == 4 * bar
+    model.view.tick_start = 3 * bar
+    start = 4 * bar + BEAT
+    drag(model, tools.DrawTool(), at(model, start, 60), at(model, start + BEAT, 60))
+    assert model.project.pattern_length("Roll") == 5 * bar
+    assert int(model.notes()["start"].max()) == start
+    depth = model.project.undo_depth()
+    assert model.project.undo()
+    assert model.project.pattern_length("Roll") == 4 * bar
+    assert model.project.undo_depth() == depth - 1
+    assert int(model.notes()["start"].max()) < 4 * bar

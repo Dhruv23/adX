@@ -1,4 +1,5 @@
 #include "engine/project/SnapshotBuilder.h"
+#include "engine/midi/DeviceNames.h"
 
 #include <algorithm>
 #include <atomic>
@@ -6,8 +7,10 @@
 #include <limits>
 #include <variant>
 
+#include "engine/clip/ClipRenderCache.h"
 #include "engine/core/Config.h"
 #include "engine/dsp/Math.h"
+#include "engine/format/audio/SamplePool.h"
 #include "engine/format/mininotation/PatternCompiler.h"
 #include "engine/project/ControllerCompile.h"
 #include "engine/project/EventCompile.h"
@@ -64,7 +67,39 @@ struct SnapshotStorage {
     std::vector<Knot> knots;
     std::vector<std::uint32_t> paramLaneStart;
     std::vector<std::uint32_t> paramLanes;
+    std::vector<midi::MidiRoute> midiRoutes;
+    std::vector<midi::CompiledBinding> midiBindings;
+    clip::CompiledAudio audio;
 };
+
+/// The project's [MIDI] section as the audio thread reads it.
+void compileMidi(const Project& project, SnapshotStorage& storage) {
+    for (const MidiRouteSetting& route : project.midi.routes) {
+        storage.midiRoutes.push_back(midi::MidiRoute{.device = midi::deviceSlot(route.device),
+                                                     .channels = route.channels,
+                                                     .keyLow = route.keyLow,
+                                                     .keyHigh = route.keyHigh,
+                                                     .velocityLow = route.velocityLow,
+                                                     .velocityHigh = route.velocityHigh,
+                                                     .transpose = route.transpose,
+                                                     .curve = route.curve,
+                                                     .target = route.target.value});
+    }
+    for (const MidiBinding& binding : project.midi.bindings) {
+        if (!binding.target.valid()) {
+            continue; // kept in the file, inert until its target exists again
+        }
+        storage.midiBindings.push_back(
+            midi::CompiledBinding{.device = midi::deviceSlot(binding.device),
+                                  .channel = binding.channel,
+                                  .kind = binding.kind,
+                                  .number = binding.number,
+                                  .target = binding.target,
+                                  .minimum = binding.minimum,
+                                  .maximum = binding.maximum,
+                                  .toggle = binding.toggle});
+    }
+}
 
 /// The window a placement plays from its source, in the source's own ticks.
 struct Window {
@@ -348,9 +383,32 @@ void destroySnapshot(Snapshot* snapshot) noexcept {
     }
 }
 
-SnapshotBuilder::SnapshotBuilder(std::uint32_t sampleRate, std::uint32_t maxBlockFrames)
+SnapshotBuilder::SnapshotBuilder(std::uint32_t sampleRate, std::uint32_t maxBlockFrames,
+                                 bool offline)
     : m_sampleRate(sampleRate),
-      m_nodes(graph::PrepareInfo{.sampleRate = sampleRate, .maxBlockFrames = maxBlockFrames}) {}
+      m_nodes(graph::PrepareInfo{
+          .sampleRate = sampleRate, .maxBlockFrames = maxBlockFrames, .offline = offline}),
+      m_stemNodes(graph::PrepareInfo{
+          .sampleRate = sampleRate, .maxBlockFrames = maxBlockFrames, .offline = offline}) {}
+
+void SnapshotBuilder::setMonitor(core::PlaylistTrackId track) {
+    if (m_nodes.monitorTrack() != track) {
+        m_nodes.setMonitorTrack(track);
+        // A track with no clips has a node only while it is monitored: a new graph.
+        m_graphBuild.reset();
+        m_graph.reset();
+    }
+}
+
+void SnapshotBuilder::setStem(const graph::StemSpec* stem) {
+    if (stem != nullptr) {
+        m_stem = *stem;
+    } else {
+        m_stem.reset();
+    }
+    m_graphBuild.reset();
+    m_graph.reset();
+}
 
 SnapshotBuilder::~SnapshotBuilder() = default;
 
@@ -361,6 +419,17 @@ void SnapshotBuilder::forgetCaches() {
     m_clips.clear();
     m_channels.clear();
     m_primed = false;
+}
+
+bool SnapshotBuilder::audioReady() const noexcept {
+    // What changed since the build: the rendered buffer finished, or the file it stood
+    // in with finished decoding.
+    return std::ranges::any_of(m_audioWaiting, [](const auto& waiting) {
+        const auto& [entry, sourceWasReady] = waiting;
+        return entry->handle().state() != format::SampleState::Loading ||
+               (!sourceWasReady &&
+                entry->source()->handle().state() != format::SampleState::Loading);
+    });
 }
 
 std::uint32_t SnapshotBuilder::totalLatency() const noexcept {
@@ -529,7 +598,9 @@ SnapshotBuildResult SnapshotBuilder::build(const Project& project, std::uint64_t
     // a new tuning has to reach its node's configuration check.
     if (!m_graphBuild ||
         (dirty & (dirty::kChannels | dirty::kMixer | dirty::kRouting | dirty::kMeta)) != 0) {
-        auto candidate = std::make_shared<graph::GraphBuild>(graph::buildGraph(project, m_nodes));
+        m_stemNodes.setSamplePool(m_nodes.samplePool());
+        auto candidate = std::make_shared<graph::GraphBuild>(graph::buildGraph(
+            project, m_nodes, m_stem ? &*m_stem : nullptr, m_stem ? &m_stemNodes : nullptr));
         if (!candidate->ok) {
             return SnapshotBuildResult{.snapshot = nullptr, .error = candidate->error};
         }
@@ -541,6 +612,7 @@ SnapshotBuildResult SnapshotBuilder::build(const Project& project, std::uint64_t
             m_graphBuild = std::move(candidate);
         }
         m_nodes.pruneUnused();
+        m_stemNodes.pruneUnused();
     } else {
         m_stats.graphReused = true;
     }
@@ -584,7 +656,30 @@ SnapshotBuildResult SnapshotBuilder::build(const Project& project, std::uint64_t
 
     static const ChannelEvents kNoEvents{};
     storage->tracks.reserve(m_graphBuild->trackChannels.size());
-    for (const core::ChannelId channel : m_graphBuild->trackChannels) {
+    const bool anyFiltered = std::ranges::any_of(m_graphBuild->trackPatterns,
+                                                 [](core::PatternId p) { return p.valid(); });
+    const PlacementsByChannel stemPlacements =
+        anyFiltered ? collectPlacements(project) : PlacementsByChannel{};
+    for (std::size_t t = 0; t < m_graphBuild->trackChannels.size(); ++t) {
+        const core::ChannelId channel = m_graphBuild->trackChannels[t];
+        const core::PatternId only = t < m_graphBuild->trackPatterns.size()
+                                         ? m_graphBuild->trackPatterns[t]
+                                         : core::PatternId{};
+        if (only.valid()) {
+            // A pattern stem's copy of a channel: that pattern's placements only. Not
+            // cached - a stem's builder renders once.
+            std::vector<Placement> mine;
+            if (const auto found = stemPlacements.find(channel.value);
+                found != stemPlacements.end()) {
+                std::ranges::copy_if(found->second, std::back_inserter(mine),
+                                     [only](const Placement& p) { return p.pattern->id == only; });
+            }
+            auto events = flatten(mine, project.find(channel), mini::cycleLength(project.tempo));
+            storage->tracks.push_back(
+                EventTrack{.events = events->events, .lyrics = events->lyrics});
+            storage->keepAlive.push_back(std::move(events));
+            continue;
+        }
         const auto found = m_channels.find(channel.value);
         if (found != m_channels.end() && found->second.events) {
             storage->keepAlive.push_back(found->second.events);
@@ -610,6 +705,18 @@ SnapshotBuildResult SnapshotBuilder::build(const Project& project, std::uint64_t
                         return found->second.events->events;
                     });
 
+    // --- audio clips ---
+    // Rebuilt every time: a track's regions are a handful of structs, and their sample
+    // positions move with the tempo map.
+    format::SamplePool& pool =
+        m_nodes.samplePool() != nullptr ? *m_nodes.samplePool() : format::SamplePool::global();
+    clip::compileAudio(project, m_graphBuild->audioSources, m_sampleRate, pool,
+                       clip::ClipRenderCache::global(), storage->audio);
+    m_audioWaiting.clear();
+    for (const auto& entry : storage->audio.waiting) {
+        m_audioWaiting.emplace_back(entry, entry->source()->handle().ready());
+    }
+
     Snapshot& snapshot = storage->snapshot;
     snapshot.revision = revision;
     snapshot.sampleRate = m_sampleRate;
@@ -625,6 +732,16 @@ SnapshotBuildResult SnapshotBuilder::build(const Project& project, std::uint64_t
     snapshot.paramIndex = m_graphBuild->params.index;
     snapshot.paramLaneStart = storage->paramLaneStart;
     snapshot.paramLanes = storage->paramLanes;
+    snapshot.audioTracks = storage->audio.tables;
+    compileMidi(project, *storage);
+    snapshot.midiRoutes = storage->midiRoutes;
+    snapshot.midiBindings = storage->midiBindings;
+    for (std::size_t i = 0; i < m_graphBuild->audioSources.size(); ++i) {
+        if (m_nodes.monitorTrack().valid() &&
+            m_graphBuild->audioSources[i].track == m_nodes.monitorTrack()) {
+            snapshot.monitorTable = static_cast<std::uint32_t>(i);
+        }
+    }
 
     SnapshotStorage* owned = storage.release();
     owned->snapshot.lifetime = rt::retireOf(owned);

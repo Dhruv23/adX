@@ -106,7 +106,11 @@ void NullBackend::runLoop() noexcept {
     rt::registerAudioThread();
 
     using Clock = std::chrono::steady_clock;
-    const auto startedAt = Clock::now();
+    // The device buffer a real output would have: a lag shorter than this is absorbed
+    // (the next wake does not sleep), a longer one is an underrun. Shared-mode WASAPI
+    // plus RtAudio's ring hold about this much.
+    constexpr auto kDeviceBuffer = std::chrono::milliseconds(40);
+    auto startedAt = Clock::now();
     const auto framesPerSecond = static_cast<double>(m_config.sampleRate);
 
     std::uint64_t framesIssued = 0;
@@ -129,11 +133,14 @@ void NullBackend::runLoop() noexcept {
         const auto now = Clock::now();
         if (now < deadline) {
             std::this_thread::sleep_until(deadline);
-        } else if (framesIssued > 0 && now - deadline > std::chrono::milliseconds(5)) {
-            // Behind by more than a block. On a real device this is an xrun; here it is
-            // only ever the host being busy, but it is reported the same way so the
-            // number means the same thing in both.
+        } else if (framesIssued > 0 && now - deadline > kDeviceBuffer) {
+            // Behind by more than the buffer: on a real device the output has run dry - an
+            // xrun - and the stream carries on from now, the gap lost. The same here, so
+            // the count means what a device's does (xruns_exposed). Timer overshoot,
+            // which Windows' coarse sleeps cause every few blocks, is far shorter and is
+            // absorbed as before.
             m_lateCount.fetch_add(1, std::memory_order_relaxed);
+            startedAt += now - deadline;
         }
 
         time.streamFrames = framesIssued;

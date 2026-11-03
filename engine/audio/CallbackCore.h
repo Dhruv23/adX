@@ -16,6 +16,7 @@
 #include <cstdint>
 
 #include "engine/audio/AudioBackend.h"
+#include "engine/audio/ScopeTap.h"
 #include "engine/rt/BlockArena.h"
 #include "engine/rt/OverwriteRing.h"
 
@@ -41,6 +42,12 @@ public:
     void attachArena(std::byte* storage, std::size_t bytes) noexcept {
         m_arena = rt::BlockArena{storage, bytes};
     }
+    /// Main thread, before the stream starts. The ring is a quarter of a megabyte, too
+    /// big to sit inside an engine a test puts on the stack, so its owner keeps it on
+    /// the heap; `tap` outlives the core.
+    void attachScopeTap(ScopeTapRing& tap) noexcept {
+        m_scopeTap = &tap;
+    }
     void setProcessStep(ProcessStep step, void* user) noexcept;
     void setOutputChannels(std::uint32_t channels) noexcept {
         m_outputChannels = channels == 0 ? 1 : channels;
@@ -54,8 +61,8 @@ public:
 
     void render(float* out, const float* in, std::uint32_t frames, const StreamTime& time) noexcept;
 
-    [[nodiscard]] rt::OverwriteRing<rt::StereoFrame, 8192>& scopeTap() noexcept {
-        return m_scopeTap;
+    [[nodiscard]] ScopeTapRing& scopeTap() noexcept {
+        return *m_scopeTap;
     }
     [[nodiscard]] rt::OverwriteRing<rt::LevelFrame, 256>& levelTap() noexcept {
         return m_levelTap;
@@ -81,6 +88,13 @@ public:
         m_overDeadline.store(0, std::memory_order_release);
     }
 
+    /// Fault injection (phase_10.5.md §5, xruns_exposed): every callback spins this long
+    /// after its work, so a test can overload the stream on purpose and see the xrun
+    /// count move. 0, the default, costs one relaxed load. Any thread.
+    void setStallMicroseconds(std::uint32_t microseconds) noexcept {
+        m_stallUs.store(microseconds, std::memory_order_relaxed);
+    }
+
     [[nodiscard]] std::size_t arenaHighWaterMark() const noexcept {
         return m_arena.highWaterMark();
     }
@@ -101,11 +115,12 @@ private:
     std::uint64_t m_deadlineNs{0};
 
     rt::BlockArena m_arena;
-    rt::OverwriteRing<rt::StereoFrame, 8192> m_scopeTap;
+    ScopeTapRing* m_scopeTap{nullptr};
     rt::OverwriteRing<rt::LevelFrame, 256> m_levelTap;
     rt::OverwriteRing<CallbackTiming, 1024> m_timingTap;
     std::atomic<std::uint64_t> m_worstNs{0};
     std::atomic<std::uint64_t> m_overDeadline{0};
+    std::atomic<std::uint32_t> m_stallUs{0};
 };
 
 } // namespace adx::audio

@@ -14,6 +14,7 @@
 
 #include "engine/core/Ids.h"
 #include "engine/project/Color.h"
+#include "engine/project/PluginRef.h"
 
 namespace adx::project {
 
@@ -43,6 +44,8 @@ struct Slot {
     /// reference (Resources), or invalid for none. Structure, like a lookahead: a
     /// different file is a different node.
     core::SampleId impulse;
+    /// The hosted plugin of a `clap` or `vst3` slot (phase_9.md §4.7); empty otherwise.
+    PluginRef plugin;
 
     [[nodiscard]] const SlotParam* find(std::string_view name) const noexcept;
     [[nodiscard]] SlotParam* find(std::string_view name) noexcept;

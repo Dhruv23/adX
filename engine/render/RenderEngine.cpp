@@ -24,7 +24,7 @@ graph::EngineMessage messageOf(graph::MessageKind kind) noexcept {
 
 RenderEngine::RenderEngine(std::unique_ptr<audio::AudioBackend> backend, EngineOptions options)
     : m_options(options), m_audio(std::move(backend)), m_core(m_transport, m_audio.reaper()),
-      m_builder(options.sampleRate, rt::kMaxBlockFrames) {
+      m_builder(options.sampleRate, rt::kMaxBlockFrames, options.offline) {
     m_audio.setProcessStep(&graph::EngineCore::processStep, &m_core);
 }
 
@@ -47,9 +47,25 @@ audio::Error RenderEngine::open() {
     config.sampleRate = m_options.sampleRate;
     config.blockFrames = m_options.blockFrames;
     config.outputChannels = m_options.outputChannels;
+    config.inputDeviceId = m_options.inputDeviceId;
+    config.inputChannels = m_options.inputChannels;
+    m_core.setInputChannels(m_options.inputChannels);
     audio::Error error = m_audio.open(config);
     m_open = error.code == audio::Error::Code::None;
     return error;
+}
+
+void RenderEngine::ping(std::int64_t at, float level) {
+    graph::EngineMessage message = messageOf(graph::MessageKind::Ping);
+    message.tickA = at;
+    message.value = level;
+    post(message);
+}
+
+CommitResult RenderEngine::setMonitor(const project::Project& project,
+                                      core::PlaylistTrackId track) {
+    m_builder.setMonitor(track);
+    return publish(project, m_syncedRevision, project::dirty::kAll);
 }
 
 audio::Error RenderEngine::start() {
@@ -143,6 +159,11 @@ CommitResult RenderEngine::setProject(const project::Project& project, std::uint
 CommitResult RenderEngine::commit(const project::Project& project,
                                   const project::CommandStack& stack) {
     if (m_synced && stack.revision() == m_syncedRevision) {
+        // Nothing was edited, but an audio clip that was standing in for its rendered
+        // buffer can now play the real one.
+        if (m_builder.audioReady()) {
+            return publish(project, m_syncedRevision, project::dirty::kPlaylist);
+        }
         return CommitResult{};
     }
     const project::DirtyMask dirty =
@@ -260,6 +281,25 @@ void RenderEngine::audition(core::ChannelId channel, std::uint8_t pitch, std::ui
 
 void RenderEngine::stopAudition() {
     post(messageOf(graph::MessageKind::AuditionStop));
+}
+
+std::size_t RenderEngine::applyLearned(project::Project& project, project::CommandStack& stack) {
+    std::size_t applied = 0;
+    midi::LearnedValue learned{};
+    while (m_core.takeLearned(learned)) {
+        // setParam posts the value again; the audio thread already has it, and the
+        // repeat is a no-op write.
+        if (setParam(project, stack, learned.target, learned.value)) {
+            ++applied;
+        }
+    }
+    return applied;
+}
+
+void RenderEngine::setMidiTarget(core::ChannelId channel) {
+    graph::EngineMessage message = messageOf(graph::MessageKind::MidiTarget);
+    message.tickA = channel.valid() ? channel.value : graph::kNone;
+    post(message);
 }
 
 void RenderEngine::setMetronome(bool enabled, core::Ticks beat, std::uint32_t beatsPerBar) {

@@ -2,11 +2,17 @@
 #include "engine/graph/GraphBuilder.h"
 
 #include <algorithm>
+#include <bit>
+#include <limits>
 #include <unordered_map>
 #include <unordered_set>
+#include <variant>
 
 #include "engine/dsp/Math.h"
 #include "engine/effects/Factory.h"
+#include "engine/format/audio/SamplePool.h"
+#include "engine/graph/DeclaresParams.h"
+#include "engine/graph/nodes/AudioTrackNode.h"
 #include "engine/graph/nodes/ChannelNode.h"
 #include "engine/graph/nodes/DepartingNode.h"
 #include "engine/graph/nodes/InsertNode.h"
@@ -142,6 +148,16 @@ std::shared_ptr<Node> NodeStore::send(core::SendId id) {
     return getOrMake(Key{Kind::Send, id.value}, [] { return std::make_shared<SendNode>(); });
 }
 
+std::shared_ptr<Node> NodeStore::audioTrack(core::PlaylistTrackId id) {
+    return getOrMake(Key{Kind::AudioTrack, id.value},
+                     [] { return std::make_shared<AudioTrackNode>(); });
+}
+
+std::shared_ptr<Node> NodeStore::frozenChannel(core::ChannelId id) {
+    return getOrMake(Key{Kind::FrozenChannel, id.value},
+                     [] { return std::make_shared<AudioTrackNode>(true); });
+}
+
 std::shared_ptr<Node> NodeStore::controller(core::ControllerId id, const PeakConfig& config) {
     const Key key{Kind::Controller, id.value};
     // The audio thread reads a node's configuration unlocked, so a changed one is a new
@@ -156,6 +172,11 @@ std::shared_ptr<Node> NodeStore::controller(core::ControllerId id, const PeakCon
 
 std::shared_ptr<const Node> NodeStore::findSlot(core::SlotId id) const {
     const auto found = m_nodes.find(Key{Kind::Slot, id.value});
+    return found == m_nodes.end() ? nullptr : found->second.node;
+}
+
+std::shared_ptr<const Node> NodeStore::findChannel(core::ChannelId id) const {
+    const auto found = m_nodes.find(Key{Kind::Channel, id.value});
     return found == m_nodes.end() ? nullptr : found->second.node;
 }
 
@@ -467,6 +488,21 @@ void appendTyped(ParamLayout& layout, const project::TypeInfo& type, ParamSource
     }
 }
 
+/// Appends one binding per parameter `node` declares (DeclaresParams.h): the model's
+/// value where it has one, NaN - "leave it" - where it does not.
+template<class IndexOf>
+void appendDeclared(ParamLayout& layout, const DeclaresParams& node, ParamSource source,
+                    std::uint32_t owner, IndexOf indexOf) {
+    for (std::uint32_t i = 0; i < node.declaredParamCount(); ++i) {
+        layout.bindings.push_back(
+            ParamBinding{.source = source,
+                         .owner = owner,
+                         .index = indexOf(node.declaredParamName(i)),
+                         .part = project::CurvePart::None,
+                         .fallback = std::numeric_limits<float>::quiet_NaN()});
+    }
+}
+
 /// Appends a node's parameter slice and returns where it starts.
 std::uint32_t appendParams(ParamLayout& layout, std::initializer_list<ParamBinding> bindings) {
     const auto base = static_cast<std::uint32_t>(layout.bindings.size());
@@ -494,13 +530,26 @@ std::string insertLabel(core::InsertId id) {
     return "insert." + std::to_string(id.value);
 }
 
+/// Where an insert's nodes keep their parameters: one (base, count) per slot, then the
+/// fader's. Recorded by the full build so a stem copy can share the slots (StemSpec).
+struct InsertSlices {
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> slots;
+    std::pair<std::uint32_t, std::uint32_t> fader{0, 0};
+    /// The slots' nodes, in order.
+    std::vector<NodeId> slotNodes;
+};
+
 /// Adds one insert's chain - slots, fader, meter - and returns (entry, fader). Slots
 /// keyed from another insert are recorded in `keyed`, to be wired once every fader
-/// exists. The master's meter measures true peak as well.
+/// exists. The master's meter measures true peak as well. With `reuse`, the nodes take
+/// those parameter slices instead of appending their own; `record` receives the slices
+/// they got.
 std::pair<NodeId, NodeId> addInsertChain(const project::Insert& insert, bool master, Graph& graph,
                                          ParamLayout& layout, NodeStore& nodes,
                                          std::vector<std::pair<NodeId, core::InsertId>>& keyed,
-                                         const project::Resources& resources) {
+                                         const project::Resources& resources,
+                                         const InsertSlices* reuse = nullptr,
+                                         InsertSlices* record = nullptr) {
     const std::string label = insertLabel(insert.id);
 
     // Slots process in list order (Mixer.h): reordering effects is a move in the list,
@@ -509,27 +558,48 @@ std::pair<NodeId, NodeId> addInsertChain(const project::Insert& insert, bool mas
     NodeId previous{kNone};
     for (const project::Slot& slotValue : insert.slots) {
         const project::Slot* slot = &slotValue;
-        const NodeId id = graph.add(nodes.slot(*slot, resources), label);
+        std::shared_ptr<Node> slotNode = nodes.slot(*slot, resources);
+        const auto* declared = dynamic_cast<const DeclaresParams*>(slotNode.get());
+        const NodeId id = graph.add(std::move(slotNode), label);
         if (slot->sidechain.valid()) {
             keyed.emplace_back(id, slot->sidechain);
         }
         GraphNode& node = *graph.find(id);
+        const auto ordinal = static_cast<std::size_t>(slot - insert.slots.data());
+        if (record != nullptr) {
+            record->slotNodes.push_back(id);
+        }
+        if (reuse != nullptr && ordinal < reuse->slots.size()) {
+            node.paramBase = reuse->slots[ordinal].first;
+            node.paramCount = reuse->slots[ordinal].second;
+            if (previous.v == kNone) {
+                entry = id;
+            } else {
+                graph.connect(previous, kPortPost, id, kPortMain);
+            }
+            previous = id;
+            continue;
+        }
         node.paramBase = appendParams(
             layout, {ParamBinding{.source = ParamSource::SlotMix, .owner = slot->id.value},
                      ParamBinding{.source = ParamSource::SlotBypass, .owner = slot->id.value}});
         // The effect's parameters in the order its descriptor table names them - the
         // order its node reads them - whatever order the file listed them in.
+        const auto slotIndex = [slot](std::string_view name) {
+            const auto match = std::ranges::find(slot->params, name, &project::SlotParam::name);
+            return match == slot->params.end()
+                       ? kAbsentParam
+                       : static_cast<std::uint16_t>(match - slot->params.begin());
+        };
         if (const project::TypeInfo* type = project::findEffectType(slot->type)) {
-            appendTyped(layout, *type, ParamSource::SlotEffect, slot->id.value,
-                        [slot](std::string_view name) {
-                            const auto match =
-                                std::ranges::find(slot->params, name, &project::SlotParam::name);
-                            return match == slot->params.end()
-                                       ? kAbsentParam
-                                       : static_cast<std::uint16_t>(match - slot->params.begin());
-                        });
+            appendTyped(layout, *type, ParamSource::SlotEffect, slot->id.value, slotIndex);
+        } else if (declared != nullptr) {
+            appendDeclared(layout, *declared, ParamSource::SlotEffect, slot->id.value, slotIndex);
         }
         node.paramCount = static_cast<std::uint32_t>(layout.bindings.size()) - node.paramBase;
+        if (record != nullptr) {
+            record->slots.emplace_back(node.paramBase, node.paramCount);
+        }
         if (previous.v == kNone) {
             entry = id;
         } else {
@@ -542,13 +612,20 @@ std::pair<NodeId, NodeId> addInsertChain(const project::Insert& insert, bool mas
     {
         GraphNode& node = *graph.find(fader);
         const std::uint32_t owner = insert.id.value;
-        node.paramBase = appendParams(
-            layout, {ParamBinding{.source = ParamSource::InsertGain, .owner = owner},
-                     ParamBinding{.source = ParamSource::InsertPan, .owner = owner},
-                     ParamBinding{.source = ParamSource::InsertWidth, .owner = owner},
-                     ParamBinding{.source = ParamSource::InsertAudible, .owner = owner},
-                     ParamBinding{.source = ParamSource::InsertPolarity, .owner = owner}});
+        if (reuse != nullptr) {
+            node.paramBase = reuse->fader.first;
+        } else {
+            node.paramBase = appendParams(
+                layout, {ParamBinding{.source = ParamSource::InsertGain, .owner = owner},
+                         ParamBinding{.source = ParamSource::InsertPan, .owner = owner},
+                         ParamBinding{.source = ParamSource::InsertWidth, .owner = owner},
+                         ParamBinding{.source = ParamSource::InsertAudible, .owner = owner},
+                         ParamBinding{.source = ParamSource::InsertPolarity, .owner = owner}});
+        }
         node.paramCount = kInsertParamCount;
+        if (record != nullptr) {
+            record->fader = {node.paramBase, node.paramCount};
+        }
     }
     if (previous.v == kNone) {
         entry = fader;
@@ -602,13 +679,156 @@ void addPeakControllers(const project::Project& project, Graph& graph, const Par
     }
 }
 
+/// What the full build leaves for a stem copy: where everything's parameters live, and
+/// which audio table each track reads.
+struct StemContext {
+    std::unordered_map<std::uint32_t, std::pair<std::uint32_t, std::uint32_t>> channelSlices;
+    std::unordered_map<std::uint32_t, InsertSlices> insertSlices;
+    std::unordered_map<std::uint32_t, std::pair<std::uint32_t, std::uint32_t>> sendSlices;
+    std::unordered_map<std::uint32_t, std::uint32_t> audioTrackIndex;
+    std::unordered_map<std::uint32_t, std::uint32_t> frozenIndex;
+    std::unordered_map<std::uint32_t, NodeId> channelNodes;
+};
+
+bool isFrozen(const project::Project& project, const project::Channel& channel,
+              const NodeStore& nodes) {
+    if (channel.frozen.empty()) {
+        return false;
+    }
+    const format::SamplePool& pool =
+        nodes.samplePool() != nullptr ? *nodes.samplePool() : format::SamplePool::global();
+    return format::sampleExists(pool.resolve(project.resources, channel.frozen));
+}
+
+/// The stem copy (StemSpec): the mixer again, sharing the full build's parameter slices,
+/// fed only by the stem's sources, keyed from the full mix. Returns its master fader.
+NodeId addStemCopy(const project::Project& project, const StemSpec& stem, NodeStore& nodes,
+                   const StemContext& context,
+                   const std::unordered_map<std::uint32_t, NodeId>& fullFaders, GraphBuild& build) {
+    Graph& graph = build.graph;
+    // The full mix's wiring, before the copy adds to it: where each slot's input comes from.
+    const std::vector<GraphEdge> fullEdges = graph.edges();
+    ParamLayout unused;
+    std::unordered_map<std::uint32_t, NodeId> entries;
+    std::unordered_map<std::uint32_t, NodeId> faders;
+    std::vector<std::pair<NodeId, core::InsertId>> pending;
+    std::vector<std::pair<NodeId, core::InsertId>> keyed;
+    const auto inStem = [](const auto& list, auto id) {
+        return std::ranges::find(list, id) != list.end();
+    };
+    for (const project::Insert& insert : project.mixer.inserts) {
+        for (const project::Channel& channel : project.channels) {
+            if (channel.output != insert.id || !inStem(stem.channels, channel.id)) {
+                continue;
+            }
+            const auto frozen = context.frozenIndex.find(channel.id.value);
+            // A render cannot be split by pattern: a pattern stem leaves frozen channels
+            // to a stem of their own (StemRender.h).
+            if (frozen != context.frozenIndex.end() && stem.pattern.valid()) {
+                continue;
+            }
+            const NodeId id =
+                frozen != context.frozenIndex.end()
+                    ? graph.add(nodes.frozenChannel(channel.id), "stem.frozen." + channel.name)
+                    : graph.add(nodes.channel(channel, project.resources, &project),
+                                "stem.channel." + channel.name);
+            GraphNode& node = *graph.find(id);
+            if (frozen != context.frozenIndex.end()) {
+                node.audioTrack = frozen->second;
+            } else {
+                // Its own event track, so its cursor is its own: two nodes walking one
+                // cursor would each see half the events.
+                node.eventTrack = static_cast<std::uint32_t>(build.trackChannels.size());
+                build.trackChannels.push_back(channel.id);
+                build.trackPatterns.push_back(stem.pattern);
+            }
+            const auto& [base, count] = context.channelSlices.at(channel.id.value);
+            node.paramBase = base;
+            node.paramCount = count;
+            pending.emplace_back(id, insert.id);
+        }
+        for (const project::PlaylistTrack& track : project.playlist.tracks) {
+            const auto index = context.audioTrackIndex.find(track.id.value);
+            if (index == context.audioTrackIndex.end() || !inStem(stem.audioTracks, track.id)) {
+                continue;
+            }
+            const core::InsertId output =
+                project.mixer.find(track.output) != nullptr ? track.output : project.mixer.master;
+            if (output != insert.id) {
+                continue;
+            }
+            // Stateless, so a second instance reading the same regions is exact.
+            const NodeId id = graph.add(nodes.audioTrack(track.id), "stem.track." + track.name);
+            graph.find(id)->audioTrack = index->second;
+            pending.emplace_back(id, insert.id);
+        }
+        const auto slices = context.insertSlices.find(insert.id.value);
+        InsertSlices copied;
+        const auto [entry, fader] = addInsertChain(
+            insert, insert.id == project.mixer.master, graph, unused, nodes, keyed,
+            project.resources, slices != context.insertSlices.end() ? &slices->second : nullptr,
+            &copied);
+        entries[insert.id.value] = entry;
+        faders[insert.id.value] = fader;
+        // A dynamics slot with no sidechain of its own keys on what the full mix's slot
+        // hears, and so applies the full mix's gain to the stem: a compressor or limiter
+        // on a bus is then linear in the signal, and the stems still sum through it.
+        for (std::size_t k = 0; slices != context.insertSlices.end() && k < insert.slots.size() &&
+                                k < copied.slotNodes.size() && k < slices->second.slotNodes.size();
+             ++k) {
+            auto* slot = static_cast<SlotNode*>(graph.find(copied.slotNodes[k])->node.get());
+            if (insert.slots[k].sidechain.valid() || !slot->canFollowKey()) {
+                continue;
+            }
+            slot->setFollowKey(true);
+            for (const GraphEdge& edge : fullEdges) {
+                if (edge.to == slices->second.slotNodes[k] && edge.toPort == kPortMain) {
+                    graph.connect(edge.from, edge.fromPort, copied.slotNodes[k], kPortSidechain);
+                }
+            }
+        }
+        for (const project::Send& send : insert.sends) {
+            const NodeId id = graph.add(nodes.send(send.id), "stem." + insertLabel(insert.id));
+            GraphNode& node = *graph.find(id);
+            const auto& [base, count] = context.sendSlices.at(send.id.value);
+            node.paramBase = base;
+            node.paramCount = count;
+            graph.connect(fader, send.preFader ? kPortPre : kPortPost, id, kPortMain);
+            if (project.mixer.find(send.target) != nullptr) {
+                pending.emplace_back(id, send.target);
+            }
+        }
+    }
+    for (const auto& [from, target] : pending) {
+        graph.connect(from, kPortPost, entries[target.value], kPortMain);
+    }
+    // The key is the full mix: a ducker in a stem ducks exactly as it does in the master.
+    for (const auto& [slotNode, key] : keyed) {
+        const GraphNode* node = graph.find(slotNode);
+        const auto source = fullFaders.find(key.value);
+        if (source != fullFaders.end() && node != nullptr &&
+            node->node->ports().inputs > kPortSidechain) {
+            graph.connect(source->second, kPortPost, slotNode, kPortSidechain);
+        }
+    }
+    for (const project::Route& route : project.mixer.routes) {
+        if (faders.contains(route.from.value) && entries.contains(route.to.value)) {
+            graph.connect(faders[route.from.value], kPortPost, entries[route.to.value], kPortMain);
+        }
+    }
+    const auto master = faders.find(project.mixer.master.value);
+    return master != faders.end() ? master->second : NodeId{kNone};
+}
+
 } // namespace
 
 // NOLINTNEXTLINE(readability-function-size)
-GraphBuild buildGraph(const project::Project& project, NodeStore& nodes) {
+GraphBuild buildGraph(const project::Project& project, NodeStore& nodes, const StemSpec* stem,
+                      NodeStore* stemNodes) {
     GraphBuild build;
     Graph& graph = build.graph;
     ParamLayout& layout = build.params;
+    StemContext stemContext;
 
     std::unordered_map<std::uint32_t, NodeId> entries;
     std::unordered_map<std::uint32_t, NodeId> faders;
@@ -628,30 +848,68 @@ GraphBuild buildGraph(const project::Project& project, NodeStore& nodes) {
         }
     }
 
+    // Playlist tracks that hold audio, grouped the same way by the insert they play
+    // into. A track whose insert is gone plays into the master.
+    std::unordered_map<std::uint32_t, std::vector<const project::PlaylistTrack*>> audioByInsert;
+    for (const project::PlaylistTrack& track : project.playlist.tracks) {
+        const bool hasAudio =
+            std::ranges::any_of(track.items, [](const project::PlaylistItem& item) {
+                return std::holds_alternative<project::AudioClipRef>(item.content);
+            });
+        if (!hasAudio && track.id != nodes.monitorTrack()) {
+            continue;
+        }
+        const core::InsertId output =
+            project.mixer.find(track.output) != nullptr ? track.output : project.mixer.master;
+        audioByInsert[output.value].push_back(&track);
+    }
+    const auto addAudioTrack = [&](const project::PlaylistTrack& track) {
+        const NodeId id = graph.add(nodes.audioTrack(track.id), "track." + track.name);
+        graph.find(id)->audioTrack = static_cast<std::uint32_t>(build.audioSources.size());
+        stemContext.audioTrackIndex[track.id.value] = graph.find(id)->audioTrack;
+        build.audioSources.push_back(AudioSource{.track = track.id, .frozen = {}});
+        return id;
+    };
+
     const auto addChannel = [&](std::size_t ordinal) {
         const project::Channel& channel = project.channels[ordinal];
-        const NodeId id = graph.add(nodes.channel(channel, project.resources, &project),
-                                    "channel." + channel.name);
+        // A frozen channel plays its render in its instrument's place - while the render
+        // is there to play. A file that has gone missing thaws it rather than silencing it.
+        const bool frozen = isFrozen(project, channel, nodes);
+        std::shared_ptr<Node> channelNode =
+            frozen ? nodes.frozenChannel(channel.id)
+                   : nodes.channel(channel, project.resources, &project);
+        const auto* declared = dynamic_cast<const DeclaresParams*>(channelNode.get());
+        const NodeId id =
+            graph.add(std::move(channelNode), (frozen ? "frozen." : "channel.") + channel.name);
         GraphNode& node = *graph.find(id);
-        node.eventTrack = static_cast<std::uint32_t>(ordinal);
+        if (frozen) {
+            node.audioTrack = static_cast<std::uint32_t>(build.audioSources.size());
+            stemContext.frozenIndex[channel.id.value] = node.audioTrack;
+            build.audioSources.push_back(AudioSource{.track = {}, .frozen = channel.id});
+        } else {
+            node.eventTrack = static_cast<std::uint32_t>(ordinal);
+        }
+        stemContext.channelNodes[channel.id.value] = id;
         const std::uint32_t owner = channel.id.value;
         node.paramBase = appendParams(
             layout, {ParamBinding{.source = ParamSource::ChannelVolume, .owner = owner},
                      ParamBinding{.source = ParamSource::ChannelPan, .owner = owner},
                      ParamBinding{.source = ParamSource::ChannelAudible, .owner = owner},
                      ParamBinding{.source = ParamSource::ChannelPitch, .owner = owner}});
+        const std::vector<project::ParamValue>& values = channel.instrument.params;
+        const auto valueIndex = [&values](std::string_view name) {
+            const auto match = std::ranges::find(values, name, &project::ParamValue::name);
+            return match == values.end() ? kAbsentParam
+                                         : static_cast<std::uint16_t>(match - values.begin());
+        };
         if (const project::TypeInfo* type = project::findInstrumentType(channel.instrument.type)) {
-            const std::vector<project::ParamValue>& values = channel.instrument.params;
-            appendTyped(layout, *type, ParamSource::ChannelInstrument, owner,
-                        [&values](std::string_view name) {
-                            const auto match =
-                                std::ranges::find(values, name, &project::ParamValue::name);
-                            return match == values.end()
-                                       ? kAbsentParam
-                                       : static_cast<std::uint16_t>(match - values.begin());
-                        });
+            appendTyped(layout, *type, ParamSource::ChannelInstrument, owner, valueIndex);
+        } else if (declared != nullptr) {
+            appendDeclared(layout, *declared, ParamSource::ChannelInstrument, owner, valueIndex);
         }
         node.paramCount = static_cast<std::uint32_t>(layout.bindings.size()) - node.paramBase;
+        stemContext.channelSlices[owner] = {node.paramBase, node.paramCount};
         return id;
     };
 
@@ -661,8 +919,12 @@ GraphBuild buildGraph(const project::Project& project, NodeStore& nodes) {
         for (const std::size_t ordinal : channelsByInsert[insert.id.value]) {
             pendingOutputs.emplace_back(addChannel(ordinal), insert.id);
         }
-        const auto [entry, fader] = addInsertChain(insert, insert.id == project.mixer.master, graph,
-                                                   layout, nodes, keyed, project.resources);
+        for (const project::PlaylistTrack* track : audioByInsert[insert.id.value]) {
+            pendingOutputs.emplace_back(addAudioTrack(*track), insert.id);
+        }
+        const auto [entry, fader] =
+            addInsertChain(insert, insert.id == project.mixer.master, graph, layout, nodes, keyed,
+                           project.resources, nullptr, &stemContext.insertSlices[insert.id.value]);
         entries[insert.id.value] = entry;
         faders[insert.id.value] = fader;
         for (const project::Send& send : insert.sends) {
@@ -671,6 +933,7 @@ GraphBuild buildGraph(const project::Project& project, NodeStore& nodes) {
             node.paramBase = appendParams(
                 layout, {ParamBinding{.source = ParamSource::SendLevel, .owner = send.id.value}});
             node.paramCount = kSendParamCount;
+            stemContext.sendSlices[send.id.value] = {node.paramBase, node.paramCount};
             graph.connect(fader, send.preFader ? kPortPre : kPortPost, id, kPortMain);
             if (project.mixer.find(send.target) != nullptr) {
                 // Connected once every insert exists; recorded now to keep the order.
@@ -712,13 +975,24 @@ GraphBuild buildGraph(const project::Project& project, NodeStore& nodes) {
             graph.connect(faders[route.from.value], kPortPost, entries[route.to.value], kPortMain);
         }
     }
-    if (faders.contains(project.mixer.master.value)) {
-        graph.setOutput(faders[project.mixer.master.value]);
-    }
-
     build.trackChannels.reserve(project.channels.size());
     for (const project::Channel& channel : project.channels) {
         build.trackChannels.push_back(channel.id);
+        build.trackPatterns.emplace_back();
+    }
+
+    if (stem != nullptr && stem->tap.valid()) {
+        if (const auto tapped = stemContext.channelNodes.find(stem->tap.value);
+            tapped != stemContext.channelNodes.end()) {
+            graph.setOutput(tapped->second);
+        }
+    } else if (stem != nullptr && stemNodes != nullptr) {
+        const NodeId output = addStemCopy(project, *stem, *stemNodes, stemContext, faders, build);
+        if (output.v != kNone) {
+            graph.setOutput(output);
+        }
+    } else if (faders.contains(project.mixer.master.value)) {
+        graph.setOutput(faders[project.mixer.master.value]);
     }
 
     for (const ParamBinding& binding : layout.bindings) {
@@ -746,6 +1020,7 @@ GraphBuild buildGraph(const project::Project& project, NodeStore& nodes) {
 
 bool GraphBuild::sameStructure(const GraphBuild& other) const noexcept {
     if (ok != other.ok || graph.nodes().size() != other.graph.nodes().size() ||
+        audioSources != other.audioSources || trackPatterns != other.trackPatterns ||
         graph.edges() != other.graph.edges() || graph.hasOutput() != other.graph.hasOutput() ||
         graph.output() != other.graph.output() || pdc.latency != other.pdc.latency ||
         order.order != other.order.order ||
@@ -755,17 +1030,18 @@ bool GraphBuild::sameStructure(const GraphBuild& other) const noexcept {
     for (std::size_t i = 0; i < graph.nodes().size(); ++i) {
         const GraphNode& a = graph.nodes()[i];
         const GraphNode& b = other.graph.nodes()[i];
-        if (a.node != b.node || a.eventTrack != b.eventTrack || a.timeSource != b.timeSource ||
-            a.paramBase != b.paramBase || a.paramCount != b.paramCount ||
-            a.modulates != b.modulates) {
+        if (a.node != b.node || a.eventTrack != b.eventTrack || a.audioTrack != b.audioTrack ||
+            a.timeSource != b.timeSource || a.paramBase != b.paramBase ||
+            a.paramCount != b.paramCount || a.modulates != b.modulates) {
             return false;
         }
     }
     for (std::size_t i = 0; i < params.bindings.size(); ++i) {
         const ParamBinding& a = params.bindings[i];
         const ParamBinding& b = other.params.bindings[i];
+        // Bitwise on the fallback: a declared plugin parameter's is NaN, which != itself.
         if (a.source != b.source || a.owner != b.owner || a.index != b.index || a.part != b.part ||
-            a.fallback != b.fallback) {
+            std::bit_cast<std::uint32_t>(a.fallback) != std::bit_cast<std::uint32_t>(b.fallback)) {
             return false;
         }
     }

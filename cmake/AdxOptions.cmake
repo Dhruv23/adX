@@ -11,6 +11,10 @@ option(ADX_WARNINGS_AS_ERRORS "Treat compiler warnings as errors in first-party 
 # Declared now with nothing behind them on purpose: Phase 1 and Phase 10 then add
 # code, not build plumbing (phase_0.md §3.5).
 option(ADX_ENABLE_ONNX "Compile the ONNX melody extractor (FINAL_PLAN §8.2)" OFF)
+# Phase 9 (phase_9.md §4.9): RtAudio's ASIO path. RtAudio ships the ASIO host files it
+# needs, so this is a switch rather than an SDK path. The stream still opens WASAPI
+# unless ASIO is asked for (RtAudioBackend), so turning it on changes nothing by itself.
+option(ADX_ENABLE_ASIO "Compile RtAudio's ASIO backend" ON)
 option(ADX_ENABLE_ASAN "Build with AddressSanitizer; used by the P1/P3 nightly jobs" OFF)
 
 # The RT guard belongs wherever assertions are live, because it reports through
