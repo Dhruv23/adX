@@ -60,10 +60,11 @@ GeneratedTrack c418Track(const preset::PresetLibrary& presets, const StyleOption
     const std::int64_t phrases =
         std::max<std::int64_t>(4, (static_cast<std::int64_t>(options.bars) + 3) / 4);
     const std::int64_t develop = std::max<std::int64_t>(1, (phrases - 3) / 2);
-    const std::vector<Section> form{{"Intro", 4},
-                                    {"Theme", 4 * std::max<std::int64_t>(1, phrases - 3 - develop)},
-                                    {"Development", 4 * develop},
-                                    {"Outro", 4}};
+    const std::vector<Section> form{
+        {.name = "Intro", .bars = 4},
+        {.name = "Theme", .bars = 4 * std::max<std::int64_t>(1, phrases - 3 - develop)},
+        {.name = "Development", .bars = 4 * develop},
+        {.name = "Outro", .bars = 4}};
 
     const auto& idioms =
         key.mode == Mode::Major
@@ -98,7 +99,7 @@ GeneratedTrack c418Track(const preset::PresetLibrary& presets, const StyleOption
             if (name != "Intro") {
                 const Chord& up = high[static_cast<std::size_t>(i) % high.size()];
                 const bool sparse = name == "Outro";
-                for (GenNote n :
+                for (const GenNote n :
                      arpeggio(up, i * kBar, kBar, sparse ? core::kPpq / 2 : core::kPpq / 4, 2,
                               ArpMode::Up, 78, 0.8, random)) {
                     arps.push_back(n);

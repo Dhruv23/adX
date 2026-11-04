@@ -14,6 +14,7 @@ constexpr auto kPass = std::chrono::milliseconds(5);
 
 } // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape) - stop() joins a thread; nothing here throws.
 CaptureTap::~CaptureTap() {
     if (running()) {
         static_cast<void>(stop());

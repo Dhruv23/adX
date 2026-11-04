@@ -259,7 +259,7 @@ adx::project::Project voiceProject() {
     project.resources.baseDirectory = adx::tests::syntheticVoicebank().parent_path().string();
     adx::project::Channel& channel = project.channels.front();
     channel.instrument.type = "voice";
-    channel.instrument.voicebank = "adx_voicebank_synth";
+    channel.instrument.voicebank = adx::tests::syntheticVoicebank().filename().string();
     adx::project::NoteClip& clip = project.patterns.front().noteClips.front();
     const std::array<const char*, 5> lyrics{"あ", "い", "う", "え", "お"};
     for (std::size_t n = 0; n < clip.notes.size(); ++n) {

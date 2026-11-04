@@ -21,6 +21,7 @@ using namespace std::chrono_literals;
 
 adx::project::Project song() {
     std::vector<adx::tests::NoteSpec> notes;
+    notes.reserve(32);
     for (int i = 0; i < 32; ++i) {
         notes.push_back({.start = i * (adx::core::kPpq / 2),
                          .length = adx::core::kPpq / 3,
@@ -73,7 +74,7 @@ TEST_CASE("capture_tap_matches_offline", "[audio][capture]") {
     const adx::audio::Capture capture = tap.stop();
     CHECK(capture.lost == 0);
     CHECK(capture.startFrame == 0);
-    REQUIRE(capture.frames > 48000 * 2);
+    REQUIRE(capture.frames > std::uint64_t{48000} * 2);
 
     adx::render::RenderStats stats;
     const std::vector<float> offline =
@@ -107,7 +108,7 @@ TEST_CASE("capture_tap_no_alloc", "[audio][capture]") {
     const adx::audio::Capture capture = tap.stop();
     CHECK(adx::rt::ViolationLog::instance().count() == before);
     CHECK(capture.lost == 0);
-    CHECK(capture.frames > static_cast<std::uint64_t>(48000 * (seconds - 1)));
+    CHECK(capture.frames > std::uint64_t{48000} * static_cast<std::uint64_t>(seconds - 1));
 }
 
 TEST_CASE("xruns_exposed", "[audio][capture]") {

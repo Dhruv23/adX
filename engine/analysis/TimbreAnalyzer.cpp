@@ -26,7 +26,7 @@ float goertzel(std::span<const float> mono, std::size_t start, std::size_t lengt
     const double coefficient = 2.0 * std::cos(w);
     double s1 = 0.0;
     double s2 = 0.0;
-    const double span = static_cast<double>(length - 1);
+    const auto span = static_cast<double>(length - 1);
     for (std::size_t i = 0; i < length; ++i) {
         const double hann =
             0.5 - (0.5 * std::cos(2.0 * std::numbers::pi * static_cast<double>(i) / span));
@@ -99,6 +99,7 @@ double rounded(double v) {
 
 } // namespace
 
+// NOLINTNEXTLINE(readability-function-size) - candidates, harmonics, envelope, preset.
 std::optional<TimbreAnalysis> analyzeTimbre(std::span<const float> mono, std::uint32_t sampleRate,
                                             std::span<const TimbreNote> notes,
                                             const TimbreOptions& options) {

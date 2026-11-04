@@ -40,7 +40,7 @@ std::vector<Onset> onsetsOf(const Phrase& p, std::int64_t grid) {
     for (const CleanNote& n : p.notes) {
         const std::int64_t slot = snap(n.start - p.start, grid) / std::max<std::int64_t>(1, grid);
         auto [it, inserted] = bySlot.try_emplace(slot, n.pitch);
-        if (!inserted && n.pitch > it->second) {
+        if (!inserted && std::cmp_greater(n.pitch, it->second)) {
             it->second = n.pitch;
         }
     }
@@ -79,7 +79,7 @@ bool isSubsequence(const std::string& sub, const std::string& super) {
 }
 
 const std::vector<std::string>& candidateForms() {
-    static const std::vector<std::string> forms = {
+    static const std::vector<std::string> kForms = {
         "AAA",   "AAAA",               // strophic
         "AB",    "AABB",               // binary
         "ABA",   "ABABA",              // ternary
@@ -87,17 +87,17 @@ const std::vector<std::string>& candidateForms() {
         "ABAB",  "ABABCB",  "ABABCAB", // verse-chorus
         "AABA",                        // 32-bar song form
     };
-    return forms;
+    return kForms;
 }
 
 /// Weighted by how common each form is in the pop material this targets, so the
 /// verse-chorus-bridge grammar is learnt as normal.
 const std::vector<std::pair<std::string, int>>& trainingForms() {
-    static const std::vector<std::pair<std::string, int>> forms = {
+    static const std::vector<std::pair<std::string, int>> kForms = {
         {"ABABCB", 5},  {"ABABCAB", 3}, {"ABAB", 3}, {"AABA", 2}, {"ABA", 2},  {"ABACA", 2},
         {"ABACABA", 1}, {"ABABA", 1},   {"AAAA", 1}, {"AB", 1},   {"AABB", 1},
     };
-    return forms;
+    return kForms;
 }
 
 /// First-order Markov over A..F with add-one smoothing.
@@ -157,8 +157,8 @@ private:
 };
 
 const Markov& markov() {
-    static const Markov model;
-    return model;
+    static const Markov kModel;
+    return kModel;
 }
 
 /// ±1 slot forgives a humanised or unquantized extraction.
@@ -313,7 +313,7 @@ std::string matchKnownForm(const std::string& form) {
     if (std::ranges::all_of(c, [&](char ch) { return ch == c[0]; })) {
         return "Strophic";
     }
-    static const std::map<std::string, std::string> known = {
+    static const std::map<std::string, std::string> kKnown = {
         {"AB", "Binary"},
         {"AABB", "Binary"},
         {"ABA", "Ternary"},
@@ -325,12 +325,12 @@ std::string matchKnownForm(const std::string& form) {
         {"ABABCAB", "Verse-Chorus"},
         {"AABA", "Song Form (AABA)"},
     };
-    const auto it = known.find(c);
-    return it != known.end() ? it->second : "Freeform";
+    const auto it = kKnown.find(c);
+    return it != kKnown.end() ? it->second : "Freeform";
 }
 
 std::string blueprintFor(const std::string& observedForm) {
-    const std::string observed = canonicalForm(observedForm);
+    std::string observed = canonicalForm(observedForm);
     if (observed.empty()) {
         return observed;
     }

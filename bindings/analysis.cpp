@@ -118,8 +118,9 @@ Request requestOf(const std::string& kind, const py::dict& params) {
     if (params.contains("name")) {
         r.name = params["name"].cast<std::string>();
     }
-    static const std::vector<std::string> kinds{"key", "chords", "bpm", "timbre", "melody", "form"};
-    if (std::ranges::find(kinds, kind) == kinds.end()) {
+    static const std::vector<std::string> kKinds{"key",    "chords", "bpm",
+                                                 "timbre", "melody", "form"};
+    if (std::ranges::find(kKinds, kind) == kKinds.end()) {
         throw py::value_error("unknown analysis '" + kind + "'");
     }
     if ((kind == "bpm" || kind == "timbre" || kind == "melody") && r.path.empty()) {
@@ -141,10 +142,7 @@ Request requestOf(const std::string& kind, const py::dict& params) {
 }
 
 bool loadAudio(const Request& r, std::uint32_t rate, an::MonoAudio& audio, Outcome& out) {
-    if (!an::loadMono(r.path, rate, audio, out.error)) {
-        return false;
-    }
-    return true;
+    return an::loadMono(r.path, rate, audio, out.error);
 }
 
 an::Chromagram chromaOf(const Request& r, an::AnalysisControl& control, Outcome& out, bool& ok) {

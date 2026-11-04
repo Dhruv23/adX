@@ -35,6 +35,7 @@ std::vector<Chord> progression(const analysis::Key& key, const std::vector<int>&
         chord.degree = degree;
         const int count = sevenths ? 4 : 3;
         std::vector<int> tones;
+        tones.reserve(static_cast<std::size_t>(count));
         for (int i = 0; i < count; ++i) {
             tones.push_back(scalePitch(key, tonic, degree - 1 + (2 * i)));
         }

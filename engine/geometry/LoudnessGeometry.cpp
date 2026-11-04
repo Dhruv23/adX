@@ -2,6 +2,7 @@
 #include "engine/geometry/LoudnessGeometry.h"
 
 #include <algorithm>
+#include <array>
 
 #include "engine/geometry/ColorPalette.h"
 #include "engine/geometry/Vertices.h"
@@ -28,13 +29,13 @@ void LoudnessGeometry::build(const rt::LevelFrame& master, const LoudnessStyle& 
 
     const float floor = style.floorLufs;
     const auto yOf = [floor](float lufs) { return std::clamp(lufs / floor, 0.0F, 1.0F); };
-    writeVertices(m_bars, 6 * 6, [&](VertexWriter& w) {
-        const float values[] = {master.momentary, master.shortTerm, master.integrated};
+    writeVertices(m_bars, std::size_t{6} * 6, [&](VertexWriter& w) {
+        const std::array<float, 3> values{master.momentary, master.shortTerm, master.integrated};
         for (int i = 0; i < 3; ++i) {
             const float x0 = 0.02F + (0.1F * static_cast<float>(i));
             const float x1 = x0 + 0.08F;
             w.quad(x0, 0.0F, x1, 1.0F, ColorRole::kMeterBack);
-            w.quad(x0, yOf(values[i]), x1, 1.0F,
+            w.quad(x0, yOf(values.at(static_cast<std::size_t>(i))), x1, 1.0F,
                    i == 2 ? ColorRole::kCorrelation : ColorRole::kLoudness);
         }
     });

@@ -147,19 +147,20 @@ TEST_CASE("timbre_analyzer_recovers_patch", "[analysis]") {
 
     const std::vector<std::uint8_t> pitches{48, 52, 55, 60, 64, 67, 57, 62};
     const Played reference = play(truth, pitches);
-    const auto analysis = analyzeTimbre(reference.mono, kRate, reference.notes);
-    REQUIRE(analysis.has_value());
-    CHECK(analysis->notesMeasured == pitches.size());
-    CHECK(analysis->preset.type == "additive");
+    const auto measured = analyzeTimbre(reference.mono, kRate, reference.notes);
+    REQUIRE(measured.has_value());
+    const TimbreAnalysis analysis = measured.value_or(TimbreAnalysis{});
+    CHECK(analysis.notesMeasured == pitches.size());
+    CHECK(analysis.preset.type == "additive");
     for (const auto& [k, level] : harmonics) {
-        CHECK_THAT(analysis->harmonics[static_cast<std::size_t>(k - 1)],
+        CHECK_THAT(analysis.harmonics[static_cast<std::size_t>(k - 1)],
                    Catch::Matchers::WithinAbs(level, 0.03));
     }
-    CHECK(analysis->harmonics[5] < 0.01F); // harmonic 6 was never there
+    CHECK(analysis.harmonics[5] < 0.01F); // harmonic 6 was never there
 
     // The preset, applied to a default patch by name, renders the same spectrum.
     std::vector<float> recovered = instrumentParams(type);
-    for (const adx::project::ParamValue& p : analysis->preset.params) {
+    for (const adx::project::ParamValue& p : analysis.preset.params) {
         recovered[instrumentParamIndex(type, p.name)] = static_cast<float>(p.value);
     }
     const Played rendered = play(recovered, pitches);
@@ -175,11 +176,11 @@ TEST_CASE("timbre_analyzer_recovers_patch", "[analysis]") {
         }
     }
     CHECK(compared >= 8);
-    CHECK_THAT(analysis->sustain, Catch::Matchers::WithinAbs(0.8, 0.08));
+    CHECK_THAT(analysis.sustain, Catch::Matchers::WithinAbs(0.8, 0.08));
 }
 
 TEST_CASE("timbre_analyzer_declines_without_usable_notes", "[analysis]") {
-    const std::vector<float> silence(kRate * 2, 0.0F);
+    const std::vector<float> silence(std::size_t{kRate} * 2, 0.0F);
     const std::vector<TimbreNote> shortNote{{.startSeconds = 0.1, .seconds = 0.05, .pitch = 60}};
     CHECK_FALSE(analyzeTimbre(silence, kRate, shortNote).has_value());
     const std::vector<TimbreNote> silent{{.startSeconds = 0.1, .seconds = 1.0, .pitch = 60}};
@@ -190,6 +191,7 @@ TEST_CASE("timbre_analyzer_declines_without_usable_notes", "[analysis]") {
 
 TEST_CASE("track_cleaner_stages_pure", "[analysis]") {
     const std::vector<CleanNote> notes = song("ABABB", kPhrase, 120, 3);
+    // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) - the snapshot is the point.
     const std::vector<CleanNote> copy = notes;
 
     CHECK(segmentPhrases(notes, kPhrase) == segmentPhrases(notes, kPhrase));
@@ -222,9 +224,11 @@ TEST_CASE("track_cleaner_form_detection", "[analysis]") {
         std::string name;
     };
     const std::vector<Case> corpus{
-        {"AABA", "Song Form (AABA)"}, {"ABAB", "Verse-Chorus"}, {"ABABCB", "Verse-Chorus"},
-        {"ABACA", "Rondo"},           {"ABA", "Ternary"},       {"AAAA", "Strophic"},
-        {"AABB", "Binary"},           {"ABACABA", "Rondo"},     {"ABABCAB", "Verse-Chorus"},
+        {.form = "AABA", .name = "Song Form (AABA)"}, {.form = "ABAB", .name = "Verse-Chorus"},
+        {.form = "ABABCB", .name = "Verse-Chorus"},   {.form = "ABACA", .name = "Rondo"},
+        {.form = "ABA", .name = "Ternary"},           {.form = "AAAA", .name = "Strophic"},
+        {.form = "AABB", .name = "Binary"},           {.form = "ABACABA", .name = "Rondo"},
+        {.form = "ABABCAB", .name = "Verse-Chorus"},
     };
     std::uint32_t seed = 1;
     for (const Case& c : corpus) {

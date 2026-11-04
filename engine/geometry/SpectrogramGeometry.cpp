@@ -20,17 +20,18 @@ struct Rgb {
 
 /// Dark blue through magenta and orange to near white, by level 0..1.
 Rgb ramp(float t) noexcept {
-    constexpr std::array<Rgb, 5> kStops{{{0.02F, 0.02F, 0.08F},
-                                         {0.20F, 0.05F, 0.45F},
-                                         {0.70F, 0.15F, 0.55F},
-                                         {0.98F, 0.55F, 0.15F},
-                                         {1.00F, 0.97F, 0.85F}}};
+    constexpr std::array<Rgb, 5> kStops{{{.r = 0.02F, .g = 0.02F, .b = 0.08F},
+                                         {.r = 0.20F, .g = 0.05F, .b = 0.45F},
+                                         {.r = 0.70F, .g = 0.15F, .b = 0.55F},
+                                         {.r = 0.98F, .g = 0.55F, .b = 0.15F},
+                                         {.r = 1.00F, .g = 0.97F, .b = 0.85F}}};
     const float scaled = std::clamp(t, 0.0F, 1.0F) * static_cast<float>(kStops.size() - 1);
     const auto i = std::min(static_cast<std::size_t>(scaled), kStops.size() - 2);
     const float f = scaled - static_cast<float>(i);
     const Rgb& a = kStops.at(i);
     const Rgb& b = kStops.at(i + 1);
-    return {a.r + ((b.r - a.r) * f), a.g + ((b.g - a.g) * f), a.b + ((b.b - a.b) * f)};
+    return {
+        .r = a.r + ((b.r - a.r) * f), .g = a.g + ((b.g - a.g) * f), .b = a.b + ((b.b - a.b) * f)};
 }
 
 std::uint8_t byte(float v) noexcept {

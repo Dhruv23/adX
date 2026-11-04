@@ -54,11 +54,12 @@ GeneratedTrack stakillazTrack(const preset::PresetLibrary& presets, const StyleO
     const std::int64_t phrases =
         std::max<std::int64_t>(6, (static_cast<std::int64_t>(options.bars) + 3) / 4);
     const std::int64_t drops = std::max<std::int64_t>(1, (phrases - 4) / 2);
-    const std::vector<Section> form{{"Intro", 4},
-                                    {"Build", 4},
-                                    {"Drop", 4 * drops},
-                                    {"Break", 4},
-                                    {"Drop 2", 4 * std::max<std::int64_t>(1, phrases - 4 - drops)}};
+    const std::vector<Section> form{
+        {.name = "Intro", .bars = 4},
+        {.name = "Build", .bars = 4},
+        {.name = "Drop", .bars = 4 * drops},
+        {.name = "Break", .bars = 4},
+        {.name = "Drop 2", .bars = 4 * std::max<std::int64_t>(1, phrases - 4 - drops)}};
 
     const std::vector<int>& degrees =
         kIdioms.at(static_cast<std::size_t>(roll(random, 0, static_cast<int>(kIdioms.size()) - 1)));
@@ -131,8 +132,8 @@ GeneratedTrack stakillazTrack(const preset::PresetLibrary& presets, const StyleO
             }
         }
         std::vector<std::pair<core::ChannelId, std::vector<GenNote>>> parts;
-        for (auto& [channel, notes] : {std::pair{kick, kicks}, std::pair{sub, subs},
-                                       std::pair{bass, rolls}, std::pair{lead, leads}}) {
+        for (const auto& [channel, notes] : {std::pair{kick, kicks}, std::pair{sub, subs},
+                                             std::pair{bass, rolls}, std::pair{lead, leads}}) {
             if (!notes.empty()) {
                 parts.emplace_back(channel, notes);
             }

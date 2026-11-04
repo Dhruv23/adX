@@ -26,13 +26,13 @@ namespace {
 using namespace adx::generate;
 
 const adx::preset::PresetLibrary& packs() {
-    static const adx::preset::PresetLibrary library = [] {
+    static const adx::preset::PresetLibrary kLibrary = [] {
         adx::preset::PresetLibrary l;
         adx::format::DiagnosticList diagnostics;
         l.scan(adx::preset::packsDirectory(adx::tests::repoRoot()), diagnostics);
         return l;
     }();
-    return library;
+    return kLibrary;
 }
 
 std::string textOf(const GeneratedTrack& track) {

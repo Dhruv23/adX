@@ -13,11 +13,12 @@ namespace adx::graph {
 namespace {
 // At namespace scope, built before main: a function-local static could take its
 // initialisation lock on the audio thread's first block.
-NodeProfile g_nodeProfile;
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables) - the profile counters.
+NodeProfile gNodeProfile;
 } // namespace
 
 NodeProfile& nodeProfile() noexcept {
-    return g_nodeProfile;
+    return gNodeProfile;
 }
 namespace {
 

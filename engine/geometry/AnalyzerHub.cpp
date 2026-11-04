@@ -185,8 +185,9 @@ void AnalyzerHub::frame(const rt::LevelFrame& master, double dtSeconds) {
     if (settings.scope || settings.vector || settings.particles) {
         // The newest frames straight from the tap: any thread may read it.
         const std::size_t want = std::min<std::size_t>(
-            m_recent.size(), std::max<std::size_t>({2U * settings.scopeStyle.windowFrames,
-                                                    settings.vectorStyle.windowFrames, 1024U}));
+            m_recent.size(),
+            std::max<std::size_t>({std::size_t{2} * settings.scopeStyle.windowFrames,
+                                   settings.vectorStyle.windowFrames, 1024U}));
         const std::size_t got = m_tap.readLatest(m_recent.data(), want);
         const std::span<const rt::StereoFrame> recent(m_recent.data(), got);
         if (settings.scope) {

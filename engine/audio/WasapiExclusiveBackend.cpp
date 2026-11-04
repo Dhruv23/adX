@@ -36,17 +36,17 @@ Error failure(Error::Code code, std::string_view message) {
 
 /// What the device takes, in the order tried: float first (no conversion), then the
 /// integer layouts drivers that refuse float in exclusive mode usually accept.
-enum class SampleFormat : std::uint8_t { Float32, Pcm32, Pcm24, Pcm16 };
+enum class SampleFormat : std::uint8_t { kFloat32, kPcm32, kPcm24, kPcm16 };
 
 constexpr std::string_view formatText(SampleFormat format) noexcept {
     switch (format) {
-    case SampleFormat::Float32:
+    case SampleFormat::kFloat32:
         return "float32";
-    case SampleFormat::Pcm32:
+    case SampleFormat::kPcm32:
         return "pcm24in32";
-    case SampleFormat::Pcm24:
+    case SampleFormat::kPcm24:
         return "pcm24";
-    case SampleFormat::Pcm16:
+    case SampleFormat::kPcm16:
         return "pcm16";
     }
     return "";
@@ -68,12 +68,12 @@ template<class T> void release(T*& pointer) noexcept {
 WAVEFORMATEXTENSIBLE waveFormat(SampleFormat format, std::uint32_t rate, std::uint32_t channels) {
     WORD container = 32;
     WORD valid = 32;
-    if (format == SampleFormat::Pcm32) {
+    if (format == SampleFormat::kPcm32) {
         valid = 24;
-    } else if (format == SampleFormat::Pcm24) {
+    } else if (format == SampleFormat::kPcm24) {
         container = 24;
         valid = 24;
-    } else if (format == SampleFormat::Pcm16) {
+    } else if (format == SampleFormat::kPcm16) {
         container = 16;
         valid = 16;
     }
@@ -87,8 +87,8 @@ WAVEFORMATEXTENSIBLE waveFormat(SampleFormat format, std::uint32_t rate, std::ui
     out.Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
     out.Samples.wValidBitsPerSample = valid;
     out.dwChannelMask = channels == 2 ? (SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT) : 0;
-    out.SubFormat = format == SampleFormat::Float32 ? KSDATAFORMAT_SUBTYPE_IEEE_FLOAT
-                                                    : KSDATAFORMAT_SUBTYPE_PCM;
+    out.SubFormat = format == SampleFormat::kFloat32 ? KSDATAFORMAT_SUBTYPE_IEEE_FLOAT
+                                                     : KSDATAFORMAT_SUBTYPE_PCM;
     return out;
 }
 
@@ -121,7 +121,7 @@ struct WasapiExclusiveBackend::Device {
     IAudioClock* clock{nullptr};
     HANDLE event{nullptr};
     std::thread thread;
-    SampleFormat format{SampleFormat::Float32};
+    SampleFormat format{SampleFormat::kFloat32};
     std::uint32_t bufferFrames{0};
     std::uint64_t clockFrequency{0};
     /// Frames handed to the device since start, the silent first buffer included: the
@@ -236,8 +236,8 @@ Error WasapiExclusiveBackend::open(const StreamConfig& config, RenderCallback ca
         return fail(Error::Code::BackendFailure, "could not activate the output device");
     }
 
-    constexpr std::array kFormats{SampleFormat::Float32, SampleFormat::Pcm32, SampleFormat::Pcm24,
-                                  SampleFormat::Pcm16};
+    constexpr std::array kFormats{SampleFormat::kFloat32, SampleFormat::kPcm32,
+                                  SampleFormat::kPcm24, SampleFormat::kPcm16};
     bool supported = false;
     WAVEFORMATEXTENSIBLE format{};
     for (const SampleFormat candidate : kFormats) {
@@ -434,17 +434,17 @@ void WasapiExclusiveBackend::renderInto(std::uint8_t* target, std::uint32_t fram
     const std::size_t count = static_cast<std::size_t>(frames) * channels;
     const auto clamp = [](float v) { return std::clamp(v, -1.0F, 1.0F); };
     switch (d.format) {
-    case SampleFormat::Float32:
+    case SampleFormat::kFloat32:
         std::copy_n(m_scratch.data(), count, reinterpret_cast<float*>(target));
         break;
-    case SampleFormat::Pcm32: {
+    case SampleFormat::kPcm32: {
         auto* out = reinterpret_cast<std::int32_t*>(target);
         for (std::size_t i = 0; i < count; ++i) {
             out[i] = static_cast<std::int32_t>(std::lrint(clamp(m_scratch[i]) * 8388607.0F)) << 8;
         }
         break;
     }
-    case SampleFormat::Pcm24:
+    case SampleFormat::kPcm24:
         for (std::size_t i = 0; i < count; ++i) {
             const auto v = static_cast<std::int32_t>(std::lrint(clamp(m_scratch[i]) * 8388607.0F));
             target[(3 * i) + 0] = static_cast<std::uint8_t>(v & 0xFF);
@@ -452,7 +452,7 @@ void WasapiExclusiveBackend::renderInto(std::uint8_t* target, std::uint32_t fram
             target[(3 * i) + 2] = static_cast<std::uint8_t>((v >> 16) & 0xFF);
         }
         break;
-    case SampleFormat::Pcm16: {
+    case SampleFormat::kPcm16: {
         auto* out = reinterpret_cast<std::int16_t*>(target);
         for (std::size_t i = 0; i < count; ++i) {
             out[i] = static_cast<std::int16_t>(std::lrint(clamp(m_scratch[i]) * 32767.0F));
@@ -486,7 +486,7 @@ std::int64_t WasapiExclusiveBackend::onsetPlayTime() const noexcept {
 #else
 
 struct WasapiExclusiveBackend::Device {
-    SampleFormat format{SampleFormat::Float32};
+    SampleFormat format{SampleFormat::kFloat32};
 };
 
 WasapiExclusiveBackend::WasapiExclusiveBackend() : m_device(std::make_unique<Device>()) {}

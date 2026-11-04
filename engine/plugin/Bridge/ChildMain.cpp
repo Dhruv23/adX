@@ -375,6 +375,9 @@ private:
     static bool restart(Hosted& hosted, std::string& error) {
         const std::scoped_lock lock(hosted.busy);
         const bool ok = hosted.plugin->restart(error);
+        // Blocks that ran between the request and this lock asked again for the same
+        // restart; the plugin now has its new latency, so those asks are stale.
+        hosted.pending.store(0);
         hosted.shared->control.latency.store(hosted.plugin->latency());
         hosted.shared->control.status.fetch_or(bridge::kLatencyChanged);
         return ok;

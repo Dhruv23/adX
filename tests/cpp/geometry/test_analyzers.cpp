@@ -86,8 +86,8 @@ TEST_CASE("analyzer_hub_spectrum_finds_the_tone", "[geometry][analyzers]") {
     const auto columns = hub.spectrum().columns();
     const auto loudest =
         static_cast<std::size_t>(std::ranges::max_element(columns) - columns.begin());
-    const double hzOfColumn =
-        20.0 * std::pow(1000.0, (static_cast<double>(loudest) + 0.5) / columns.size());
+    const double hzOfColumn = 20.0 * std::pow(1000.0, (static_cast<double>(loudest) + 0.5) /
+                                                          static_cast<double>(columns.size()));
     CHECK(std::abs(std::log2(hzOfColumn / 1000.0)) < 0.05); // within a semitone
     // A half-scale sine reads about -6 dB.
     CHECK_THAT(columns[loudest], Catch::Matchers::WithinAbs(-6.0, 1.5));
@@ -153,9 +153,11 @@ TEST_CASE("spectrogram_ring_fixed", "[geometry][analyzers]") {
     SpectrogramGeometry s;
     s.configure(4, 8);
     s.push(std::vector<float>(1025, -85.0F), 48000);
-    const int dark = s.pixels()[(s.head() * 8 * 4)] + s.pixels()[(s.head() * 8 * 4) + 1];
+    const int dark = s.pixels()[(std::size_t{s.head()} * 8 * 4)] +
+                     s.pixels()[(std::size_t{s.head()} * 8 * 4) + 1];
     s.push(std::vector<float>(1025, -3.0F), 48000);
-    const int bright = s.pixels()[(s.head() * 8 * 4)] + s.pixels()[(s.head() * 8 * 4) + 1];
+    const int bright = s.pixels()[(std::size_t{s.head()} * 8 * 4)] +
+                       s.pixels()[(std::size_t{s.head()} * 8 * 4) + 1];
     CHECK(bright > dark + 200);
 }
 
@@ -189,7 +191,7 @@ TEST_CASE("particles_pool_bounded", "[geometry][analyzers]") {
     b.build(hit, 0.016);
     const auto fa = a.particles().floats();
     const auto fb = b.particles().floats();
-    CHECK(std::equal(fa.begin(), fa.end(), fb.begin(), fb.end()));
+    CHECK(std::ranges::equal(fa, fb));
 }
 
 TEST_CASE("scope_triggers_on_a_rising_crossing", "[geometry][analyzers]") {
@@ -203,7 +205,7 @@ TEST_CASE("scope_triggers_on_a_rising_crossing", "[geometry][analyzers]") {
     const std::size_t start = scope.lastStart();
     CHECK(tone[start - 1].left < 0.0F);
     CHECK(tone[start].left >= 0.0F);
-    CHECK(scope.lines().vertexCount() == (960 - 1) * 4);
+    CHECK(scope.lines().vertexCount() == std::size_t{960 - 1} * 4);
     // Hold keeps the trace.
     style.hold = true;
     const std::uint64_t revision = scope.lines().revision();
@@ -254,7 +256,7 @@ TEST_CASE("loudness_history_scrolls", "[geometry][analyzers]") {
     }
     CHECK(loudness.integrated() == -16.0F);
     CHECK(loudness.bars().vertexCount() == 36);
-    CHECK(loudness.history().vertexCount() == (8 - 1) * 2); // a full ring of segments
+    CHECK(loudness.history().vertexCount() == std::size_t{8 - 1} * 2); // a full ring of segments
     loudness.reset();
     loudness.build(frame, style);
     CHECK(loudness.history().vertexCount() == 0);
@@ -295,6 +297,7 @@ TEST_CASE("visualizer_no_audio_thread_work", "[geometry][analyzers][.slow]") {
         const std::size_t got =
             engine.audio().callbacks().timingTap().readLatest(timings.data(), timings.size());
         std::vector<double> us;
+        us.reserve(got);
         for (std::size_t i = 0; i < got; ++i) {
             us.push_back(timings[i].durationNs / 1000.0);
         }

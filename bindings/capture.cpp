@@ -9,6 +9,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "bindings/Bindings.h"
@@ -38,7 +39,8 @@ void defineEngineCapture(py::class_<EngineHandle>& engine) {
             const auto& ring = self.engine->audio().callbacks().timingTap();
             const std::uint64_t written = ring.framesWritten();
             const auto wanted = static_cast<std::size_t>(written > since ? written - since : 0);
-            std::vector<adx::audio::CallbackTiming> got(std::min(wanted, ring.capacity()));
+            std::vector<adx::audio::CallbackTiming> got(
+                std::min(wanted, std::remove_cvref_t<decltype(ring)>::capacity()));
             std::uint64_t lost = 0;
             const std::uint64_t first = written - got.size();
             const std::size_t read =

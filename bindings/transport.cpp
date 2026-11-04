@@ -155,6 +155,7 @@ makeEngine(std::uint32_t sampleRate, std::uint32_t blockFrames, std::uint32_t ou
     return handle;
 }
 
+// NOLINTNEXTLINE(readability-function-size) - the Engine class's bindings, one .def each.
 void defineEngine(py::module_& m) {
     py::class_<EngineHandle> engine(
         m, "Engine", "The render engine: a stream, a transport, and the project it plays.");

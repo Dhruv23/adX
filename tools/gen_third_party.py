@@ -67,7 +67,8 @@ def manifest() -> list[tuple[str, str, str, str, str]]:
         )
     if missing:
         raise SystemExit(
-            f"gen_third_party: no '# adx-license:' line above {', '.join(missing)} in {MANIFEST.name}"
+            f"gen_third_party: no '# adx-license:' line above "
+            f"{', '.join(missing)} in {MANIFEST.name}"
         )
     return out
 
