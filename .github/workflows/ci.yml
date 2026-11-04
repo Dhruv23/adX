@@ -38,6 +38,16 @@ jobs:
     # About an hour when green (clang-tidy is most of it). Without a limit a hang runs
     # into GitHub's six hours, as Phase 7's first push did.
     timeout-minutes: 120
+    # sccache puts compiler output in the Actions cache, so an unchanged translation unit
+    # is not recompiled. CMake reads the launcher variables from the environment for both
+    # the preset build and the scikit-build-core build under `pip install -e`. MSVC's
+    # default /Zi writes debug info to a shared PDB, which sccache cannot cache; /Z7
+    # (Embedded) can, so it is set for both builds.
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      SKBUILD_CMAKE_DEFINE: CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
     strategy:
       fail-fast: false
       matrix:
@@ -89,6 +99,9 @@ jobs:
         with:
           arch: x64
 
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Cache dependency sources
         uses: actions/cache@v4
         with:
@@ -111,11 +124,15 @@ jobs:
 
       # 3. Configure and build.
       - name: Configure
-        run: cmake --preset ${{ matrix.preset }}
+        run: cmake --preset ${{ matrix.preset }} -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
 
       - name: Build
         id: build
         run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: sccache stats
+        if: ${{ !cancelled() }}
+        run: sccache --show-stats
 
       # 4. The Python package, before any test: it is also what installs the pinned
       # ruff, mypy and clang-tidy. Installed after ctest, one failing test skipped the
