@@ -201,7 +201,8 @@ TEST_CASE("plugin_latency_change_midplay", "[plugin][pdc]") {
     };
     CHECK(waitFor([&] { return ours() >= 1; }, 3.0));
     CHECK(ours() == 1);
-    CHECK(changed() != nullptr);
+    // The rebuild may swap in a fresh instance, so the old one is checked directly.
+    CHECK(moved->latency() == 64);
 }
 
 TEST_CASE("plugin_state_roundtrip", "[plugin][state]") {
