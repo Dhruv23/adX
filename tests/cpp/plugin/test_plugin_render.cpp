@@ -163,7 +163,7 @@ TEST_CASE("plugin_latency_change_midplay", "[plugin][pdc]") {
     tests::OfflineRig const rig(256);
     REQUIRE(rig.engine->setProject(project, 0).rebuilt);
     rig.engine->play();
-    static_cast<void>(rig.render(std::uint64_t{256} * 150));
+    static_cast<void>(rig.render(std::uint64_t{256} * 120));
     // Wait on the instance, not on a notice: a notice from an earlier test's instance can
     // still be on its way, and on a slow machine it arrives first.
     std::vector<bridge::Notice> notices;
@@ -187,11 +187,13 @@ TEST_CASE("plugin_latency_change_midplay", "[plugin][pdc]") {
             return moved != nullptr;
         },
         3.0));
+    // Short renders after the change: the plugin moves again 100 blocks after every restart,
+    // and a quick restart must not leave room for that.
     // One recompensation: the app answers the notice with a rebuild, and the plan now
     // holds the new latency. The notice is the log line.
-    static_cast<void>(rig.render(std::uint64_t{256} * 50));
+    static_cast<void>(rig.render(std::uint64_t{256} * 20));
     REQUIRE(rig.engine->setProject(project, 1).rebuilt);
-    static_cast<void>(rig.render(std::uint64_t{256} * 50));
+    static_cast<void>(rig.render(std::uint64_t{256} * 20));
     const auto ours = [&] {
         grow();
         return std::ranges::count_if(notices, [&](const bridge::Notice& notice) {
