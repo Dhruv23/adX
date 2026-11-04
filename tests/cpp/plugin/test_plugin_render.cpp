@@ -164,13 +164,27 @@ TEST_CASE("plugin_latency_change_midplay", "[plugin][pdc]") {
     REQUIRE(rig.engine->setProject(project, 0).rebuilt);
     rig.engine->play();
     static_cast<void>(rig.render(std::uint64_t{256} * 150));
+    // Wait on the instance, not on a notice: a notice from an earlier test's instance can
+    // still be on its way, and on a slow machine it arrives first.
     std::vector<bridge::Notice> notices;
+    const auto grow = [&] {
+        const auto n = host.takeNotices();
+        notices.insert(notices.end(), n.begin(), n.end());
+    };
+    const auto changed = [&]() -> std::shared_ptr<bridge::RemoteInstance> {
+        for (const auto& instance : host.instances()) {
+            if (instance->plugin().uid == "com.adx.test.effect" && instance->latency() == 64) {
+                return instance;
+            }
+        }
+        return nullptr;
+    };
+    std::shared_ptr<bridge::RemoteInstance> moved;
     REQUIRE(waitFor(
         [&] {
-            const auto n = host.takeNotices();
-            notices.insert(notices.end(), n.begin(), n.end());
-            return std::ranges::count(notices, bridge::Notice::Kind::LatencyChanged,
-                                      &bridge::Notice::kind) > 0;
+            grow();
+            moved = changed();
+            return moved != nullptr;
         },
         3.0));
     // One recompensation: the app answers the notice with a rebuild, and the plan now
@@ -178,17 +192,16 @@ TEST_CASE("plugin_latency_change_midplay", "[plugin][pdc]") {
     static_cast<void>(rig.render(std::uint64_t{256} * 50));
     REQUIRE(rig.engine->setProject(project, 1).rebuilt);
     static_cast<void>(rig.render(std::uint64_t{256} * 50));
-    const auto more = host.takeNotices();
-    notices.insert(notices.end(), more.begin(), more.end());
-    CHECK(std::ranges::count(notices, bridge::Notice::Kind::LatencyChanged,
-                             &bridge::Notice::kind) == 1);
-    bool found = false;
-    for (const auto& instance : host.instances()) {
-        if (instance->plugin().uid == "com.adx.test.effect" && instance->latency() == 64) {
-            found = true;
-        }
-    }
-    CHECK(found);
+    const auto ours = [&] {
+        grow();
+        return std::ranges::count_if(notices, [&](const bridge::Notice& notice) {
+            return notice.kind == bridge::Notice::Kind::LatencyChanged &&
+                   notice.instance == moved->id();
+        });
+    };
+    CHECK(waitFor([&] { return ours() >= 1; }, 3.0));
+    CHECK(ours() == 1);
+    CHECK(changed() != nullptr);
 }
 
 TEST_CASE("plugin_state_roundtrip", "[plugin][state]") {
