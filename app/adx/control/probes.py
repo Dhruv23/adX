@@ -75,6 +75,8 @@ def state(window: MainWindow) -> dict[str, Any]:
                 "class": type(modal).__name__,
                 "name": modal.objectName(),
                 "title": modal.windowTitle(),
+                # A message box's own words: what a scenario that met one needs to say.
+                "text": str(modal.property("text") or "")[:500],
             }
             if modal is not None
             else None
