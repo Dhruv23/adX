@@ -16,11 +16,11 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Qt, QTimer, QUrl, Slot
 from PySide6.QtGui import QColor
 from PySide6.QtQuick import QQuickItem
-from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from adx.engine_bridge import PeakCache, Peaks, WaveformGeometry
 from adx.panels.base import DockPanel
+from adx.panels.quick_host import QuickHost
 from adx.quick import ULong, call
 from adx.theme.tokens import DARK, Theme, qml_palette, role_colors
 
@@ -109,8 +109,7 @@ class WaveformView(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         self.status = QLabel("No file")
         layout.addWidget(self.status)
-        self.quick = QQuickWidget()
-        self.quick.setResizeMode(QQuickWidget.ResizeMode.SizeRootObjectToView)
+        self.quick = QuickHost()
         self.input = WaveInput(self)
         self.quick.rootContext().setContextProperty("waveInput", self.input)
         self.quick.rootContext().setContextProperty("adxTheme", qml_palette(DARK))

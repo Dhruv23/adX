@@ -153,8 +153,30 @@ bool FmInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
     const float level = dsp::dbToGainF(render.param(levelIndex));
     const auto pitch = static_cast<float>(voice.pitch);
 
+    // The routing, unpacked once per call rather than tested bit by bit every sample:
+    // each operator's modulators in ascending order (the order the sum always had), and
+    // which operators run at all. A modulator at level 0 that no loop reads only ever
+    // outputs zero, and adding a zero to a sum begun at +0 leaves it bit for bit as it
+    // was, so it is skipped - its output stays the +0 startVoice left there.
+    std::array<std::array<std::uint8_t, kFmOperators>, kFmOperators> modList{};
+    std::array<std::uint32_t, kFmOperators> modCount{};
+    std::array<bool, kFmOperators> runs{};
+    for (std::uint32_t k = 0; k < kFmOperators; ++k) {
+        for (std::uint32_t m = 0; m < kFmOperators; ++m) {
+            if (((algo.modulators[k] >> m) & 1U) != 0) {
+                modList[k][modCount[k]++] = static_cast<std::uint8_t>(m);
+            }
+        }
+        const bool carrier = ((algo.carriers >> k) & 1U) != 0;
+        runs[k] = carrier || k == algo.feedbackFrom || state.level[k] != 0.0F;
+    }
+
     bool alive = true;
     float carrierEnv = 0.0F;
+    // Each operator's phase step, worked out again only when the note's Hz moves: the
+    // same product as before, so the same float.
+    std::array<float, kFmOperators> step{};
+    float stepsFor = -1.0F;
     dsp::MidiHz noteHzOf; // the pitch's Hz, again only when it moves
     for (std::uint32_t i = 0; i < left.size(); ++i) {
         if (!alive) {
@@ -164,28 +186,34 @@ bool FmInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
         }
         const float cents = i < render.pitchCents.size() ? render.pitchCents[i] : 0.0F;
         const float noteHz = noteHzOf(pitch + (cents * 0.01F));
+        if (noteHz != stepsFor) {
+            for (std::uint32_t k = 0; k < kFmOperators; ++k) {
+                const float hz = fixedHz[k] > 0.0F ? fixedHz[k] : noteHz * ratio[k];
+                step[k] = hz * inverseRate;
+            }
+            stepsFor = noteHz;
+        }
         float out = 0.0F;
         bool sounding = false;
         carrierEnv = 0.0F;
         // Operator 6 first: every modulator is evaluated before what it modulates.
         for (std::uint32_t k = kFmOperators; k-- > 0;) {
+            if (!runs[k]) {
+                continue;
+            }
             float modulation = 0.0F;
-            const std::uint8_t mods = algo.modulators[k];
-            for (std::uint32_t m = 0; m < kFmOperators; ++m) {
-                if (((mods >> m) & 1U) != 0) {
-                    modulation += state.output[m];
-                }
+            for (std::uint32_t n = 0; n < modCount[k]; ++n) {
+                modulation += state.output[modList[k][n]];
             }
             modulation *= kFmModIndex;
             if (k == algo.feedbackTo) {
                 modulation += feedback * 0.5F * (state.feedback1 + state.feedback2);
             }
             const float env = state.env[k].next(state.shape[k]);
-            const float hz = fixedHz[k] > 0.0F ? fixedHz[k] : noteHz * ratio[k];
             float phase = state.phase[k] + modulation;
             phase -= dsp::floorExact(phase);
-            state.output[k] = dsp::sinTurnsF(phase) * env * state.level[k];
-            state.phase[k] += hz * inverseRate;
+            state.output[k] = dsp::sinUnitF(phase) * env * state.level[k];
+            state.phase[k] += step[k];
             state.phase[k] -= dsp::floorExact(state.phase[k]);
             if (((algo.carriers >> k) & 1U) != 0) {
                 out += state.output[k];

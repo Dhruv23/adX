@@ -308,21 +308,31 @@ without one fails the build.
 
 ## 7. Definition of done
 
-- [ ] `bench_full_project` meets all eight targets. **Phase 11 is blocked until
+- [x] `bench_full_project` meets all eight targets. **Phase 11 is blocked until
       it does** — FINAL_PLAN §7 makes optimization a prerequisite, and this is
-      where that is enforced.
-- [ ] `golden_unchanged_by_optimization` passes, with any re-blessed hash
-      reviewed and justified in the commit.
-- [ ] Every §5.9 and §5.10 item exists and is tested.
-- [ ] The full suite passes with `ADX_ENABLE_ONNX=OFF`, and a clean clone builds
-      in under 5 minutes (FINAL_PLAN §8.2's actual requirement).
+      where that is enforced. (2026-11-04: the engine's six in bench_full_project
+      (CPU 8.3 %, worst block 24.2 %); UI work p99 0.49 ms and interval p99 19.0 ms
+      in bench_ui with the native Quick windows; the one-hour soak. STATE.md P10-5,
+      P10-6.)
+- [x] `golden_unchanged_by_optimization` passes, with any re-blessed hash
+      reviewed and justified in the commit. (2026-11-04: 19 hashes moved, all in the
+      changed effects and FM; listens passed. The justification goes in the Phase 10
+      commit.)
+- [x] Every §5.9 and §5.10 item exists and is tested. (2026-11-04: 22 named items;
+      three are covered under other names, `bench_one_hour_soak` written.)
+- [x] The full suite passes with `ADX_ENABLE_ONNX=OFF`, and a clean clone builds
+      in under 5 minutes (FINAL_PLAN §8.2's actual requirement). (2026-11-04: OFF is
+      the default build, and every suite passes in it. A clean clone of the working
+      tree in Release: configure 40.6 s, total 90.3 s on 32 threads.)
 - [ ] `docs/` is complete and its examples execute in CI.
 - [ ] The installer produces a working MSI, verified on a clean VM:
       `installer_clean_install` as a full-check job on a fresh GitHub-hosted Windows
       runner (this machine is Windows 11 Home, with no Windows Sandbox or Hyper-V;
       FINAL_PLAN §9, agent-run).
-- [ ] `bench_one_hour_soak` passes overnight.
-- [ ] FINAL_PLAN.md §10 Phase 10 row updated.
+- [x] `bench_one_hour_soak` passes overnight. (2026-11-04, 60 min: −0.01 MB/hour,
+      0 xruns.)
+- [x] FINAL_PLAN.md §10 Phase 10 row updated. (2026-11-04; update it again when the
+      phase is Done.)
 
 ---
 
@@ -592,3 +602,151 @@ zip, no install): Start-menu entry, `.adx` association, no administrator prompt.
 is missing. adX's own licence is not chosen: `installer/LICENSE.txt` says so, and that
 Rubber Band makes the binary GPL-2.0-or-later (FINAL_PLAN §8).
 
+
+### Session of 2026-11-04: P10-5, options 1 and 2 (code only)
+
+The user chose both the output-changing DSP work and the parallel scheduler ("options 1
+and 2 together is a good start"), as code changes only: **nothing was built, tested or
+measured this session.** Every claim below is a design claim until the next session
+builds it and re-runs `bench_full_project`.
+
+**The parallel scheduler (option 2).** Modelled on Ardour's process graph (a ready queue,
+per-node predecessor counts, the callback thread working as one of the lanes, helpers
+woken through a semaphore-like wait only when asleep):
+
+- `CompiledGraph` builds a `ParallelPlan` beside the serial plan when the builder asks
+  (`SnapshotBuilder::setParallel`, set by `RenderEngine` when it has helpers): an output
+  buffer per port, per-port gather lists, successor lists and predecessor counts.
+- Bit-exactness: a step *pulls* its inputs into lane scratch, adding the same edges in the
+  same order the serial walk pushes them (the serial edge order, filtered to one
+  accumulator), through the same PDC delay lines. Non-audio dependencies become edges: a
+  peak controller and every reader of its target parameter, steps sharing an event
+  cursor, steps sharing a node. Helpers take the audio thread's MXCSR for every job (FTZ
+  and DAZ are per thread) and run inside an RT section.
+- `engine/graph/Crew.h` is the realtime half (atomics only); `engine/render/RenderWorkers`
+  owns the threads: MMCSS "Pro Audio" at high priority for realtime engines, normal for
+  offline ones. `ADX_RENDER_WORKERS` (0 = off) or `EngineOptions::renderWorkers` set the
+  count; the default is cores - 1, at most 15. Pieces under 16 steps, and every piece while
+  the node profiler runs, stay serial.
+- Note for the gate: `bench_full_project` times the callback, so helpers' work does not
+  count against "audio-thread CPU". Total CPU across cores is not lower; the worst block
+  should be, since the critical path is one channel, one insert chain and the master.
+
+**Output-changing DSP (option 1), each needing its golden hashes re-blessed and listened
+to:** FM uses a branchless 4-term minimax sine (`dsp::sinUnitF`, error < 7e-7);
+PitchShifter and SpectralFreeze run both channels through one complex FFT (`StereoStft`)
+and read phases with a float minimax atan2 and the unit-range sine/cosine; the 4x
+oversampler (Overdrive, Saturation) folds its symmetric taps and sums in four fixed
+partial sums; MultibandComp and TransientShaper detect in float (`dsp::gainToDbF`).
+
+**Bit-exact speed-ups:** `dsp::log2` reads frexp's mantissa and exponent from the bits
+(MSVC's frexp is a CRT call, on every compressor's per-sample path); FM unpacks its routing
+once per call, recomputes phase steps only when the pitch moves, and skips zero-level
+modulators; MultibandComp and SpectralFreeze cache dB-to-gain conversions.
+
+**Tests written, not run:** `test_parallel_render.cpp` (serial vs 3-4 helpers, same hash,
+on a 64-channel synthetic project at three block sizes and on every golden project; the
+crew handshake over 5000 jobs), and float-math accuracy plus the frexp bit path in
+`test_math.cpp`.
+
+**Next session:** build all three configurations; `ADX_UPDATE_GOLDEN=1` for the hashes
+the DSP changes move (and only those - a hash moving anywhere else is a bug); the user
+listens to the changed renders; re-run `bench_full_project` and `bench/profile_nodes.py`;
+record the numbers here.
+
+### Session of 2026-11-04, later: P10-5 built and measured
+
+**Build.** Debug, RelWithDebInfo and Release all build. The first Debug build failed on
+C4324 (`alignas` padding, treated as an error) in Crew.h and Scheduler.h; both now
+push/disable it, as SpscRing.h does. clang-tidy had 8 findings, the same in all three
+databases: integer widening in Scheduler.cpp's port indexing and in the new test, and one
+`auto`. All are fixed, and 151 files are clean in each database. Every lint gate passes.
+
+**Parallel = serial.** `test_parallel_render` passes in all three builds. 3 of the 8
+golden projects reach the crew (genre_c418_seed1, genre_stakillaz_seed1 and
+sidechain_duck, 563 pieces each); the other 5 stay under the 16-step threshold. The test
+now asserts that at least 3 do, so it cannot pass vacuously.
+
+**Golden re-bless.** `ADX_UPDATE_GOLDEN=1` moved exactly 19 hashes:
+- `effect/{MultibandComp, Overdrive, PitchShifter, Saturation, SpectralFreeze,
+  TransientShaper}/{default, low, high}`;
+- `instrument/fm`.
+
+`hashes.txt`, `formats.txt`, every preset and every other effect are unchanged. No
+golden project uses a changed unit. The new hashes check clean in all three builds.
+
+**Before and after renders.** These are for the user's listening gate. The before set was
+rendered with the pre-change pyd, before anything was rebuilt. Files, A/B alternations
+and notes are in `build/p10-5_listen/` (LISTEN.md); none is committed. Difference
+after − before, re signal:
+
+| Unit | Difference |
+|---|---|
+| FM | −115 dB |
+| Overdrive | −139 dB |
+| Saturation | −128 dB |
+| MultibandComp | −126 dB |
+| TransientShaper | −152 dB |
+| SpectralFreeze, off | −138 dB |
+| SpectralFreeze, frozen | −130 dB |
+| PitchShifter +7 | **−22 dB** |
+| PitchShifter −12 | **−26 dB** |
+
+The 16 golden and example projects render bit-identical before and after.
+
+PitchShifter, in detail:
+- Its magnitude spectrogram differs by −29 / −36 dB, and its loudness is the same.
+- The vocoder amplifies rounding. A bin about two bins from a partial sits near the ±½
+  fold of its phase-advance estimate, and a flip there becomes a permanent phase jump of
+  `ratio` turns. The double-precision original has the same sensitivity.
+- What is new: a mono source no longer comes out mono. The packed FFT gives L and R
+  different rounding, and the vocoder turns that into a side channel at −45 dB RMS,
+  about 22 dB under the signal. Before, the side channel was exactly zero.
+- Options if the user rejects it are in LISTEN.md.
+
+**Bench.** `bench_full_project`, Release, 3 min, idle machine:
+
+| Metric | Target | 2026-11-03 | 2026-11-04 |
+|---|---|---|---|
+| Audio-thread CPU | < 50 % | 58.9 % | **8.3 %** |
+| Worst block | < 60 % | 96.8 % | **24.2 %** (p99 12.4 %) |
+| Dropouts | 0 | 0 | 0 xruns, 0 late |
+| Project load | < 3 s | 0.26 s | 0.26 s |
+| Rebuild after one note edit | < 2 ms | 1.61 ms | 1.60 ms median, 2.34 ms worst |
+
+The bench times the callback. The helpers' work is not in "audio-thread CPU", and total
+CPU across cores is not lower. That is the intended reading of the target (the audio
+thread's deadline), but it should be said whenever the number is quoted.
+
+`profile_nodes.py` profiles serially, so it isolates the DSP changes: wall time is 54.0 %
+of one core, down from 60.8 %, with timed nodes at 47.7 %. Per node type, before → after:
+
+| Node | Before | After |
+|---|---|---|
+| PitchShifter | 6.3 % | 4.61 % |
+| Overdrive | 5.2 % | 4.03 % |
+| FM | 6.4-7.6 % | 3.26 % |
+| MultibandComp | 3.7 % | 3.23 % |
+| Saturation | 2.6 % | 1.91 % |
+| SpectralFreeze | 2.5 % | 1.47 % |
+
+VA (3.19 %), the graph plumbing (2.96 %) and granular (2.91 %) are now among the leaders.
+
+**The two remaining §4.5 targets (P10-6).**
+- `bench_ui.py --seconds 60`:
+  - frame work passes: p99 0.45 ms against 16.6 ms;
+  - the tick interval fails: p99 27.3 ms against the 25 ms limit, about 56 Hz;
+  - the run had only `particles` in `analyzer_host.open`. The six analyzers look tabbed
+    together, with only the raised one running, so the bench needs to float or split them
+    before its number means "every analyzer open".
+- `bench_one_hour_soak` is not written.
+
+**Suite.**
+- ctest `-LE slow`: 494/494 in Debug, RelWithDebInfo and Release.
+- Debug `-L slow` with `ADX_FULL_EVIDENCE=1`: passes in 953 s, against 1797 s before
+  (P10.5-4).
+- `CI=1 pytest tests/python` passes. Its 3 skips are the GPU and installer ones.
+- All 26 scenarios pass with none skipped, `[wannacry]` included.
+- `check_launcher` passes: 24 panels, 48,384 frames, 0 xruns.
+
+Every render test now runs the parallel path by default.

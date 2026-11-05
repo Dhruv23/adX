@@ -19,6 +19,7 @@
 #include "engine/graph/EngineCore.h"
 #include "engine/project/ParamRef.h"
 #include "engine/project/SnapshotBuilder.h"
+#include "engine/render/RenderWorkers.h"
 #include "engine/rt/OverwriteRing.h"
 #include "engine/transport/LoopRegion.h"
 #include "engine/transport/TransportSet.h"
@@ -48,6 +49,10 @@ struct EngineOptions {
     /// sandboxed plugin is waited for rather than given a realtime deadline
     /// (phase_9.md §4.3).
     bool offline{false};
+    /// Helper threads a block's graph is spread over (RenderWorkers.h); negative leaves
+    /// it to defaultRenderWorkers(). 0 renders on the callback's thread alone. The
+    /// output is the same either way, bit for bit.
+    std::int32_t renderWorkers{-1};
 };
 
 struct CommitResult {
@@ -203,6 +208,9 @@ private:
     audio::AudioThread m_audio;
     graph::EngineCore m_core;
     project::SnapshotBuilder m_builder;
+    /// After the core and the builder, so its threads are joined first - though by then
+    /// the stream has stopped and nothing hands them work.
+    RenderWorkers m_workers;
 
     /// Messages the queue refused, oldest first. Anything posted while this is
     /// non-empty joins the back, so order is kept.

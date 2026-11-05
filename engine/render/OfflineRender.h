@@ -43,6 +43,9 @@ struct OfflineRenderOptions {
     std::uint64_t frames{0};
     /// Render this stem instead of the master (GraphBuilder.h). Borrowed for the call.
     const graph::StemSpec* stem{nullptr};
+    /// Helper threads (EngineOptions::renderWorkers): negative for the default. The
+    /// output does not depend on it.
+    std::int32_t renderWorkers{-1};
 };
 
 struct RenderStats {
@@ -60,6 +63,8 @@ struct RenderStats {
     RenderHash hash;
     std::size_t arenaHighWater{0};
     std::size_t arenaCapacity{0};
+    /// Pieces of blocks that ran spread over helper threads (SchedulerStats).
+    std::uint64_t parallelPieces{0};
     double wallSeconds{0.0};
     /// Non-empty when the project could not be rendered (a routing cycle).
     std::string error;

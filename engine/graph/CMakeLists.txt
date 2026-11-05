@@ -2,6 +2,7 @@ target_sources(adx_engine_static PRIVATE
     Audition.cpp
     BufferPool.cpp
     CompiledGraph.cpp
+    Crew.cpp
     DelayLine.cpp
     EngineCore.cpp
     Graph.cpp

@@ -1,7 +1,7 @@
 // Spectral effects: PitchShifter and SpectralFreeze, on one short-time Fourier frame
-// engine (StftChannel).
+// engine (StereoStft).
 //
-// StftChannel is the streaming skeleton: a Hann-windowed frame of `size` samples every
+// StereoStft is the streaming skeleton: a Hann-windowed frame of `size` samples every
 // `size / 4`, handed to the effect as a spectrum to change in place, then windowed again
 // and overlap-added. With Hann on both sides at 75% overlap the windows sum to a
 // constant 1.5, so an untouched spectrum comes back as the input, delayed by `size`
@@ -25,6 +25,7 @@
 #include <cstdint>
 
 #include "engine/dsp/Fft.h"
+#include "engine/dsp/Math.h"
 #include "engine/dsp/Noise.h"
 #include "engine/effects/Effect.h"
 #include "engine/effects/Params.h"
@@ -48,8 +49,11 @@ inline constexpr std::size_t kPitchFrame = 1024;
 inline constexpr std::size_t kFreezeFrame = 2048;
 inline constexpr std::size_t kStftOverlap = 4;
 
-/// One channel's streaming STFT. The effect owns the Fft and the per-bin state.
-class StftChannel {
+/// A stereo pair's streaming STFT: both channels' frames go through one complex FFT,
+/// the left in the real part and the right in the imaginary, and are told apart by
+/// conjugate symmetry - two real transforms for the price of one, each way. The effect
+/// owns the Fft and the per-bin state.
+class StereoStft {
 public:
     /// Main thread.
     void allocate(std::size_t size);
@@ -66,22 +70,23 @@ public:
         return static_cast<std::uint32_t>(m_size);
     }
 
-    /// One sample in, one out. When a frame is due, `frame(spectrum)` is called with the
-    /// windowed frame's spectrum (size() bins) to change in place.
+    /// One stereo sample in, one out. When a frame is due, `frame(left, right)` is
+    /// called with each channel's spectrum (size() bins, Hermitian) to change in place;
+    /// what it writes must stay Hermitian, as a real signal's spectrum is.
     template<class Frame>
-    [[nodiscard]] float process(float x, const dsp::Fft& fft, Frame&& frame) noexcept {
+    void process(float left, float right, float& outLeft, float& outRight, const dsp::Fft& fft,
+                 Frame&& frame) noexcept {
         // m_fill runs from latency() to size(): the input frame's newest hop is being
         // filled while the oldest finished hop of output plays out.
-        const std::span<float> input = m_input.view();
-        const std::span<float> output = m_output.view();
-        input[m_fill] = x;
-        const float y = output[m_fill - readOffset()];
+        m_input[0].view()[m_fill] = left;
+        m_input[1].view()[m_fill] = right;
+        outLeft = m_output[0].view()[m_fill - readOffset()];
+        outRight = m_output[1].view()[m_fill - readOffset()];
         if (++m_fill == m_size) {
             runFrame(fft);
-            frame(m_work.view());
+            frame(m_spectrum[0].view(), m_spectrum[1].view());
             finishFrame(fft);
         }
-        return y;
     }
 
 private:
@@ -94,11 +99,13 @@ private:
 
     std::size_t m_size{0};
     std::size_t m_fill{0};
-    /// The last size() input samples; the window of output being played out (hop
-    /// samples at the front are ready); the overlap-add accumulator.
-    rt::OwnedArray<float> m_input;
-    rt::OwnedArray<float> m_output;
-    rt::OwnedArray<float> m_accumulator;
+    /// Per channel: the last size() input samples; the window of output being played
+    /// out (hop samples at the front are ready); the overlap-add accumulator; the
+    /// channel's own spectrum, unpacked from the shared transform.
+    std::array<rt::OwnedArray<float>, 2> m_input;
+    std::array<rt::OwnedArray<float>, 2> m_output;
+    std::array<rt::OwnedArray<float>, 2> m_accumulator;
+    std::array<rt::OwnedArray<dsp::Complex>, 2> m_spectrum;
     rt::OwnedArray<float> m_window;
     rt::OwnedArray<dsp::Complex> m_work;
 };
@@ -124,9 +131,9 @@ private:
     void shift(std::span<dsp::Complex> spectrum, std::size_t channel) noexcept;
 
     dsp::Fft m_fft;
-    std::array<StftChannel, 2> m_stft{};
+    StereoStft m_stft;
     /// Per channel: the last analysis phase and the running synthesis phase, in turns.
-    std::array<std::array<double, kBins>, 2> m_lastPhase{};
+    std::array<std::array<float, kBins>, 2> m_lastPhase{};
     std::array<std::array<double, kBins>, 2> m_sumPhase{};
     std::array<float, kBins> m_magnitude{};
     std::array<float, kBins> m_frequency{};
@@ -159,9 +166,10 @@ private:
     void frame(std::span<dsp::Complex> spectrum, std::size_t channel) noexcept;
 
     dsp::Fft m_fft;
-    std::array<StftChannel, 2> m_stft{};
+    StereoStft m_stft;
     std::array<std::array<float, kBins>, 2> m_held{};
     dsp::WhiteNoise m_random{0xF4EE2EU};
+    dsp::DbGain m_gain;
     bool m_frozen{false};
     /// Set when the freeze turns on: the next frame of each channel is the one held.
     std::array<bool, 2> m_capture{};

@@ -10,7 +10,7 @@ import time
 
 import numpy as np
 import numpy.typing as npt
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 
 from adx.engine_bridge import LEVEL_COLUMNS, AnalyzerFrame, Analyzers, Engine, MeterGeometry
 
@@ -48,6 +48,9 @@ class FrameClock(QObject):
         self.analyzer_frame: AnalyzerFrame | None = None
         self._last = time.monotonic()
         self._timer = QTimer(self)
+        # Coarse timers on Windows land on the 15.6 ms system tick, so a 16 ms interval
+        # alternates 15.6 and 31.2 ms and the clock runs near 56 Hz (bench_ui.py).
+        self._timer.setTimerType(Qt.TimerType.PreciseTimer)
         self._timer.setInterval(interval_ms)
         self._timer.timeout.connect(self.tick)
 

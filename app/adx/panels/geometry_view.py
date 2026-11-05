@@ -1,5 +1,6 @@
-"""A QQuickWidget hosting one GeometryItem: the shared body of every Phase 6 hot surface
-(the playlist, the step grid, automation lanes, the mixer's meters).
+"""A Quick window (quick_host.QuickHost) hosting one GeometryItem: the shared body of
+every Phase 6 hot surface (the playlist, the step grid, automation lanes, the mixer's
+meters, the analyzers).
 
 Python owns the layout, the view transform and what input means; C++ builds the
 vertices (engine/geometry/) and draws them (bindings/qml/GeometryItem.h). A pan or zoom
@@ -17,10 +18,10 @@ from typing import Protocol, cast
 from PySide6.QtCore import QObject, Qt, QUrl, Signal, Slot
 from PySide6.QtGui import QColor
 from PySide6.QtQuick import QQuickItem
-from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtWidgets import QWidget
 
 from adx.engine_bridge import GeometryView as Lease
+from adx.panels.quick_host import QuickHost
 from adx.quick import ULong, call
 from adx.theme.tokens import DARK, Theme, qml_palette, role_colors
 
@@ -115,8 +116,8 @@ class _Forward(QObject):
         self.handler.on_resize(width, height)
 
 
-class GeometryView(QQuickWidget):
-    """One GeometryItem in a widget; layers declared once, uploaded per build."""
+class GeometryView(QuickHost):
+    """One GeometryItem in a Quick window; layers declared once, uploaded per build."""
 
     #: A press arrived, before the handler sees it: a new gesture, so a new history
     #: entry (the main window seals the command stack's coalescing on it).
@@ -126,7 +127,6 @@ class GeometryView(QQuickWidget):
         self, handler: InputHandler, modes: Iterable[int], parent: QWidget | None = None
     ) -> None:
         super().__init__(parent)
-        self.setResizeMode(QQuickWidget.ResizeMode.SizeRootObjectToView)
         #: Where geometry.qml delivers input - and where a test delivers it too.
         self.forward = _Forward(handler, self)
         context = self.rootContext()
@@ -192,7 +192,7 @@ class GeometryView(QQuickWidget):
         self.root.setProperty("hint", text)
 
     def apply_theme(self, theme: Theme) -> None:
-        """Recolour every layer: no new geometry. The clear colour too - a QQuickWidget
+        """Recolour every layer: no new geometry. The clear colour too - a Quick window
         clears to white, which showed through wherever no geometry was drawn."""
         self.rootContext().setContextProperty("adxTheme", qml_palette(theme))
         self.setClearColor(QColor(theme.window))

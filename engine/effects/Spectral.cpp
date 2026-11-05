@@ -15,15 +15,24 @@ constexpr float kOverlapGain = 1.5F;
     return std::sqrt((c.real() * c.real()) + (c.imag() * c.imag()));
 }
 
+/// A phase in turns, wrapped to [0, 1) in double, as the float the unit-range sine
+/// takes. The cast can round up to 1.0, which sinUnitF and cosUnitF both accept.
+[[nodiscard]] float unitPhase(double turns) noexcept {
+    return static_cast<float>(turns - dsp::floorExact(turns));
+}
+
 } // namespace
 
-// --- StftChannel -----------------------------------------------------------------------
+// --- StereoStft ------------------------------------------------------------------------
 
-void StftChannel::allocate(std::size_t size) {
+void StereoStft::allocate(std::size_t size) {
     m_size = size;
-    m_input.allocate(size);
-    m_output.allocate(size);
-    m_accumulator.allocate(size);
+    for (std::size_t c = 0; c < 2; ++c) {
+        m_input[c].allocate(size);
+        m_output[c].allocate(size);
+        m_accumulator[c].allocate(size);
+        m_spectrum[c].allocate(size);
+    }
     m_work.allocate(size);
     m_window.allocate(size);
     const std::span<float> window = m_window.view();
@@ -34,40 +43,68 @@ void StftChannel::allocate(std::size_t size) {
     reset();
 }
 
-void StftChannel::reset() noexcept {
-    std::ranges::fill(m_input.view(), 0.0F);
-    std::ranges::fill(m_output.view(), 0.0F);
-    std::ranges::fill(m_accumulator.view(), 0.0F);
+void StereoStft::reset() noexcept {
+    for (std::size_t c = 0; c < 2; ++c) {
+        std::ranges::fill(m_input[c].view(), 0.0F);
+        std::ranges::fill(m_output[c].view(), 0.0F);
+        std::ranges::fill(m_accumulator[c].view(), 0.0F);
+    }
     m_fill = readOffset();
 }
 
-void StftChannel::runFrame(const dsp::Fft& fft) noexcept {
-    const std::span<const float> input = m_input.view();
+void StereoStft::runFrame(const dsp::Fft& fft) noexcept {
+    const std::span<const float> left = m_input[0].view();
+    const std::span<const float> right = m_input[1].view();
     const std::span<const float> window = m_window.view();
     const std::span<dsp::Complex> work = m_work.view();
     for (std::size_t n = 0; n < m_size; ++n) {
-        work[n] = dsp::Complex{input[n] * window[n], 0.0F};
+        work[n] = dsp::Complex{left[n] * window[n], right[n] * window[n]};
     }
     fft.forward(work);
+    // z = l + i r transforms to Z = L + i R, and a real signal's spectrum is Hermitian,
+    // so L[k] = (Z[k] + conj Z[N-k]) / 2 and R[k] = (Z[k] - conj Z[N-k]) / 2i.
+    const std::span<dsp::Complex> outLeft = m_spectrum[0].view();
+    const std::span<dsp::Complex> outRight = m_spectrum[1].view();
+    for (std::size_t k = 0; k < m_size; ++k) {
+        const dsp::Complex z = work[k];
+        const dsp::Complex mirror = work[k == 0 ? 0 : m_size - k];
+        const float sumRe = z.real() + mirror.real();
+        const float sumIm = z.imag() - mirror.imag();
+        const float diffRe = z.real() - mirror.real();
+        const float diffIm = z.imag() + mirror.imag();
+        outLeft[k] = dsp::Complex{0.5F * sumRe, 0.5F * sumIm};
+        outRight[k] = dsp::Complex{0.5F * diffIm, -0.5F * diffRe};
+    }
 }
 
-void StftChannel::finishFrame(const dsp::Fft& fft) noexcept {
+void StereoStft::finishFrame(const dsp::Fft& fft) noexcept {
     const std::span<dsp::Complex> work = m_work.view();
+    const std::span<const dsp::Complex> left = m_spectrum[0].view();
+    const std::span<const dsp::Complex> right = m_spectrum[1].view();
+    // Packed back as L + i R: both spectra are Hermitian, so the inverse is l + i r.
+    for (std::size_t k = 0; k < m_size; ++k) {
+        work[k] = dsp::Complex{left[k].real() - right[k].imag(), left[k].imag() + right[k].real()};
+    }
     fft.inverse(work);
     const std::span<const float> window = m_window.view();
-    const std::span<float> accumulator = m_accumulator.view();
+    const std::span<float> accLeft = m_accumulator[0].view();
+    const std::span<float> accRight = m_accumulator[1].view();
     for (std::size_t n = 0; n < m_size; ++n) {
-        accumulator[n] += work[n].real() * window[n] / kOverlapGain;
+        accLeft[n] += work[n].real() * window[n] / kOverlapGain;
+        accRight[n] += work[n].imag() * window[n] / kOverlapGain;
     }
     // The first hop is complete: it plays out next. Then everything moves up a hop.
     const std::size_t step = hop();
-    const std::span<float> output = m_output.view();
-    std::copy_n(accumulator.begin(), step, output.begin());
-    std::copy(accumulator.begin() + static_cast<std::ptrdiff_t>(step), accumulator.end(),
-              accumulator.begin());
-    std::fill(accumulator.end() - static_cast<std::ptrdiff_t>(step), accumulator.end(), 0.0F);
-    const std::span<float> input = m_input.view();
-    std::copy(input.begin() + static_cast<std::ptrdiff_t>(step), input.end(), input.begin());
+    for (std::size_t c = 0; c < 2; ++c) {
+        const std::span<float> accumulator = m_accumulator[c].view();
+        const std::span<float> output = m_output[c].view();
+        std::copy_n(accumulator.begin(), step, output.begin());
+        std::copy(accumulator.begin() + static_cast<std::ptrdiff_t>(step), accumulator.end(),
+                  accumulator.begin());
+        std::fill(accumulator.end() - static_cast<std::ptrdiff_t>(step), accumulator.end(), 0.0F);
+        const std::span<float> input = m_input[c].view();
+        std::copy(input.begin() + static_cast<std::ptrdiff_t>(step), input.end(), input.begin());
+    }
     m_fill = readOffset();
 }
 
@@ -75,17 +112,13 @@ void StftChannel::finishFrame(const dsp::Fft& fft) noexcept {
 
 void PitchShifter::prepareEffect(const graph::PrepareInfo& /*info*/) {
     m_fft.prepare(kPitchFrame);
-    for (StftChannel& stft : m_stft) {
-        stft.allocate(kPitchFrame);
-    }
+    m_stft.allocate(kPitchFrame);
 }
 
 void PitchShifter::resetEffect() noexcept {
-    for (StftChannel& stft : m_stft) {
-        stft.reset();
-    }
+    m_stft.reset();
     for (auto& channel : m_lastPhase) {
-        channel.fill(0.0);
+        channel.fill(0.0F);
     }
     for (auto& channel : m_sumPhase) {
         channel.fill(0.0);
@@ -93,19 +126,21 @@ void PitchShifter::resetEffect() noexcept {
 }
 
 void PitchShifter::shift(std::span<dsp::Complex> spectrum, std::size_t channel) noexcept {
-    constexpr auto kOversample = static_cast<double>(kStftOverlap);
+    constexpr auto kOversample = static_cast<float>(kStftOverlap);
     const float ratio = m_ratio;
     // Analysis: each bin's magnitude and true frequency (in bins) from its phase advance.
     for (std::size_t k = 0; k < kBins; ++k) {
         const dsp::Complex x = spectrum[k];
-        const double phase = dsp::atan2Turns(x.imag(), x.real());
-        double delta = phase - m_lastPhase[channel][k];
+        const float phase = dsp::atan2TurnsF(x.imag(), x.real());
+        float delta = phase - m_lastPhase[channel][k];
         m_lastPhase[channel][k] = phase;
-        // Less the advance a bin-centred sinusoid would make in a hop, folded to +-1/2.
-        delta -= static_cast<double>(k) / kOversample;
-        delta -= dsp::floorExact(delta + 0.5);
+        // Less the advance a bin-centred sinusoid would make in a hop, k / 4 turns,
+        // folded to +-1/2. Only k / 4's fraction matters to the fold, so that is all
+        // that is subtracted: delta stays near 1 in size, where float keeps its bits.
+        delta -= static_cast<float>(k % kStftOverlap) / kOversample;
+        delta -= dsp::floorExact(delta + 0.5F);
         m_magnitude[k] = magnitudeOf(x);
-        m_frequency[k] = static_cast<float>(static_cast<double>(k) + (delta * kOversample));
+        m_frequency[k] = static_cast<float>(k) + (delta * kOversample);
     }
     // Move each bin to its new place.
     m_synthMagnitude.fill(0.0F);
@@ -123,14 +158,16 @@ void PitchShifter::shift(std::span<dsp::Complex> spectrum, std::size_t channel) 
             m_synthFrequency[target] = m_frequency[k] * ratio;
         }
     }
-    // Synthesis: advance each bin's phase at its new frequency.
+    // Synthesis: advance each bin's phase at its new frequency. The running phase stays
+    // in double, where adding a large step every frame does not wear its bits away.
     for (std::size_t k = 0; k < kBins; ++k) {
         double& sum = m_sumPhase[channel][k];
-        sum += static_cast<double>(m_synthFrequency[k]) / kOversample;
+        sum += static_cast<double>(m_synthFrequency[k]) / static_cast<double>(kOversample);
         sum -= dsp::floorExact(sum);
+        const float turns = unitPhase(sum);
         const float magnitude = m_synthMagnitude[k];
-        spectrum[k] = dsp::Complex{magnitude * static_cast<float>(dsp::cosTurns(sum)),
-                                   magnitude * static_cast<float>(dsp::sinTurns(sum))};
+        spectrum[k] =
+            dsp::Complex{magnitude * dsp::cosUnitF(turns), magnitude * dsp::sinUnitF(turns)};
     }
     for (std::size_t k = 1; k + 1 < kBins; ++k) {
         spectrum[kPitchFrame - k] = std::conj(spectrum[k]);
@@ -146,10 +183,11 @@ void PitchShifter::processWet(std::span<const float> inLeft, std::span<const flo
                                     (context.paramAt(idx(PitchShifterParam::Cents), i) * 0.01F);
             m_ratio = dsp::exp2F(std::clamp(semitones, -36.0F, 36.0F) / 12.0F);
         }
-        outLeft[i] =
-            m_stft[0].process(inLeft[i], m_fft, [this](std::span<dsp::Complex> s) { shift(s, 0); });
-        outRight[i] = m_stft[1].process(inRight[i], m_fft,
-                                        [this](std::span<dsp::Complex> s) { shift(s, 1); });
+        m_stft.process(inLeft[i], inRight[i], outLeft[i], outRight[i], m_fft,
+                       [this](std::span<dsp::Complex> left, std::span<dsp::Complex> right) {
+                           shift(left, 0);
+                           shift(right, 1);
+                       });
     }
 }
 
@@ -157,15 +195,11 @@ void PitchShifter::processWet(std::span<const float> inLeft, std::span<const flo
 
 void SpectralFreeze::prepareEffect(const graph::PrepareInfo& /*info*/) {
     m_fft.prepare(kFreezeFrame);
-    for (StftChannel& stft : m_stft) {
-        stft.allocate(kFreezeFrame);
-    }
+    m_stft.allocate(kFreezeFrame);
 }
 
 void SpectralFreeze::resetEffect() noexcept {
-    for (StftChannel& stft : m_stft) {
-        stft.reset();
-    }
+    m_stft.reset();
     for (auto& held : m_held) {
         held.fill(0.0F);
     }
@@ -186,16 +220,15 @@ void SpectralFreeze::frame(std::span<dsp::Complex> spectrum, std::size_t channel
     float& blend = m_blend[channel];
     blend = m_frozen ? std::min(1.0F, blend + 0.25F) : std::max(0.0F, blend - 0.25F);
     if (blend <= 0.0F) {
-        return; // the input, untouched: the STFT gives it back exactly
+        return; // the input, untouched: the STFT gives it back
     }
     for (std::size_t k = 0; k < kBins; ++k) {
         // A fresh random phase each frame: the held instant, smeared into a texture.
-        const double turns = m_random.nextUnit();
+        const float turns = unitPhase(m_random.nextUnit());
         const bool edge = k == 0 || k + 1 == kBins;
         const dsp::Complex frozen =
             edge ? dsp::Complex{held[k], 0.0F}
-                 : dsp::Complex{held[k] * static_cast<float>(dsp::cosTurns(turns)),
-                                held[k] * static_cast<float>(dsp::sinTurns(turns))};
+                 : dsp::Complex{held[k] * dsp::cosUnitF(turns), held[k] * dsp::sinUnitF(turns)};
         spectrum[k] = (spectrum[k] * (1.0F - blend)) + (frozen * blend);
     }
     for (std::size_t k = 1; k + 1 < kBins; ++k) {
@@ -214,11 +247,16 @@ void SpectralFreeze::processWet(std::span<const float> inLeft, std::span<const f
             }
             m_frozen = frozen;
         }
-        const float gain = dsp::dbToGainF(context.paramAt(idx(SpectralFreezeParam::Gain), i));
-        outLeft[i] = gain * m_stft[0].process(inLeft[i], m_fft,
-                                              [this](std::span<dsp::Complex> s) { frame(s, 0); });
-        outRight[i] = gain * m_stft[1].process(inRight[i], m_fft,
-                                               [this](std::span<dsp::Complex> s) { frame(s, 1); });
+        const float gain = m_gain(context.paramAt(idx(SpectralFreezeParam::Gain), i));
+        float left = 0.0F;
+        float right = 0.0F;
+        m_stft.process(inLeft[i], inRight[i], left, right, m_fft,
+                       [this](std::span<dsp::Complex> l, std::span<dsp::Complex> r) {
+                           frame(l, 0);
+                           frame(r, 1);
+                       });
+        outLeft[i] = gain * left;
+        outRight[i] = gain * right;
     }
 }
 

@@ -18,7 +18,6 @@ import re
 from typing import Any
 
 from PySide6.QtCore import QObject, QPoint
-from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtWidgets import (
     QAbstractButton,
     QAbstractItemView,
@@ -35,6 +34,7 @@ from PySide6.QtWidgets import (
 )
 
 from adx.control.protocol import AMBIGUOUS, NO_TARGET, ControlError, Json
+from adx.panels.quick_host import QuickHost
 
 #: What a user can press, type into or drag: what must have a name.
 INTERACTIVE: tuple[type[QWidget], ...] = (
@@ -44,7 +44,7 @@ INTERACTIVE: tuple[type[QWidget], ...] = (
     QLineEdit,
     QAbstractSlider,
     QAbstractItemView,
-    QQuickWidget,
+    QuickHost,
     QPlainTextEdit,
     QTextEdit,
     QTabBar,
@@ -63,7 +63,7 @@ def _kind(widget: QWidget) -> str:
         (QLineEdit, "field"),
         (QAbstractSlider, "slider"),
         (QAbstractItemView, "list"),
-        (QQuickWidget, "view"),
+        (QuickHost, "view"),
         (QPlainTextEdit, "text"),
         (QTextEdit, "text"),
         (QTabBar, "tabs"),

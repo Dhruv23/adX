@@ -23,6 +23,7 @@
 #include <string_view>
 
 #include "engine/graph/Audition.h"
+#include "engine/graph/Crew.h"
 #include "engine/graph/Node.h"
 #include "engine/project/EventTrack.h"
 #include "engine/project/Snapshot.h"
@@ -60,6 +61,8 @@ struct SchedulerStats {
     /// Tick-to-sample conversions performed walking a cursor forward.
     std::uint64_t eventComparisons{0};
     std::uint64_t eventsDispatched{0};
+    /// Pieces run on the crew rather than walked in order on one thread.
+    std::uint64_t parallelPieces{0};
 };
 
 /// A contiguous run of a track's events that fall in one sub-block.
@@ -67,6 +70,13 @@ struct EventRange {
     std::uint32_t begin{0};
     std::uint32_t end{0};
 };
+
+#if defined(_MSC_VER)
+#    pragma warning(push)
+// C4324: padded for the alignas below, which keeps the atomics on their own
+// cache lines. Intended.
+#    pragma warning(disable : 4324)
+#endif
 
 class Scheduler {
 public:
@@ -126,10 +136,31 @@ public:
         m_audition = events;
     }
 
+    /// The helpers a piece may be spread over, or null for one thread. Main thread,
+    /// while no audio thread runs this scheduler. A piece runs on the crew when there is
+    /// one with helpers, the graph carries a parallel plan, it is big enough to be worth
+    /// the hand-offs, and the node profiler is off (it times steps one after another).
+    /// Either way the output is the same, bit for bit (RenderGraph.h, ParallelPlan).
+    void setCrew(Crew* crew) noexcept {
+        m_crew = crew;
+    }
+
+    /// Below this many steps a piece is walked on one thread: the hand-offs would cost
+    /// more than the work they spread.
+    static constexpr std::size_t kParallelMinSteps = 16;
+
 private:
     void runPiece(project::Snapshot& snapshot, transport::TransportSet& transport,
                   rt::BlockArena& arena, float* out, std::uint32_t offset, std::uint32_t frames,
                   std::uint32_t outChannels) noexcept;
+    void runPieceParallel(project::Snapshot& snapshot, transport::TransportSet& transport,
+                          rt::BlockArena& arena, float* out, std::uint32_t offset,
+                          std::uint32_t frames, std::uint32_t outChannels) noexcept;
+    /// The crew's job for one piece: take ready steps until none are left.
+    static void parallelTask(void* user, std::uint32_t lane) noexcept;
+    void runParallelStep(std::uint32_t stepIndex, std::uint32_t lane) noexcept;
+    void pushReady(const ParallelPlan& plan, std::uint32_t step) noexcept;
+    [[nodiscard]] bool popReady(const ParallelPlan& plan, std::uint32_t& step) noexcept;
 
     const float* m_input{nullptr};
     std::uint32_t m_inputChannels{0};
@@ -143,15 +174,44 @@ private:
     automationFor(const NodeStep& step, project::Snapshot& snapshot,
                   const transport::TimeSource& arrangement, rt::BlockArena& arena,
                   std::uint32_t frames) noexcept;
+    /// Reads the scheduler's per-block state but writes only `stats` and the step's
+    /// own cursor, so steps on different threads may call it at once.
     [[nodiscard]] EventView eventsFor(const NodeStep& step, project::Snapshot& snapshot,
                                       transport::TransportSet& transport, rt::BlockArena& arena,
-                                      std::uint32_t frames) noexcept;
+                                      std::uint32_t frames, SchedulerStats& stats) noexcept;
 
-    [[nodiscard]] std::uint32_t lowerBound(const transport::TimeSource& time,
-                                           const project::EventTrack& track,
-                                           std::int64_t samples) noexcept;
+    // advanceCursor and fillEvents, counting into `stats`: each lane has its own.
+    [[nodiscard]] static EventRange advance(SchedulerStats& stats,
+                                            const transport::TimeSource& time,
+                                            const project::EventTrack& track,
+                                            project::EventCursor& cursor, std::uint32_t frames,
+                                            bool wrapped) noexcept;
+    static std::uint32_t fill(SchedulerStats& stats, const transport::TimeSource& time,
+                              std::uint32_t timeSource, const project::EventTrack& track,
+                              EventRange range, std::span<BlockEvent> out,
+                              std::uint32_t first) noexcept;
+    [[nodiscard]] static std::uint32_t lowerBound(SchedulerStats& stats,
+                                                  const transport::TimeSource& time,
+                                                  const project::EventTrack& track,
+                                                  std::int64_t samples) noexcept;
 
     SchedulerStats m_stats;
+    /// What each crew lane counted during the piece being run, added into m_stats after.
+    std::array<SchedulerStats, Crew::kMaxLanes> m_laneStats{};
+    Crew* m_crew{nullptr};
+
+    // The piece being run on the crew, for every lane to read. Written before
+    // Crew::run publishes the job, read only inside it.
+    project::Snapshot* m_pieceSnapshot{nullptr};
+    transport::TransportSet* m_pieceTransport{nullptr};
+    rt::BlockArena* m_pieceArena{nullptr};
+    std::uint32_t m_pieceOffset{0};
+    std::uint32_t m_pieceFrames{0};
+    // The ready queue's ends and the steps not yet finished, on their own cache lines:
+    // every lane hits them.
+    alignas(64) std::atomic<std::uint32_t> m_readyHead{0};
+    alignas(64) std::atomic<std::uint32_t> m_readyTail{0};
+    alignas(64) std::atomic<std::uint32_t> m_remaining{0};
 
     /// Per source, carried from the top of a block (or the end of the previous piece)
     /// to the first piece that can act on it.
@@ -161,5 +221,9 @@ private:
     /// Where the piece being run starts in its block, for placing audition events.
     std::uint32_t m_pieceStart{0};
 };
+
+#if defined(_MSC_VER)
+#    pragma warning(pop)
+#endif
 
 } // namespace adx::graph

@@ -608,7 +608,7 @@ SnapshotBuildResult SnapshotBuilder::build(const Project& project, std::uint64_t
             m_stats.graphReused = true;
         } else {
             m_graph = std::make_shared<graph::CompiledGraph>(candidate->graph, candidate->order,
-                                                             candidate->pdc);
+                                                             candidate->pdc, m_parallel);
             m_graphBuild = std::move(candidate);
         }
         m_nodes.pruneUnused();

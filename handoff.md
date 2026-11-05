@@ -1,10 +1,103 @@
 # Handoff: build and validate Phases 10, 10.5 and 11
 
-## 0. Where things stand (2026-11-03): read this first
+## 0. Where things stand (2026-11-04): read this first
 
-Phase 10.5 is **built and passes locally**. It isn't done, because CI hasn't seen it. The
-evidence is in [plans/phase_10.5.md](plans/phase_10.5.md) §10 and §11 and in
-[plans/STATE.md](plans/STATE.md). Nothing is committed since `be487fe`.
+Phases 8-10.5 were committed in `1b40bf5` and pushed. CI fixes followed, and per-push CI
+went green at `96b4248` (run 41767776634). `69b59f2` (sccache for CI) is unrelated to any
+phase. The **full check** (`full-check.yml`, with its new `scenarios` and `three-builds`
+jobs) has not run on anything since `phase-7`: it runs when a tag is pushed. **Ask the
+user before tagging or pushing.** Then P8-0, P9-0 and P10.5-0 can be closed with run ids.
+STATE.md doesn't record the green per-push run yet. Add it.
+
+### Update, 2026-11-04 later: the P10-5 drop is built, tested and benched
+
+Steps 1-3, 5 and 6 below are done, and the record is in phase_10.md §11, "Session of
+2026-11-04, later":
+- every check is green in all three builds;
+- 19 golden hashes moved, exactly the changed units;
+- `bench_full_project` passes its six targets.
+
+What's left:
+- **step 4**, the user's listening verdict. The files are in `build/p10-5_listen/ab/`,
+  with LISTEN.md; PitchShifter is the only real change;
+- **P10-6**: `bench_ui.py`'s tick interval fails and its analyzer setup is wrong, and
+  `bench_one_hour_soak` isn't written. §4.5 counts both among its eight targets.
+
+Nothing is committed yet.
+
+### Uncommitted: P10-5 code drop, written but never built (2026-11-04)
+
+The user chose "options 1 and 2 together" for P10-5, as **code changes only: nothing was
+built, compiled, tested or benchmarked.** Expect compile errors on the first build. The
+full write-up is in [plans/phase_10.md](plans/phase_10.md) §11, session of 2026-11-04.
+The design was researched first: it follows Ardour's process graph, MMCSS for the
+helpers, and Remez-designed polynomials.
+
+**Option 2: parallel scheduler.** The output must stay bit-identical to the serial walk.
+- `engine/graph/Crew.h/.cpp` (new) is the realtime half, atomics only. The audio thread
+  is lane 0, and helpers join through a Dekker handshake (`m_open` / `m_inFlight`) so
+  none is still inside a job after `run()` returns. Helpers copy the audio thread's MXCSR
+  for every job, because FTZ and DAZ are per thread.
+- `engine/render/RenderWorkers.h/.cpp` (new) owns the threads. Realtime engines put them
+  in MMCSS "Pro Audio" at high priority. The count is `ADX_RENDER_WORKERS` (0 turns them
+  off) or `EngineOptions::renderWorkers`; the default is cores - 1, at most 15.
+- `RenderGraph.h` gains `ParallelPlan`, which `CompiledGraph::buildParallel` builds when
+  `SnapshotBuilder::setParallel(true)` is set (`RenderEngine` sets it when it has helpers):
+  - every output port gets its own buffer;
+  - gather lists follow the serial edge order;
+  - ordering edges are added for peak controllers and their targets, for steps sharing
+    an event cursor, and for steps sharing a node.
+- `Scheduler` has a parallel path beside the untouched serial one:
+  - consumers *pull* inputs into lane scratch;
+  - stats are counted per lane;
+  - pieces under 16 steps, and any piece while the node profiler runs, stay serial;
+  - the shared context builder is `contextFor`.
+- `OfflineRenderOptions::renderWorkers` and `RenderStats::parallelPieces` are added for
+  tests.
+
+**Option 1: DSP that changes output.** The golden hashes must be re-blessed, and the user
+listens to the changed renders (a judgement gate).
+- FM uses `dsp::sinUnitF`, a branchless 4-term minimax sine.
+- PitchShifter and SpectralFreeze use `StereoStft`: both channels in one complex FFT,
+  with `atan2TurnsF`, `sinUnitF` and `cosUnitF` in float.
+- The 4x oversampler (Overdrive, Saturation) folds its symmetric taps and sums them in
+  four fixed partial sums.
+- MultibandComp and TransientShaper detect in float (`gainToDbF`).
+
+**Bit-exact speed-ups:**
+- `dsp::log2` replaces `frexp` with a bit extraction;
+- FM unpacks its routing once per call, caches its phase steps and skips silent
+  modulators;
+- MultibandComp and SpectralFreeze cache their dB-to-gain conversions.
+
+**Tests, written but not run:**
+- `tests/cpp/render/test_parallel_render.cpp` compares serial and parallel hashes on a
+  64-channel synthetic project at 3 block sizes and on every golden project, and runs
+  the crew handshake over 5000 jobs;
+- `tests/cpp/dsp/test_math.cpp` gains accuracy tests for the new float math and a check
+  that the frexp bit path matches.
+
+**Next, in order:**
+1. Build all three configurations (§4 has the MSVC wrapper) and fix the compile errors.
+   Run clang-tidy on all three databases, plus the lint gates.
+2. Run `test_parallel_render` first. A hash mismatch there is a design bug, not
+   something to re-bless.
+3. `ADX_UPDATE_GOLDEN=1`: only hashes for renders using FM, PitchShifter,
+   SpectralFreeze, Overdrive, Saturation, MultibandComp or TransientShaper may move. A
+   hash moving anywhere else is a bug.
+4. The user listens to the changed renders.
+5. Re-run `bench_full_project` and `bench/profile_nodes.py`, and record the numbers in
+   phase_10.md §11 and STATE.md P10-5. `bench_full_project` times the callback, so work
+   on helpers doesn't count toward "audio-thread CPU". Say so when you report it.
+6. Run the full suite in all three builds. The default worker count is now non-zero
+   everywhere, so every existing render test exercises the parallel path.
+
+Risks worth checking first:
+- each output port's buffer is 16 KB, so memory grows on big graphs;
+- whether MSVC's `atomic::wait` and `notify_all` go to `WaitOnAddress` directly;
+- helpers created per engine in test suites that build many engines;
+- whether a sandboxed plugin child copes with two of its instances being called at once.
+  Each instance has its own shared region, so it should.
 
 ### Open bug: OverflowError dialog with Airwindows Consolidated (not fixed)
 
@@ -62,9 +155,9 @@ generic editor's "Main" group showed:
     `create()`, because the app's hook opens a modal dialog that hangs a script.
 
 ### Other open items
-- **P10.5-0 (blocker):** CI and the full check for Phases 8-10.5 need a commit and push.
-  **Ask the user first.** P8-0 and P9-0 wait on the same push. The new `scenarios` job in
-  full-check.yml has never run in CI.
+- **P10.5-0 (blocker):** per-push CI is green (`96b4248`); the full check still needs a
+  tag push. **Ask the user first.** P8-0 and P9-0 wait on the same run. The new
+  `scenarios` job in full-check.yml has never run in CI.
 - **P10.5-2:** `ClapModule::idle()` calls `params.flush()` on the main thread between
   `activate()` and the first `process()`. CLAP wants it on the audio thread. The
   spec-correct move to `!m_active` was tried and reverted: on reopen it turned the
@@ -75,11 +168,11 @@ generic editor's "Main" group showed:
   interactive widget and leaves those tab bars out. The cause is unknown.
 - **P10.5-4:** the Debug slow ctest suite took 1797 s against an 1800 s timeout. Under
   load it timed out and missed realtime deadlines. It needs a longer timeout or a split.
-- **P10-5:** the CPU targets for `bench_full_project` are the user's decision. It blocks
-  Phase 10 §3 step 7 and Phase 11.
-- **P10-1:** key accuracy is 70 % against an 85 % target (see Phase 10 below).
+- **P10-5:** the user chose options 1 and 2. The code is written but unbuilt (above).
+  It still blocks Phase 11 until the bench passes.
+- **P10-1:** closed 2026-11-02, with the target revised (STATE.md).
 
-### Verified locally on 2026-11-03, before the bug report
+### Verified locally on 2026-11-03, before the bug report and before the P10-5 code drop
 - ctest `-LE slow` passes 489/489 in Debug, RelWithDebInfo and Release.
 - The Debug slow suite passes on an idle machine.
 - `CI=1 pytest tests/python` passes.
@@ -93,7 +186,8 @@ Also fixed this session: the CMake license-gate regex that broke every configure
 
 ---
 
-Updated 2026-11-01. Nothing is committed since `be487fe` (Phase 7). The working tree holds:
+(History, 2026-11-01. Since superseded: all of this was committed in `1b40bf5`.) The
+working tree then held:
 - Phase 8, built but not done;
 - Phase 9, built but not done;
 - the start of Phase 10 (harmony analysis in the engine);

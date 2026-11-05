@@ -52,6 +52,20 @@ template<std::size_t Taps> std::array<float, Taps> design(double beta) {
 const std::array<float, kHalfBandTaps1> kTaps1 = design<kHalfBandTaps1>(9.0);
 const std::array<float, kHalfBandTaps2> kTaps2 = design<kHalfBandTaps2>(8.0);
 
+/// Odd taps 1, 3, ... below the centre - each stands for itself and its mirror image -
+/// and the centre tap.
+template<std::size_t Taps> FoldedTaps<Taps> fold(const std::array<float, Taps>& taps) {
+    FoldedTaps<Taps> folded;
+    for (std::size_t t = 0; t < FoldedTaps<Taps>::kPairs; ++t) {
+        folded.pairs[t] = taps[(2 * t) + 1];
+    }
+    folded.centre = taps[Taps / 2];
+    return folded;
+}
+
+const FoldedTaps<kHalfBandTaps1> kFolded1 = fold(kTaps1);
+const FoldedTaps<kHalfBandTaps2> kFolded2 = fold(kTaps2);
+
 } // namespace
 
 const float* halfBandTaps1() noexcept {
@@ -62,10 +76,18 @@ const float* halfBandTaps2() noexcept {
     return kTaps2.data();
 }
 
+const FoldedTaps<kHalfBandTaps1>& foldedTaps1() noexcept {
+    return kFolded1;
+}
+
+const FoldedTaps<kHalfBandTaps2>& foldedTaps2() noexcept {
+    return kFolded2;
+}
+
 void prepareOversampler() {
     // The taps are built during static initialisation; this exists so a node's
     // prepare() can name the dependency, and so a later lazy build has a place to go.
-    static_cast<void>(kTaps1[0] + kTaps2[0]);
+    static_cast<void>(kTaps1[0] + kTaps2[0] + kFolded1.centre + kFolded2.centre);
 }
 
 } // namespace adx::dsp

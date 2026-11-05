@@ -115,7 +115,7 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 7 — Text-first layer | M | **Done** 2026-10-25 (CI green, run 40243278857; full check run 40248449713; human gate P7-1 closed by the user) |
 | 8 — Audio & export | M | **Built** 2026-10-29 - every automated §6 box observed locally; latency gate `[~]` (P8-1, hardware half in the final review); CI (P8-0) open |
 | 9 — Plugins & MIDI | L | **Built** 2026-10-30 - every automated §6 box observed locally; CI (P9-0), MIDI latency (P9-1, emulated half fails: P9-9), ASIO emulated half (P9-4), real plugins and live crash (P9-2, P9-3; agent-run, closed by Phase 10.5) open |
-| 10 — Analysis, visualization, polish | L | In progress 2026-10-30 - §3 steps 1-6 and P10-2 done 2026-11-02 (analyses as jobs in the app, six analyzers, genre suites); optimization, docs and installer open |
+| 10 — Analysis, visualization, polish | L | In progress 2026-10-30 - every step built. P10-5 closed 2026-11-04 (parallel scheduler and DSP work; engine bench passes; listens passed); soak passed; UI 60 fps with every panel (native Quick windows, P10-6). Open: CI / full check |
 | 10.5 — Agent-run testing | L | **Built** 2026-11-03 - every §5 test observed locally, 26 scenarios incl. WannaCry; CI and full check (P10.5-0) open |
 | 11 — Live performance | L | Not started |
 | 12 — Sound-design foundation | XL | Not started |
@@ -1112,7 +1112,7 @@ violations while the plugin allocates in its process.
 | **Plan** | [phase_10.md](phase_10.md) |
 | **Entry** | Phase 9 §6 complete |
 | **Done when** | [phase_10.md](phase_10.md) §7 — **including `bench_full_project`** |
-| **Status** | In progress (2026-10-30), started at the user's request before Phase 9's gates closed (P9-0 to P9-4). §3 steps 1-6 done 2026-11-02, P10-1 and P10-2 closed. Steps 7-9 built 2026-11-03: the benchmark and its profiler, the docs, the installer script; **`bench_full_project` fails (P10-5)**, so Phase 11 is blocked - see [phase_10.md](phase_10.md) §11 |
+| **Status** | In progress (2026-10-30), started at the user's request before Phase 9's gates closed (P9-0 to P9-4). §3 steps 1-6 done 2026-11-02, P10-1 and P10-2 closed. Steps 7-9 built 2026-11-03: the benchmark and its profiler, the docs, the installer script; **`bench_full_project` fails (P10-5)**, so Phase 11 is blocked - see [phase_10.md](phase_10.md) §11. 2026-11-04: P10-5 closed (engine bench passes, the user passed the listens). The soak passes, a clean clone builds in 90 s, and the ONNX build passes `[analysis]`. The UI interval passes since the hot surfaces moved to native Quick windows (P10-6). Open: CI plus the full check (docs in CI, the MSI on a fresh runner) |
 | **Completed** | — |
 
 > `bench_full_project` is a hard prerequisite for Phase 11, not a soft one. Do
@@ -1150,10 +1150,81 @@ violations while the plugin allocates in its process.
   reviewed (reaches the CPU target, not the worst block), a parallel scheduler that keeps
   the fixed summation order (a Phase 3-sized change), or a revised target. Fixed when:
   the bench passes, or the user revises §4.5's targets.
+  **2026-11-04:** the user chose options 1 and 2 together. Both are written as code
+  (phase_10.md §11, session of 2026-11-04).
+  **2026-11-04, later: built, tested, measured.**
+  - Debug, RelWithDebInfo and Release build. The fixes were C4324 pragmas in Crew.h and
+    Scheduler.h, and 8 clang-tidy findings.
+  - `test_parallel_render` passes in all three: serial and parallel hashes are the same.
+    3 of 8 golden projects reach the crew, and the test now asserts at least 3.
+  - Golden re-bless moved exactly 19 hashes: the 18 effect hashes of MultibandComp,
+    Overdrive, PitchShifter, Saturation, SpectralFreeze and TransientShaper, plus
+    `instrument/fm`. `hashes.txt`, `formats.txt`, every preset and every other unit are
+    unchanged.
+  - `bench_full_project` (Release, 3 min, idle machine): audio-thread CPU **8.3 %**,
+    worst block **24.2 %** (p99 12.4 %), 0 xruns, load 0.26 s, rebuild 1.60 ms median
+    (2.34 ms worst). That passes all six engine-side targets. It times the callback
+    only: helpers' work is not counted, and total CPU across cores is not lower.
+  - `profile_nodes.py`: a whole single-core render is 54.0 % of one core, down from
+    60.8 %. That is the DSP changes alone, since the profiler forces serial.
+  - Listening (judgement), 2026-11-04, on `build/p10-5_listen/ab/` and its `LISTEN.md`
+    (PitchShifter is the one real change: the waveform differs by −22 dB, and a mono
+    source now leaves a side channel at −45 dB RMS). The user: "the listens pass with no
+    notes."
+  - **Closed 2026-11-04** for the engine side. The bench's two UI and soak targets are
+    tracked in P10-6.
 - **P10-6** · Not yet run: `bench/bench_ui.py` (UI p99 with every panel open, on the GPU),
   `bench_one_hour_soak`, and the MSI's build and `installer_clean_install` on a fresh hosted
   runner (WiX 3.14 needs no install; the CI job is written with the full check). Fixed when:
   each has been run and recorded in phase_10.md §11.
+  **2026-11-04:** `bench_ui.py --seconds 60` was run and failed.
+  - Frame work passes: p99 0.45 ms, worst 0.69 ms.
+  - The tick-to-tick interval does not: p99 27.3 ms against the 25 ms limit, with 3356
+    frames in 60 s, about 56 Hz. Something outside the timed tick holds the main thread.
+  - The run is also not the configuration §4.5 asks for: `analyzer_host.open` was only
+    `["particles"]`. The six analyzers seem to share one tab group, and only the raised
+    tab runs.
+  - `bench_one_hour_soak` does not exist yet; it is only named in bench_full_project.py's
+    docstring.
+  **2026-11-04, later:**
+  - `bench_ui.py` fixed twice. It now re-docks the six analyzers side by side, and it
+    fails unless all six are open. `FrameClock` uses `Qt.PreciseTimer`: the coarse timer
+    snapped to the 15.6 ms system tick, which is where the 56 Hz came from.
+  - Re-run: frame work p99 0.76 ms (passes). The displayed interval still fails, at about
+    44-45 fps with about 8 animated QQuickWidgets.
+    - The GUI thread is about 95 % idle. Each QQuickWidget's sync and render are
+      included in the 0.76 ms.
+    - With only the mixer animating it holds 60 Hz. `timeBeginPeriod(1)` changes
+      nothing, and floating the docks is worse.
+    - The cost is Qt's widget composition and present path, not adX's work.
+    - **The user's decision:** host the hot surfaces in a shared QQuickWindow (a UI
+      change), or gate on work p99 (§4.5's literal target) and carry about 45 fps as a
+      known limit. **The user chose the UI change (2026-11-04).**
+  - **Fixed 2026-11-04.** The new `app/adx/panels/quick_host.py` replaces QQuickWidget
+    in every hot surface (GeometryView, the piano roll, the waveform).
+    - Each scene is a QQuickView in `QWidget.createWindowContainer`: a native child
+      window that Qt's threaded render loop renders and presents off the GUI thread.
+    - Input synthesized on the host is forwarded to the window. Drags the window
+      receives go back to the host, where the playlist's filter handles them.
+    - One window per surface rather than one shared window: the surfaces live in
+      separate docks.
+    - `bench_ui.py --seconds 30`: interval p99 **19.0 ms** (limit 25), work p99
+      0.49 ms, all six analyzers open. **Passes.**
+    - Presented frames per window, counted with `frameSwapped`: 62.5 fps on all eight
+      animated surfaces (the clock's own rate), up from about 44.
+  - Found on the way: `qoffscreen.dll` (the suite's platform) dereferences null
+    destroying the main window after a dock holding a window container was floated
+    (`test_layout_persists_and_resets`). The windows platform does the same steps
+    cleanly. On offscreen, QuickHost holds a QQuickWidget instead: same API, same
+    forwarding. The native path is covered by bench_ui, the launcher check and the
+    scenarios, which run on the real display.
+  - **`bench_one_hour_soak` written and passed** (`bench/bench_one_hour_soak.py`,
+    60 min):
+    - growth −0.01 MB/hour, last minus first 10-minute window −0.01 MB, 0 xruns, 0 late
+      callbacks;
+    - 1800 edits and undos with all six analyzers on;
+    - private bytes about 991 MB from warm-up to the end.
+  - The MSI job has not run: it needs a push and the full check (the user's approval).
 
 **Open issues for Phase 11:**
 
@@ -1217,6 +1288,9 @@ Evidence, 2026-11-03, this machine:
   Under load it times out, and its 60 s realtime gate misses deadlines (167 callbacks over
   5.33 ms, seen while other jobs ran). Run it on an idle machine. Fixed when: it has a
   timeout with headroom, or the suite is split.
+  **2026-11-04:** with the parallel scheduler (P10-5) the same suite passed in 953 s on
+  an idle machine. That leaves headroom under 1800 s for now; it has not been checked
+  under load.
 
 **Open issues for Phase 11:**
 

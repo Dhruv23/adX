@@ -139,6 +139,50 @@ void evaluateParam(const project::Snapshot& snapshot, std::uint32_t param,
     return BlockEventKind::NoteOn;
 }
 
+/// One step's call, from what both ways of running a piece have worked out for it.
+[[nodiscard]] ProcessContext contextFor(const NodeStep& step, const PortSpec& ports,
+                                        project::Snapshot& snapshot,
+                                        transport::TransportSet& transport, rt::BlockArena& arena,
+                                        const PortInputs& inputs, const PortOutputs& outputs,
+                                        EventView events, std::span<const float* const> automation,
+                                        std::uint32_t offset, std::uint32_t frames,
+                                        const float* input, std::uint32_t inputChannels) noexcept {
+    return ProcessContext{
+        .time = transport.get(transport::TimeSourceId{step.timeSource}),
+        .outputs =
+            std::span<const std::span<float>>{
+                outputs.data(), static_cast<std::size_t>(ports.outputs) * kPortChannels},
+        .inputs =
+            std::span<const std::span<const float>>{
+                inputs.data(), static_cast<std::size_t>(ports.inputs) * kPortChannels},
+        .frames = frames,
+        .sampleRate = snapshot.sampleRate,
+        .events = events,
+        .params = snapshot.params.subspan(step.paramBase, step.paramCount),
+        .automation = automation,
+        .arena = arena,
+        .tuningCents = snapshot.tuningCents,
+        .regions = step.audioTrack < snapshot.audioTracks.size()
+                       ? snapshot.audioTracks[step.audioTrack].regions
+                       : std::span<const AudioRegion>{},
+        .input =
+            input != nullptr && step.audioTrack != kNone && step.audioTrack == snapshot.monitorTable
+                ? std::span<const float>{input + (static_cast<std::size_t>(offset) * inputChannels),
+                                         static_cast<std::size_t>(frames) * inputChannels}
+                : std::span<const float>{},
+        .inputChannels = inputChannels,
+    };
+}
+
+/// Every counter in `from`, added into `into`; `from` is left at zero.
+void drainStats(SchedulerStats& from, SchedulerStats& into) noexcept {
+    into.cursorSearches += from.cursorSearches;
+    into.searchProbes += from.searchProbes;
+    into.eventComparisons += from.eventComparisons;
+    into.eventsDispatched += from.eventsDispatched;
+    from = SchedulerStats{};
+}
+
 } // namespace
 
 void Scheduler::reset() noexcept {
@@ -146,15 +190,15 @@ void Scheduler::reset() noexcept {
     m_wrapPending.fill(false);
 }
 
-std::uint32_t Scheduler::lowerBound(const transport::TimeSource& time,
+std::uint32_t Scheduler::lowerBound(SchedulerStats& stats, const transport::TimeSource& time,
                                     const project::EventTrack& track,
                                     std::int64_t samples) noexcept {
-    ++m_stats.cursorSearches;
+    ++stats.cursorSearches;
     std::size_t low = 0;
     std::size_t high = track.events.size();
     while (low < high) {
         const std::size_t mid = low + ((high - low) / 2);
-        ++m_stats.searchProbes;
+        ++stats.searchProbes;
         if (time.samplesAt(core::Ticks{track.events[mid].tick}) < samples) {
             low = mid + 1;
         } else {
@@ -167,17 +211,23 @@ std::uint32_t Scheduler::lowerBound(const transport::TimeSource& time,
 EventRange Scheduler::advanceCursor(const transport::TimeSource& time,
                                     const project::EventTrack& track, project::EventCursor& cursor,
                                     std::uint32_t frames, bool wrapped) noexcept {
+    return advance(m_stats, time, track, cursor, frames, wrapped);
+}
+
+EventRange Scheduler::advance(SchedulerStats& stats, const transport::TimeSource& time,
+                              const project::EventTrack& track, project::EventCursor& cursor,
+                              std::uint32_t frames, bool wrapped) noexcept {
     // Only on seek, tempo rebind or a fresh snapshot. This is the whole difference
     // from iteration one: the search happens when the position *jumps*, not every
     // block (phase_3.md §4.5 step 1).
     if (cursor.seekGeneration != time.seekGeneration()) {
-        cursor.index = lowerBound(time, track, time.positionSamples());
+        cursor.index = lowerBound(stats, time, track, time.positionSamples());
         cursor.seekGeneration = time.seekGeneration();
     }
     // The loop-start position is found once, when the loop's sample bounds change,
     // so that a wrap is an assignment (scheduler_no_rescan_on_loop_wrap).
     if (time.loop().active() && cursor.loopGeneration != time.loopGeneration()) {
-        cursor.loopIndex = lowerBound(time, track, time.loopStartSamples());
+        cursor.loopIndex = lowerBound(stats, time, track, time.loopStartSamples());
         cursor.loopGeneration = time.loopGeneration();
     }
     if (wrapped && time.loop().active()) {
@@ -203,7 +253,7 @@ EventRange Scheduler::advanceCursor(const transport::TimeSource& time,
     std::uint32_t index = begin;
     const auto size = static_cast<std::uint32_t>(track.events.size());
     while (index < size) {
-        ++m_stats.eventComparisons;
+        ++stats.eventComparisons;
         if (time.samplesAt(core::Ticks{track.events[index].tick}) >= windowEnd) {
             break;
         }
@@ -216,6 +266,13 @@ EventRange Scheduler::advanceCursor(const transport::TimeSource& time,
 std::uint32_t Scheduler::fillEvents(const transport::TimeSource& time, std::uint32_t timeSource,
                                     const project::EventTrack& track, EventRange range,
                                     std::span<BlockEvent> out, std::uint32_t first) noexcept {
+    return fill(m_stats, time, timeSource, track, range, out, first);
+}
+
+std::uint32_t Scheduler::fill(SchedulerStats& stats, const transport::TimeSource& time,
+                              std::uint32_t timeSource, const project::EventTrack& track,
+                              EventRange range, std::span<BlockEvent> out,
+                              std::uint32_t first) noexcept {
     const std::int64_t start = time.positionSamples();
     const double rate = time.rate();
     std::uint32_t written = first;
@@ -254,13 +311,13 @@ std::uint32_t Scheduler::fillEvents(const transport::TimeSource& time, std::uint
         }
         ++written;
     }
-    m_stats.eventsDispatched += written - first;
+    stats.eventsDispatched += written - first;
     return written;
 }
 
 EventView Scheduler::eventsFor(const NodeStep& step, project::Snapshot& snapshot,
                                transport::TransportSet& transport, rt::BlockArena& arena,
-                               std::uint32_t frames) noexcept {
+                               std::uint32_t frames, SchedulerStats& stats) noexcept {
     const std::uint32_t source = step.timeSource;
     const transport::TimeSource& time = transport.get(transport::TimeSourceId{source});
     const bool release = source < m_releasePending.size() && m_releasePending[source];
@@ -269,8 +326,8 @@ EventView Scheduler::eventsFor(const NodeStep& step, project::Snapshot& snapshot
     EventRange range{};
     if (step.eventTrack < snapshot.eventTracks.size() &&
         step.eventTrack < snapshot.cursors.size()) {
-        range = advanceCursor(time, snapshot.eventTracks[step.eventTrack],
-                              snapshot.cursors[step.eventTrack], frames, wrapped);
+        range = advance(stats, time, snapshot.eventTracks[step.eventTrack],
+                        snapshot.cursors[step.eventTrack], frames, wrapped);
     }
 
     const std::uint32_t channel = step.eventTrack < snapshot.trackChannels.size()
@@ -326,8 +383,8 @@ EventView Scheduler::eventsFor(const NodeStep& step, project::Snapshot& snapshot
     }
     const std::uint32_t specials = written;
     if (step.eventTrack < snapshot.eventTracks.size()) {
-        written =
-            fillEvents(time, source, snapshot.eventTracks[step.eventTrack], range, events, written);
+        written = fill(stats, time, source, snapshot.eventTracks[step.eventTrack], range, events,
+                       written);
     }
     // Auditions and live notes, each moved back past the arrangement's later events so
     // the whole stays sorted by offset, as a node expects. An audition at offset 0 lands
@@ -407,6 +464,30 @@ std::span<const float* const> Scheduler::automationFor(const NodeStep& step,
     return tracks;
 }
 
+namespace {
+
+/// The master's two channels, to the device's interleaved `out`.
+void writeDevice(const BufferPool& buffers, std::uint32_t outputBuffer, float* out,
+                 std::uint32_t offset, std::uint32_t frames, std::uint32_t outChannels) noexcept {
+    if (outputBuffer == kNone || out == nullptr || outChannels == 0) {
+        return;
+    }
+    const std::span<float> left = buffers.channel(outputBuffer, 0, offset, frames);
+    const std::span<float> right = buffers.channel(outputBuffer, 1, offset, frames);
+    float* frame = out + (static_cast<std::size_t>(offset) * static_cast<std::size_t>(outChannels));
+    for (std::uint32_t i = 0; i < frames; ++i) {
+        if (outChannels == 1) {
+            frame[0] = (left[i] + right[i]) * 0.5F;
+        } else {
+            frame[0] = left[i];
+            frame[1] = right[i];
+        }
+        frame += outChannels;
+    }
+}
+
+} // namespace
+
 void Scheduler::runPiece(project::Snapshot& snapshot, transport::TransportSet& transport,
                          rt::BlockArena& arena, float* out, std::uint32_t offset,
                          std::uint32_t frames, std::uint32_t outChannels) noexcept {
@@ -414,11 +495,16 @@ void Scheduler::runPiece(project::Snapshot& snapshot, transport::TransportSet& t
     applyAutomation(snapshot, transport.arrangement());
 
     const RenderGraph& graph = snapshot.graph;
-    const BufferPool& buffers = graph.buffers;
-    const std::span<const float> silence{kSilence.data(), frames};
-
     NodeProfile& profile = nodeProfile();
     const bool profiling = profile.enabled.load(std::memory_order_relaxed);
+    if (m_crew != nullptr && m_crew->lanes() > 1 && !profiling && graph.parallel.available() &&
+        graph.steps.size() >= kParallelMinSteps) {
+        runPieceParallel(snapshot, transport, arena, out, offset, frames, outChannels);
+        return;
+    }
+
+    const BufferPool& buffers = graph.buffers;
+    const std::span<const float> silence{kSilence.data(), frames};
     std::size_t stepIndex = 0;
     for (const NodeStep& step : graph.steps) {
         // Everything this step takes from the arena - its events, its instrument's
@@ -451,39 +537,15 @@ void Scheduler::runPiece(project::Snapshot& snapshot, transport::TransportSet& t
         }
 
         const EventView events = step.eventTrack != kNone || ports.acceptsEvents
-                                     ? eventsFor(step, snapshot, transport, arena, frames)
+                                     ? eventsFor(step, snapshot, transport, arena, frames, m_stats)
                                      : EventView{};
 
         const std::span<const float* const> automation =
             automationFor(step, snapshot, transport.arrangement(), arena, frames);
 
-        ProcessContext context{
-            .time = transport.get(transport::TimeSourceId{step.timeSource}),
-            .outputs =
-                std::span<const std::span<float>>{
-                    outputs.data(), static_cast<std::size_t>(ports.outputs) * kPortChannels},
-            .inputs =
-                std::span<const std::span<const float>>{
-                    inputs.data(), static_cast<std::size_t>(ports.inputs) * kPortChannels},
-            .frames = frames,
-            .sampleRate = snapshot.sampleRate,
-            .events = events,
-            .params = snapshot.params.subspan(step.paramBase, step.paramCount),
-            .automation = automation,
-            .arena = arena,
-            .tuningCents = snapshot.tuningCents,
-            .regions = step.audioTrack < snapshot.audioTracks.size()
-                           ? snapshot.audioTracks[step.audioTrack].regions
-                           : std::span<const AudioRegion>{},
-            .input =
-                m_input != nullptr && step.audioTrack != kNone &&
-                        step.audioTrack == snapshot.monitorTable
-                    ? std::span<const float>{m_input + (static_cast<std::size_t>(offset) *
-                                                        m_inputChannels),
-                                             static_cast<std::size_t>(frames) * m_inputChannels}
-                    : std::span<const float>{},
-            .inputChannels = m_inputChannels,
-        };
+        ProcessContext context =
+            contextFor(step, ports, snapshot, transport, arena, inputs, outputs, events, automation,
+                       offset, frames, m_input, m_inputChannels);
         if (profiling && stepIndex < NodeProfile::kSteps) {
             const auto began = std::chrono::steady_clock::now();
             step.node->process(context);
@@ -525,21 +587,174 @@ void Scheduler::runPiece(project::Snapshot& snapshot, transport::TransportSet& t
         arena.rewind(arenaMark);
     }
 
-    if (graph.outputBuffer == kNone || out == nullptr || outChannels == 0) {
-        return;
-    }
-    const std::span<float> left = buffers.channel(graph.outputBuffer, 0, offset, frames);
-    const std::span<float> right = buffers.channel(graph.outputBuffer, 1, offset, frames);
-    float* frame = out + (static_cast<std::size_t>(offset) * static_cast<std::size_t>(outChannels));
-    for (std::uint32_t i = 0; i < frames; ++i) {
-        if (outChannels == 1) {
-            frame[0] = (left[i] + right[i]) * 0.5F;
-        } else {
-            frame[0] = left[i];
-            frame[1] = right[i];
+    writeDevice(buffers, graph.outputBuffer, out, offset, frames, outChannels);
+}
+
+// --- the parallel walk -------------------------------------------------------------------
+//
+// One piece as a dependency graph over the crew (Crew.h): every step waits for its
+// predecessors' count to reach zero, the last predecessor to finish puts it on the ready
+// queue, and every lane takes from the queue until all steps are done. The queue is the
+// plan's `ready` array filled front to back: a step is written once per piece, so it
+// never wraps and needs no per-slot sequence numbers - a slot is 0 until its step is
+// written into it.
+
+void Scheduler::pushReady(const ParallelPlan& plan, std::uint32_t step) noexcept {
+    const std::uint32_t at = m_readyTail.fetch_add(1, std::memory_order_acq_rel);
+    plan.ready[at].store(step + 1, std::memory_order_release);
+}
+
+bool Scheduler::popReady(const ParallelPlan& plan, std::uint32_t& step) noexcept {
+    std::uint32_t head = m_readyHead.load(std::memory_order_relaxed);
+    while (true) {
+        if (head >= m_readyTail.load(std::memory_order_acquire)) {
+            return false;
         }
-        frame += outChannels;
+        if (m_readyHead.compare_exchange_weak(head, head + 1, std::memory_order_acq_rel,
+                                              std::memory_order_relaxed)) {
+            break;
+        }
     }
+    // The pusher took the slot before it wrote the step into it: at most a few
+    // instructions to wait.
+    std::uint32_t value = 0;
+    while ((value = plan.ready[head].load(std::memory_order_acquire)) == 0) {
+        cpuRelax();
+    }
+    step = value - 1;
+    return true;
+}
+
+void Scheduler::parallelTask(void* user, std::uint32_t lane) noexcept {
+    Scheduler& self = *static_cast<Scheduler*>(user);
+    const ParallelPlan& plan = self.m_pieceSnapshot->graph.parallel;
+    while (self.m_remaining.load(std::memory_order_acquire) != 0) {
+        std::uint32_t step = 0;
+        if (!self.popReady(plan, step)) {
+            cpuRelax();
+            continue;
+        }
+        self.runParallelStep(step, lane);
+        // Release: the step's output buffers and anything it wrote into the snapshot are
+        // visible to whichever lane runs a successor, which acquires the queue slot.
+        const ParallelStep& info = plan.steps[step];
+        for (std::uint32_t s = 0; s < info.successorCount; ++s) {
+            const std::uint32_t next = plan.successors[info.firstSuccessor + s];
+            if (plan.pending[next].fetch_sub(1, std::memory_order_acq_rel) == 1) {
+                self.pushReady(plan, next);
+            }
+        }
+        self.m_remaining.fetch_sub(1, std::memory_order_acq_rel);
+    }
+}
+
+void Scheduler::runParallelStep(std::uint32_t stepIndex, std::uint32_t lane) noexcept {
+    project::Snapshot& snapshot = *m_pieceSnapshot;
+    transport::TransportSet& transport = *m_pieceTransport;
+    const RenderGraph& graph = snapshot.graph;
+    const ParallelPlan& plan = graph.parallel;
+    const NodeStep& step = graph.steps[stepIndex];
+    const ParallelStep& info = plan.steps[stepIndex];
+    rt::BlockArena& arena = lane == 0 ? *m_pieceArena : m_crew->arena(lane);
+    SchedulerStats& stats = m_laneStats[lane];
+    const std::uint32_t offset = m_pieceOffset;
+    const std::uint32_t frames = m_pieceFrames;
+    const std::span<const float> silence{kSilence.data(), frames};
+    const std::span<float> scratch = m_crew->scratch(lane);
+
+    const std::size_t arenaMark = arena.mark();
+    const PortSpec ports = step.node->ports();
+    PortInputs inputs{};
+    PortOutputs outputs{};
+    for (std::uint32_t port = 0; port < ports.inputs && port < kMaxInputPorts; ++port) {
+        const std::uint32_t count = info.gatherCount[port];
+        if (count == 0) {
+            inputs[static_cast<std::size_t>(port) * kPortChannels] = silence;
+            inputs[(static_cast<std::size_t>(port) * kPortChannels) + 1] = silence;
+            continue;
+        }
+        // The accumulator, in this lane's scratch: zeroed, then every edge into it added
+        // in the serial walk's order - the same sum, the same float.
+        const std::span<float> left = scratch.subspan(
+            static_cast<std::size_t>(port * kPortChannels) * rt::kMaxBlockFrames, frames);
+        const std::span<float> right = scratch.subspan(
+            static_cast<std::size_t>((port * kPortChannels) + 1) * rt::kMaxBlockFrames, frames);
+        std::ranges::fill(left, 0.0F);
+        std::ranges::fill(right, 0.0F);
+        for (std::uint32_t g = 0; g < count; ++g) {
+            const GatherStep& gather = plan.gathers[info.gatherFirst[port] + g];
+            const std::span<float> srcLeft =
+                plan.buffers.channel(gather.fromBuffer, 0, offset, frames);
+            const std::span<float> srcRight =
+                plan.buffers.channel(gather.fromBuffer, 1, offset, frames);
+            if (gather.delayLine != kNone && gather.delayLine < graph.delays.size()) {
+                graph.delays[gather.delayLine].processAdd(srcLeft, srcRight, left, right);
+            } else {
+                for (std::uint32_t i = 0; i < frames; ++i) {
+                    left[i] += srcLeft[i];
+                    right[i] += srcRight[i];
+                }
+            }
+        }
+        inputs[static_cast<std::size_t>(port) * kPortChannels] = left;
+        inputs[(static_cast<std::size_t>(port) * kPortChannels) + 1] = right;
+    }
+    for (std::uint32_t port = 0; port < ports.outputs && port < kMaxOutputPorts; ++port) {
+        const std::uint32_t buffer = info.outputBuffers[port];
+        ADX_ASSERT(buffer != kNone);
+        for (std::uint32_t channel = 0; channel < kPortChannels; ++channel) {
+            outputs[(port * kPortChannels) + channel] =
+                plan.buffers.channel(buffer, channel, offset, frames);
+        }
+    }
+
+    const EventView events = step.eventTrack != kNone || ports.acceptsEvents
+                                 ? eventsFor(step, snapshot, transport, arena, frames, stats)
+                                 : EventView{};
+    const std::span<const float* const> automation =
+        automationFor(step, snapshot, transport.arrangement(), arena, frames);
+    ProcessContext context =
+        contextFor(step, ports, snapshot, transport, arena, inputs, outputs, events, automation,
+                   offset, frames, m_input, m_inputChannels);
+    step.node->process(context);
+    if (float value = 0.0F;
+        step.modulates < snapshot.params.size() && step.node->modulation(value)) {
+        // Ordered against every reader of this parameter by the plan's edges.
+        snapshot.params[step.modulates] = value;
+    }
+    arena.rewind(arenaMark);
+}
+
+void Scheduler::runPieceParallel(project::Snapshot& snapshot, transport::TransportSet& transport,
+                                 rt::BlockArena& arena, float* out, std::uint32_t offset,
+                                 std::uint32_t frames, std::uint32_t outChannels) noexcept {
+    ++m_stats.parallelPieces;
+    const ParallelPlan& plan = snapshot.graph.parallel;
+    const auto stepCount = static_cast<std::uint32_t>(plan.steps.size());
+    for (std::uint32_t s = 0; s < stepCount; ++s) {
+        plan.pending[s].store(plan.steps[s].predecessors, std::memory_order_relaxed);
+        plan.ready[s].store(0, std::memory_order_relaxed);
+    }
+    m_readyHead.store(0, std::memory_order_relaxed);
+    m_readyTail.store(0, std::memory_order_relaxed);
+    m_remaining.store(stepCount, std::memory_order_relaxed);
+    m_pieceSnapshot = &snapshot;
+    m_pieceTransport = &transport;
+    m_pieceArena = &arena;
+    m_pieceOffset = offset;
+    m_pieceFrames = frames;
+    for (const std::uint32_t root : plan.roots) {
+        pushReady(plan, root);
+    }
+
+    // Publishes everything above to the helpers (Crew::run stores with seq_cst after it),
+    // and returns once every step has run and every helper is out.
+    m_crew->run(&Scheduler::parallelTask, this);
+
+    for (std::uint32_t lane = 0; lane < m_crew->lanes(); ++lane) {
+        drainStats(m_laneStats[lane], m_stats);
+    }
+    writeDevice(plan.buffers, plan.outputBuffer, out, offset, frames, outChannels);
 }
 
 void Scheduler::render(project::Snapshot& snapshot, transport::TransportSet& transport,

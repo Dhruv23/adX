@@ -15,6 +15,7 @@
 // visible (§10 of the plan).
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -32,7 +33,12 @@ public:
     /// Compiles `graph`. `order` and `pdc` must have been computed from it. Nodes are
     /// shared, not copied: a node that survives from the previous graph keeps its
     /// voices, its meter ring and its tails.
-    CompiledGraph(const Graph& graph, const TopoResult& order, const PdcPlan& pdc);
+    ///
+    /// `parallel` also builds the ParallelPlan (RenderGraph.h), for an engine that runs
+    /// pieces on several threads. It costs a buffer per output port, so a builder whose
+    /// engine has no helpers leaves it off.
+    CompiledGraph(const Graph& graph, const TopoResult& order, const PdcPlan& pdc,
+                  bool parallel = false);
 
     CompiledGraph(const CompiledGraph&) = delete;
     CompiledGraph& operator=(const CompiledGraph&) = delete;
@@ -61,6 +67,9 @@ public:
     }
 
 private:
+    void buildParallel(const Graph& graph, const std::vector<std::size_t>& live,
+                       const std::vector<std::uint32_t>& stepOf);
+
     std::vector<std::shared_ptr<Node>> m_nodes;
     std::vector<NodeStep> m_steps;
     std::vector<EdgeStep> m_edges;
@@ -69,6 +78,16 @@ private:
     std::vector<float> m_delayStorage;
     std::vector<DelayLine> m_delays;
     std::uint32_t m_bufferCount{0};
+
+    // The parallel plan's arrays, empty unless it was asked for.
+    std::vector<ParallelStep> m_parallelSteps;
+    std::vector<GatherStep> m_gathers;
+    std::vector<std::uint32_t> m_successors;
+    std::vector<std::uint32_t> m_roots;
+    std::vector<float> m_parallelStorage;
+    std::vector<std::atomic<std::uint32_t>> m_pending;
+    std::vector<std::atomic<std::uint32_t>> m_ready;
+
     RenderGraph m_view;
 };
 

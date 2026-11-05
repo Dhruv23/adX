@@ -3,7 +3,7 @@ delivered as Qt events through the same handlers, never as a direct command call
 wiring between panels is part of what is being tested.
 
 Pointer events go through ``QTest``, which posts real ``QMouseEvent``s to the widget; on a
-GeometryView (a QQuickWidget) they travel on through the Quick window to geometry.qml's
+GeometryView (a QuickHost) they are passed on to the Quick window to geometry.qml's
 MouseArea and the panel's handler, as a user's do.
 
 What this does not cover, on purpose: a drag *between* widgets starts ``QDrag.exec``, the
@@ -23,11 +23,11 @@ from PySide6.QtGui import (
     QDropEvent,
     QKeySequence,
 )
-from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QAbstractItemView, QApplication, QComboBox, QMenu, QWidget
 
 from adx.control.protocol import AMBIGUOUS, BAD_REQUEST, ControlError
+from adx.panels.quick_host import QuickHost
 
 BUTTONS = {
     "left": Qt.MouseButton.LeftButton,
@@ -99,7 +99,7 @@ def drag(
     QTest.mousePress(target, BUTTONS[button], mods, a)
     for i in range(1, steps + 1):
         p = QPoint(a.x() + (b.x() - a.x()) * i // steps, a.y() + (b.y() - a.y()) * i // steps)
-        if isinstance(target, QQuickWidget):
+        if isinstance(target, QuickHost):
             # QTest.mouseMove sends no button state; the Quick window needs it to drag.
             QTest.mouseMove(target, p)
             _quick_move(target, p, BUTTONS[button], mods)

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <numeric>
+#include <utility>
 
 namespace adx::graph {
 namespace {
@@ -21,7 +22,8 @@ struct Want {
 // Long, but one straight line: collect lifetimes, colour them, lay the steps out. The
 // parts share too much state to split without passing it all around.
 // NOLINTNEXTLINE(readability-function-size)
-CompiledGraph::CompiledGraph(const Graph& graph, const TopoResult& order, const PdcPlan& pdc) {
+CompiledGraph::CompiledGraph(const Graph& graph, const TopoResult& order, const PdcPlan& pdc,
+                             bool parallel) {
     const std::size_t nodeCount = graph.nodes().size();
     const std::size_t stepCount = order.order.size();
 
@@ -198,6 +200,136 @@ CompiledGraph::CompiledGraph(const Graph& graph, const TopoResult& order, const 
     m_view.totalLatency = pdc.totalLatency;
     if (graph.hasOutput() && graph.output().v < nodeCount && stepOf[graph.output().v] != kNone) {
         m_view.outputBuffer = m_steps[stepOf[graph.output().v]].outputBuffers[kPortPost];
+    }
+    if (parallel && stepCount > 0) {
+        buildParallel(graph, live, stepOf);
+    }
+}
+
+// One straight line again: buffers, gathers, ordering edges, then the flat arrays.
+// NOLINTNEXTLINE(readability-function-size)
+void CompiledGraph::buildParallel(const Graph& graph, const std::vector<std::size_t>& live,
+                                  const std::vector<std::uint32_t>& stepOf) {
+    const std::size_t stepCount = m_steps.size();
+    m_parallelSteps.assign(stepCount, ParallelStep{});
+
+    // A buffer per output port: the serial plan gave one to every port a node has.
+    std::uint32_t bufferCount = 0;
+    for (std::size_t s = 0; s < stepCount; ++s) {
+        for (std::uint32_t port = 0; port < kMaxOutputPorts; ++port) {
+            if (m_steps[s].outputBuffers[port] != kNone) {
+                m_parallelSteps[s].outputBuffers[port] = bufferCount++;
+            }
+        }
+    }
+
+    // Gathers per (step, input port). `live` is in the order the serial walk applies the
+    // edges - by producing step, then consumer, port, source port and edge - and
+    // m_edges[i] is live[i]. Filtered to one accumulator, that is the order its sum is
+    // built in, so appending in this order keeps it.
+    std::vector<std::vector<GatherStep>> gathers(stepCount * kMaxInputPorts);
+    std::vector<std::vector<std::uint32_t>> after(stepCount);
+    for (std::size_t i = 0; i < live.size(); ++i) {
+        const GraphEdge& edge = graph.edges()[live[i]];
+        const std::uint32_t from = stepOf[edge.from.v];
+        const std::uint32_t to = stepOf[edge.to.v];
+        gathers[(static_cast<std::size_t>(to) * kMaxInputPorts) + edge.toPort].push_back(
+            GatherStep{.fromBuffer = m_parallelSteps[from].outputBuffers[edge.fromPort],
+                       .delayLine = m_edges[i].delayLine});
+        after[from].push_back(to);
+    }
+
+    // Order that is not audio, kept as the serial walk has it: the earlier step first.
+    const auto keepOrder = [&after](std::uint32_t a, std::uint32_t b) {
+        if (a != b) {
+            after[std::min(a, b)].push_back(std::max(a, b));
+        }
+    };
+    for (std::uint32_t c = 0; c < stepCount; ++c) {
+        const std::uint32_t target = m_steps[c].modulates;
+        if (target == kNone) {
+            continue;
+        }
+        // A controller writes one parameter after it runs. Whoever reads that parameter,
+        // and any other controller writing it, sees the value the serial order gives.
+        for (std::uint32_t s = 0; s < stepCount; ++s) {
+            const NodeStep& step = m_steps[s];
+            const bool reads = step.paramCount > 0 && target >= step.paramBase &&
+                               target - step.paramBase < step.paramCount;
+            if (reads || step.modulates == target) {
+                keepOrder(c, s);
+            }
+        }
+    }
+    // An event cursor advances as its step reads it, and a node keeps state between
+    // calls: two steps sharing either run in step order.
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> trackLast;
+    std::vector<std::pair<const Node*, std::uint32_t>> nodeLast;
+    for (std::uint32_t s = 0; s < stepCount; ++s) {
+        const NodeStep& step = m_steps[s];
+        if (step.eventTrack != kNone) {
+            const auto found = std::ranges::find_if(
+                trackLast, [&step](const auto& entry) { return entry.first == step.eventTrack; });
+            if (found != trackLast.end()) {
+                keepOrder(found->second, s);
+                found->second = s;
+            } else {
+                trackLast.emplace_back(step.eventTrack, s);
+            }
+        }
+        if (step.node != nullptr) {
+            const auto found = std::ranges::find_if(
+                nodeLast, [&step](const auto& entry) { return entry.first == step.node; });
+            if (found != nodeLast.end()) {
+                keepOrder(found->second, s);
+                found->second = s;
+            } else {
+                nodeLast.emplace_back(step.node, s);
+            }
+        }
+    }
+
+    for (std::uint32_t s = 0; s < stepCount; ++s) {
+        std::vector<std::uint32_t>& next = after[s];
+        std::ranges::sort(next);
+        const auto duplicates = std::ranges::unique(next);
+        next.erase(duplicates.begin(), duplicates.end());
+        ParallelStep& step = m_parallelSteps[s];
+        step.firstSuccessor = static_cast<std::uint32_t>(m_successors.size());
+        step.successorCount = static_cast<std::uint32_t>(next.size());
+        m_successors.insert(m_successors.end(), next.begin(), next.end());
+        for (const std::uint32_t t : next) {
+            ++m_parallelSteps[t].predecessors;
+        }
+        for (std::uint32_t port = 0; port < kMaxInputPorts; ++port) {
+            const std::vector<GatherStep>& list =
+                gathers[(static_cast<std::size_t>(s) * kMaxInputPorts) + port];
+            step.gatherFirst[port] = static_cast<std::uint32_t>(m_gathers.size());
+            step.gatherCount[port] = static_cast<std::uint32_t>(list.size());
+            m_gathers.insert(m_gathers.end(), list.begin(), list.end());
+        }
+    }
+    for (std::uint32_t s = 0; s < stepCount; ++s) {
+        if (m_parallelSteps[s].predecessors == 0) {
+            m_roots.push_back(s);
+        }
+    }
+
+    m_parallelStorage.assign(static_cast<std::size_t>(bufferCount) * kFloatsPerBuffer, 0.0F);
+    m_pending = std::vector<std::atomic<std::uint32_t>>(stepCount);
+    m_ready = std::vector<std::atomic<std::uint32_t>>(stepCount);
+
+    ParallelPlan& plan = m_view.parallel;
+    plan.steps = m_parallelSteps;
+    plan.gathers = m_gathers;
+    plan.successors = m_successors;
+    plan.roots = m_roots;
+    plan.buffers = BufferPool{m_parallelStorage, bufferCount};
+    plan.pending = m_pending;
+    plan.ready = m_ready;
+    if (graph.hasOutput() && graph.output().v < stepOf.size() &&
+        stepOf[graph.output().v] != kNone) {
+        plan.outputBuffer = m_parallelSteps[stepOf[graph.output().v]].outputBuffers[kPortPost];
     }
 }
 

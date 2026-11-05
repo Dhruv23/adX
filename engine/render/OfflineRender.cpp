@@ -78,11 +78,12 @@ OfflineSession::OfflineSession(const project::Project& project, const OfflineRen
 
     auto backend = std::make_unique<audio::OfflineBackend>();
     s.backend = backend.get();
-    s.engine = std::make_unique<RenderEngine>(std::move(backend),
-                                              EngineOptions{.sampleRate = options.sampleRate,
-                                                            .blockFrames = options.blockFrames,
-                                                            .outputChannels = options.channels,
-                                                            .offline = true});
+    s.engine = std::make_unique<RenderEngine>(
+        std::move(backend), EngineOptions{.sampleRate = options.sampleRate,
+                                          .blockFrames = options.blockFrames,
+                                          .outputChannels = options.channels,
+                                          .offline = true,
+                                          .renderWorkers = options.renderWorkers});
     if (s.engine->open().code != audio::Error::Code::None) {
         s.error = "could not open the offline backend";
         return;
@@ -156,6 +157,7 @@ void OfflineSession::finish(RenderStats& stats) const {
     stats.latencySamples = s.engine->latencySamples();
     stats.arenaHighWater = s.engine->audio().arenaHighWaterMark();
     stats.arenaCapacity = s.engine->audio().callbacks().arenaCapacity();
+    stats.parallelPieces = s.engine->core().scheduler().stats().parallelPieces;
     stats.wallSeconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - s.startedAt).count();
 }

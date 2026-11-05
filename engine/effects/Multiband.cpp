@@ -117,12 +117,16 @@ void MultibandComp::processWet(std::span<const float> inLeft, std::span<const fl
         for (std::size_t b = 0; b < m_bands; ++b) {
             // Stereo-linked peak detection, smoothed in dB.
             const float peak = std::max(std::abs(band[0][b]), std::abs(band[1][b]));
-            const auto level = static_cast<float>(dsp::gainToDb(peak, -120.0));
+            // In float: the detector's level only steers a smoothed gain, and the double
+            // series was most of this effect's time.
+            const float level = dsp::gainToDbF(peak, -120.0F);
             const float over = level - context.paramAt(bandParam(b, 0), i);
             const float target = reductionDb(over, m_ratio[b]);
             const float coefficient = target < m_reduction[b] ? m_attack : m_release;
             m_reduction[b] = target + (coefficient * (m_reduction[b] - target));
-            const float gain = dsp::dbToGainF(m_reduction[b] + context.paramAt(bandParam(b, 2), i));
+            // Worked out again only when it moves: a band that is not compressing sits
+            // at exactly its makeup gain.
+            const float gain = m_bandGain[b](m_reduction[b] + context.paramAt(bandParam(b, 2), i));
             left += band[0][b] * gain;
             right += band[1][b] * gain;
         }
@@ -150,8 +154,7 @@ void TransientShaper::processWet(std::span<const float> inLeft, std::span<const 
         const float slowPole = level > m_slow ? m_slowAttack : m_slowRelease;
         m_fast = level + (fastPole * (m_fast - level));
         m_slow = level + (slowPole * (m_slow - level));
-        const auto difference =
-            static_cast<float>(dsp::gainToDb((m_fast + kFloor) / (m_slow + kFloor)));
+        const float difference = dsp::gainToDbF((m_fast + kFloor) / (m_slow + kFloor));
         const float attack =
             std::clamp(context.paramAt(idx(TransientParam::Attack), i), -1.0F, 1.0F);
         const float sustain =

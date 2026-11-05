@@ -38,6 +38,22 @@ PANELS = (
 )
 BUDGET_MS = 1000.0 / 60.0
 
+# The analyzers share a tab group, and a tab behind another is switched off
+# (analyzers/host.py on_screen), so raising each in turn leaves one running. Re-dock the
+# six side by side along the bottom of the main window so every one is on screen at
+# once. Not floating: each floating dock is its own top-level window with its own
+# swapchain, and presenting seven of them on the GUI thread is a cost no user layout has.
+FLOAT = """
+from PySide6.QtCore import Qt
+for panel in window.analyzers:
+    window.removeDockWidget(panel)
+    window.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, panel, Qt.Orientation.Horizontal)
+    panel.show()
+window.resizeDocks(list(window.analyzers), [1] * len(window.analyzers), Qt.Orientation.Horizontal)
+result = True
+"""
+ANALYZERS = 6
+
 HOOK = """
 import time
 clock = window.clock
@@ -75,13 +91,21 @@ def main() -> int:
         app.wait_for("project.open", timeout=120)
         for panel in PANELS:
             app.trigger(f"view.{panel}")
+        app.script(FLOAT)
+        deadline = time.monotonic() + 10
+        while len(app.state()["analyzers"]) < ANALYZERS and time.monotonic() < deadline:
+            time.sleep(0.2)
         app.script(HOOK)
         app.trigger("transport.play")
         app.wait_for("transport.playing", timeout=10)
         time.sleep(args.seconds)
         stats = dict(app.script(READ))
         stats["analyzers"] = app.state()["analyzers"]
-    stats["ok"] = stats["p99_ms"] < BUDGET_MS and stats["interval_p99_ms"] < BUDGET_MS * 1.5
+    stats["ok"] = (
+        len(stats["analyzers"]) == ANALYZERS
+        and stats["p99_ms"] < BUDGET_MS
+        and stats["interval_p99_ms"] < BUDGET_MS * 1.5
+    )
     print(json.dumps(stats))
     return 0 if stats["ok"] else 1
 

@@ -78,6 +78,7 @@ adx_add_cpp_test(adx_tests
         render/test_golden_units.cpp
         render/test_corpus_render.cpp
         render/test_spectral_match.cpp
+        render/test_parallel_render.cpp
         render/test_pdc_effects.cpp
         render/test_decode_async.cpp
         render/test_levels.cpp

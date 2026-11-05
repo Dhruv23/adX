@@ -8,6 +8,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <span>
 
@@ -60,6 +61,67 @@ struct EdgeStep {
     std::uint32_t delayLine{kNone};
 };
 
+/// One input a step gathers in the parallel plan: a producer's output port, added into
+/// the step's accumulator - through its PDC delay line when it has one.
+struct GatherStep {
+    /// The producer's output, in ParallelPlan::buffers.
+    std::uint32_t fromBuffer{kNone};
+    /// Index into RenderGraph::delays, or kNone.
+    std::uint32_t delayLine{kNone};
+};
+
+/// A step's place in the parallel plan. Indexed like RenderGraph::steps.
+struct ParallelStep {
+    /// Per input port, what is summed into it: [gatherFirst, +gatherCount) into
+    /// ParallelPlan::gathers, in exactly the order the serial walk adds the same edges,
+    /// so every accumulator's bits are the same whichever thread sums it.
+    std::array<std::uint32_t, kMaxInputPorts> gatherFirst{0, 0};
+    std::array<std::uint32_t, kMaxInputPorts> gatherCount{0, 0};
+    /// Where the node writes, per output port, in ParallelPlan::buffers.
+    std::array<std::uint32_t, kMaxOutputPorts> outputBuffers{kNone, kNone};
+    /// Steps that may start only once this one is done: [firstSuccessor,
+    /// +successorCount) into ParallelPlan::successors.
+    std::uint32_t firstSuccessor{0};
+    std::uint32_t successorCount{0};
+    /// How many steps must finish before this one may start.
+    std::uint32_t predecessors{0};
+};
+
+/// The same steps as a dependency graph, for running a piece on several threads
+/// (Scheduler, Crew.h). Empty when the builder was not asked for one; the serial walk
+/// over RenderGraph::steps is then the only way to run the graph.
+///
+/// What differs from the serial plan, and why the output is bit for bit the same:
+///   - a step pulls its inputs when it starts rather than each producer pushing into
+///     an accumulator when it finishes. The additions into one accumulator are the
+///     same additions in the same order (GatherStep), so the sum is the same float;
+///   - every output port has a buffer of its own. The serial plan shares buffers
+///     between steps whose lifetimes do not overlap in the *serial* order, which says
+///     nothing once steps overlap in time;
+///   - an accumulator is the running thread's scratch, alive only while its step runs;
+///   - dependencies that are not audio are edges too: a controller and the node whose
+///     parameter it writes, and two steps that share an event cursor or a node, keep
+///     the order the serial walk gives them.
+struct ParallelPlan {
+    std::span<const ParallelStep> steps;
+    std::span<const GatherStep> gathers;
+    std::span<const std::uint32_t> successors;
+    /// Steps with no predecessors, in step order.
+    std::span<const std::uint32_t> roots;
+    BufferPool buffers;
+    /// The master's post-fader buffer in `buffers`.
+    std::uint32_t outputBuffer{kNone};
+    /// Per step, predecessors still running in the piece being run. Reset at the start
+    /// of every piece; written only by whoever is running the graph.
+    std::span<std::atomic<std::uint32_t>> pending;
+    /// The ready queue: each step's index + 1 once it may run, 0 before. Reset per piece.
+    std::span<std::atomic<std::uint32_t>> ready;
+
+    [[nodiscard]] bool available() const noexcept {
+        return !steps.empty() && pending.size() == steps.size() && ready.size() == steps.size();
+    }
+};
+
 struct RenderGraph {
     std::span<const NodeStep> steps;
     std::span<const EdgeStep> edges;
@@ -72,6 +134,8 @@ struct RenderGraph {
     /// Samples between an event and its sound at the output, along the slowest path.
     /// The latency readout, and Phase 8's recording alignment.
     std::uint32_t totalLatency{0};
+    /// The parallel plan, when one was built.
+    ParallelPlan parallel;
 };
 
 } // namespace adx::graph

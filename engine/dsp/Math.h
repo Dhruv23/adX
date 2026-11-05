@@ -19,6 +19,7 @@
 #include <bit>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 namespace adx::dsp {
 
@@ -126,6 +127,62 @@ inline constexpr double kLog2Of10 = 3.32192809488736234787;
     return sinTurnsF(turns + 0.25F);
 }
 
+/// sin(2 pi x) for x already in [0, 1): what an oscillator that wraps its own phase
+/// has. No branches: folded to [0, 1/4] with abs and min, then a minimax odd
+/// polynomial in x itself (4 terms, designed by Remez on [0, 1/4]). Error below 7e-7,
+/// evaluated in float - the same as sinTurnsF's, for two multiplies fewer and no
+/// unpredictable branch on the quadrant.
+[[nodiscard]] inline float sinUnitF(float x) noexcept {
+    const float u = x - 0.5F; // sin(2 pi x) = -sin(2 pi u), u in [-1/2, 1/2)
+    const float a = u < 0.0F ? -u : u;
+    const float b = 0.5F - a;
+    const float m = a < b ? a : b; // sin(2 pi a) = sin(2 pi (1/2 - a))
+    const float m2 = m * m;
+    const float poly =
+        6.283164044F + (m2 * (-41.33714237F + (m2 * (81.34076889F + (m2 * -70.99343327F)))));
+    const float s = m * poly;
+    // The sign of -u, set on s >= 0: a bit operation, never a branch.
+    const std::uint32_t sign = (std::bit_cast<std::uint32_t>(u) & 0x80000000U) ^ 0x80000000U;
+    return std::bit_cast<float>(std::bit_cast<std::uint32_t>(s) | sign);
+}
+
+/// cos(2 pi x) for x in [0, 1), with sinUnitF's accuracy.
+[[nodiscard]] inline float cosUnitF(float x) noexcept {
+    float shifted = x + 0.25F;
+    shifted = shifted >= 1.0F ? shifted - 1.0F : shifted;
+    return sinUnitF(shifted);
+}
+
+/// atan2(y, x) in turns, in float: atan2Turns' octant reduction, then a 4-term minimax
+/// odd polynomial on [0, tan(pi / 8)] (Remez). Error below 3e-8 turns, which is float's
+/// own resolution near 1/2. For a phase vocoder that reads 513 phases a frame. 0 at
+/// the origin.
+[[nodiscard]] inline float atan2TurnsF(float y, float x) noexcept {
+    const float ax = x < 0.0F ? -x : x;
+    const float ay = y < 0.0F ? -y : y;
+    if (ax == 0.0F && ay == 0.0F) {
+        return 0.0F;
+    }
+    const bool swap = ay > ax;
+    float z = swap ? ax / ay : ay / ax; // 0 .. 1
+    float base = 0.0F;
+    if (z > 0.41421356F) {
+        z = (z - 1.0F) / (z + 1.0F);
+        base = 0.125F; // pi/4, in turns
+    }
+    const float z2 = z * z;
+    const float poly =
+        0.1591545625F + (z2 * (-0.05302114737F + (z2 * (0.03116408827F + (z2 * -0.01715644418F)))));
+    float angle = base + (z * poly);
+    if (swap) {
+        angle = 0.25F - angle;
+    }
+    if (x < 0.0F) {
+        angle = 0.5F - angle;
+    }
+    return y < 0.0F ? -angle : angle;
+}
+
 // --- exponentials and logarithms -------------------------------------------
 
 /// 2^x. Relative error below 1e-15 for x in [-1000, 1000]; saturates outside.
@@ -161,7 +218,18 @@ inline constexpr double kLog2Of10 = 3.32192809488736234787;
         return -1100.0;
     }
     int exponent = 0;
-    double mantissa = std::frexp(x, &exponent); // [0.5, 1)
+    double mantissa = 0.0;
+    const auto bits = std::bit_cast<std::uint64_t>(x);
+    const auto biased = static_cast<int>((bits >> 52U) & 0x7FFU);
+    if (biased != 0 && biased != 0x7FF) {
+        // What frexp returns for a normal number, read off its bits: MSVC's frexp is a
+        // call into the CRT, and gainToDb runs per sample in every compressor.
+        mantissa = std::bit_cast<double>((bits & 0x800FFFFFFFFFFFFFULL) | (1022ULL << 52U));
+        exponent = biased - 1022;
+    } else {
+        mantissa = std::frexp(x, &exponent); // subnormal or infinite
+    }
+    // mantissa is in [0.5, 1)
     if (mantissa < 0.70710678118654752440) {
         mantissa *= 2.0;
         --exponent;
@@ -309,6 +377,39 @@ inline constexpr double kLog2Of10 = 3.32192809488736234787;
 
 [[nodiscard]] inline float dbToGainF(float db) noexcept {
     return exp2F(db * (3.32192809488736234787F / 20.0F));
+}
+
+/// log2(x) in float for x > 0: exponent from the bits, then 2 atanh(s) to s^7 on the
+/// mantissa folded to [sqrt(1/2), sqrt(2)). Absolute error below 1e-7. -150 for x <= 0
+/// and for subnormals (which the audio thread flushes anyway).
+[[nodiscard]] inline float log2F(float x) noexcept {
+    const auto bits = std::bit_cast<std::uint32_t>(x);
+    const auto biased = static_cast<int>((bits >> 23U) & 0xFFU);
+    if (!(x > 0.0F) || biased == 0 || biased == 0xFF) {
+        return x == std::numeric_limits<float>::infinity() ? 128.0F : -150.0F;
+    }
+    // Mantissa in [1, 2), then into [sqrt(1/2), sqrt(2)) so |s| <= 0.1716.
+    float mantissa = std::bit_cast<float>((bits & 0x007FFFFFU) | 0x3F800000U);
+    int exponent = biased - 127;
+    if (mantissa > 1.41421356F) {
+        mantissa *= 0.5F;
+        ++exponent;
+    }
+    const float s = (mantissa - 1.0F) / (mantissa + 1.0F);
+    const float s2 = s * s;
+    const float poly =
+        1.0F + (s2 * ((1.0F / 3.0F) + (s2 * ((1.0F / 5.0F) + (s2 * (1.0F / 7.0F))))));
+    return static_cast<float>(exponent) + (s * poly * 2.88539008177792681472F); // 2 / ln 2
+}
+
+/// 20 log10(gain) in float; `floor` for gain <= 0 or below it. For per-sample
+/// detectors, where gainToDb's double series is most of the cost.
+[[nodiscard]] inline float gainToDbF(float gain, float floor = -200.0F) noexcept {
+    if (!(gain > 0.0F)) {
+        return floor;
+    }
+    const float db = log2F(gain) * 6.02059991327962390427F; // 20 log10(2)
+    return db < floor ? floor : db;
 }
 
 /// midiToHz for a pitch read every sample, which mostly does not move: the same

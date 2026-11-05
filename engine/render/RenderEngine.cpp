@@ -24,8 +24,14 @@ graph::EngineMessage messageOf(graph::MessageKind kind) noexcept {
 
 RenderEngine::RenderEngine(std::unique_ptr<audio::AudioBackend> backend, EngineOptions options)
     : m_options(options), m_audio(std::move(backend)), m_core(m_transport, m_audio.reaper()),
-      m_builder(options.sampleRate, rt::kMaxBlockFrames, options.offline) {
+      m_builder(options.sampleRate, rt::kMaxBlockFrames, options.offline),
+      m_workers(options.renderWorkers < 0 ? defaultRenderWorkers()
+                                          : static_cast<std::uint32_t>(options.renderWorkers),
+                !options.offline) {
     m_audio.setProcessStep(&graph::EngineCore::processStep, &m_core);
+    // Before the stream opens: the scheduler reads its crew on the audio thread.
+    m_core.scheduler().setCrew(m_workers.crew());
+    m_builder.setParallel(m_workers.crew() != nullptr);
 }
 
 RenderEngine::~RenderEngine() {

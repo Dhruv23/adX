@@ -16,6 +16,7 @@
 #include <array>
 #include <cstdint>
 
+#include "engine/dsp/Math.h"
 #include "engine/dsp/RbjFilter.h"
 #include "engine/effects/Effect.h"
 #include "engine/effects/Params.h"
@@ -117,6 +118,7 @@ private:
     std::array<dsp::BiquadCoefficients, kCrossovers> m_allpassCoefficients{};
     /// Each band's smoothed gain reduction, dB (<= 0).
     std::array<float, kMaxBands> m_reduction{};
+    std::array<dsp::DbGain, kMaxBands> m_bandGain{};
     std::size_t m_bands{4};
     float m_attack{0.0F};
     float m_release{0.0F};

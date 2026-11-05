@@ -9,6 +9,7 @@ target_sources(adx_engine_static PRIVATE
     OggEncoder.cpp
     RenderEngine.cpp
     RenderHash.cpp
+    RenderWorkers.cpp
     StemRender.cpp
     WavEncoder.cpp
 )

@@ -21,7 +21,6 @@ import numpy as np
 from PySide6.QtCore import QEvent, QObject, QSettings, Qt, QUrl, Signal, Slot
 from PySide6.QtGui import QAction, QActionGroup, QColor, QKeyEvent, QKeySequence
 from PySide6.QtQuick import QQuickItem
-from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtWidgets import (
     QComboBox,
     QGridLayout,
@@ -53,6 +52,7 @@ from adx.panels.piano_roll.tools import (
     simplify_curve,
 )
 from adx.panels.piano_roll.view_state import BuiltRange, ViewState
+from adx.panels.quick_host import QuickHost
 from adx.quick import ULong, call
 from adx.theme.tokens import DARK, Theme, qml_palette, role_colors
 from adx.widgets.keyboard import PianoKeyboard
@@ -162,9 +162,8 @@ class PianoRollPanel(DockPanel):
         self.keyboard = PianoKeyboard()
         self.keyboard.key_clicked.connect(lambda pitch: self._sound(pitch, 100))
         self.timeline = Timeline()
-        self.quick = QQuickWidget()
+        self.quick = QuickHost()
         self.quick.setObjectName("piano_roll.roll")
-        self.quick.setResizeMode(QQuickWidget.ResizeMode.SizeRootObjectToView)
         self.input = RollInput(self)
         context = self.quick.rootContext()
         context.setContextProperty("rollInput", self.input)

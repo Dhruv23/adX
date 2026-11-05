@@ -91,6 +91,16 @@ public:
         return m_nodes;
     }
 
+    /// Whether compiled graphs carry a parallel plan (RenderGraph.h), for an engine
+    /// whose scheduler has helpers. Set before the first build; a change rebuilds.
+    void setParallel(bool parallel) {
+        if (parallel != m_parallel) {
+            m_parallel = parallel;
+            m_graphBuild.reset();
+            m_graph.reset();
+        }
+    }
+
     /// The compiled graph of the last successful build. For tests and diagnostics.
     [[nodiscard]] const graph::CompiledGraph* compiledGraph() const noexcept {
         return m_graph.get();
@@ -174,6 +184,7 @@ private:
     std::shared_ptr<const TempoBlock> m_tempo;
     std::shared_ptr<graph::GraphBuild> m_graphBuild;
     std::shared_ptr<graph::CompiledGraph> m_graph;
+    bool m_parallel{false};
     std::map<std::pair<std::uint32_t, std::uint32_t>, ClipCacheEntry> m_clips;
     std::map<std::uint32_t, ChannelCacheEntry> m_channels;
     std::uint64_t m_clipVersion{0};
