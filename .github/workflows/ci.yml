@@ -164,12 +164,13 @@ jobs:
           pip install $pin
 
       # 5. C++ tests.
-      # Four at a time, the runner's cores. The [.slow] cases that measure time are
-      # RUN_SERIAL (cmake/AdxTesting.cmake), so ctest runs those alone.
+      # One at a time. --parallel 4 was tried (2026-11-05): on the runner's four cores
+      # the regular set's timing tests (levels worst call, the watchdog, analysis
+      # cancellation, the Voice's background render) starved each other and failed.
       - name: ctest
         shell: bash
         run: |
-          ctest --preset ${{ matrix.preset }} ${{ matrix.ctest_args }} --parallel 4 --output-on-failure 2>&1 | tee ctest.log
+          ctest --preset ${{ matrix.preset }} ${{ matrix.ctest_args }} --output-on-failure 2>&1 | tee ctest.log
           exit "${PIPESTATUS[0]}"
 
       # Job logs need a token to read; annotations do not. Surface what failed.
