@@ -177,7 +177,10 @@ jobs:
         if: failure() && hashFiles('ctest.log') != ''
         shell: bash
         run: |
-          grep -n -E 'Failed|Timeout|FAILED|REQUIRE|with expansion|worst|xrun' ctest.log | head -40 | while IFS= read -r l; do echo "::error title=ctest::${l:0:400}"; done
+          grep -n -E 'Failed|Timeout|REQUIRE|worst|xrun' ctest.log | head -20 | while IFS= read -r l; do echo "::error title=ctest::${l:0:400}"; done
+          # Each Catch2 failure with what follows it: the expression, its expansion and
+          # the INFO messages (which case of a table-driven test failed).
+          grep -n -A8 'FAILED:' ctest.log | head -60 | while IFS= read -r l; do echo "::error title=ctest detail::${l:0:400}"; done
 
       # 6. Python tests. Independent of ctest, so a C++ failure does not hide them.
       # The GPU frame-rate test cannot run here - no usable GPU on the runners - and is
