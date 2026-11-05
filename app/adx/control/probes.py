@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from PySide6.QtWidgets import QApplication
 
 from adx import engine_bridge
+from adx.control import inputs
 from adx.control.protocol import Json
 from adx.panels.analyzers.host import on_screen
 
@@ -40,7 +41,7 @@ def state(window: MainWindow) -> dict[str, Any]:
     project = window.session.project
     modal = QApplication.activeModalWidget()
     popup = QApplication.activePopupWidget()
-    focus = QApplication.focusWidget()
+    focus = inputs.focused()
     text = project.dumps() if project is not None else ""
     engine = window.engine
     clock = window.clock

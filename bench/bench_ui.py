@@ -87,7 +87,8 @@ def main() -> int:
     parser.add_argument("--seconds", type=float, default=60.0)
     args = parser.parse_args()
     project = make_project.build(ROOT / "build" / "bench")
-    with Driver.launch(project, via="adX.cmd", timeout=180) as app:
+    # In front: Windows may throttle presenting a fully covered window (adx/screens.py).
+    with Driver.launch(project, via="adX.cmd", timeout=180, env={"ADX_BEHIND": "0"}) as app:
         app.wait_for("project.open", timeout=120)
         for panel in PANELS:
             app.trigger(f"view.{panel}")

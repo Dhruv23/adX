@@ -65,6 +65,10 @@ class QuickHost(QWidget):
             self._target = self._window = self._view
             body = QWidget.createWindowContainer(self._view, self)
             body.setMinimumSize(1, 1)
+            # Qt reports the container as the focus widget when the scene has focus, so
+            # input synthesized on "the focused widget" lands there: pass it on too.
+            body.installEventFilter(self)
+            self._body = body
         body.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setFocusProxy(body)
         layout.addWidget(body)
@@ -144,7 +148,7 @@ class QuickHost(QWidget):
             )
             QApplication.sendEvent(self._target, clone_wheel)
             return True
-        if kind in _KEYS and isinstance(event, QKeyEvent):
+        if (kind in _KEYS or kind == QEvent.Type.ShortcutOverride) and isinstance(event, QKeyEvent):
             clone_key = QKeyEvent(
                 kind,
                 event.key(),
@@ -153,11 +157,46 @@ class QuickHost(QWidget):
                 event.isAutoRepeat(),
                 event.count(),
             )
-            QApplication.sendEvent(self._target, clone_key)
+            clone_key.setAccepted(False)
+            QApplication.sendEvent(self._key_target(), clone_key)
+            if kind == QEvent.Type.ShortcutOverride:
+                # The scene claims the key (a text field in it) or leaves it to shortcuts.
+                event.setAccepted(clone_key.isAccepted())
             return True
         return super().event(event)
 
+    def _key_target(self) -> QObject:
+        """Where a forwarded key goes. A native Quick window gives its focus item active
+        focus only while it is the OS focus window, which a click makes it for a user
+        but synthesized input never does: then the item holding focus gets the key."""
+        if self._view is None:
+            return self._target
+        active = self._view.activeFocusItem()
+        if active is not None and active is not self._view.contentItem():
+            return active
+        root = self._view.rootObject()
+        stack = [root] if root is not None else []
+        found: QQuickItem | None = None
+        while stack:
+            item = stack.pop()
+            if item.hasFocus() and item is not root:
+                found = item
+            stack.extend(item.childItems())
+        return found or self._target
+
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt's name
+        if self._view is not None and watched is getattr(self, "_body", None):
+            kind = event.type()
+            if (
+                kind in _MOUSE
+                or kind in _KEYS
+                or kind
+                in (
+                    QEvent.Type.Wheel,
+                    QEvent.Type.ShortcutOverride,
+                )
+            ):
+                return self.event(event)
         if self._view is not None and watched is self._view and event.type() in _DRAGS:
             # A drop on the native window: deliver it to the host, where the panel's
             # filter (the playlist's) decides, as it did on the QQuickWidget.

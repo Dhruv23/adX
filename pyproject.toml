@@ -78,6 +78,9 @@ markers = [
     "wannacry: plays or writes the WannaCry corpus, which only this machine has",
     # phase_10.5.md 4.6: pinned open-source plugins from tools/fetch_test_plugins.py.
     "realplugin: hosts the fetched test plugins",
+    # Wall-clock or callback-deadline assertions: run alone, after the parallel pass
+    # (pytest -n auto -m "not serial", then pytest -m serial).
+    "serial: asserts a time budget, so it must not share the CPU with other tests",
 ]
 
 [tool.ruff]

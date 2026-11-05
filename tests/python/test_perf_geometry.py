@@ -32,6 +32,7 @@ def _best_ms(runs: int, body: object) -> float:
     return best
 
 
+@pytest.mark.serial
 def test_round_trip_10k(ten_k_text: str) -> None:
     """Python -> C++ -> numpy for 10k notes: the clip as one array, and a geometry view."""
     project, _diagnostics = Project.loads(ten_k_text)
@@ -50,6 +51,7 @@ def test_round_trip_10k(ten_k_text: str) -> None:
     assert ms < 0.5
 
 
+@pytest.mark.serial
 def test_build_10k_through_the_bridge(ten_k_text: str) -> None:
     """The 2 ms C++ budget holds through the FFI too (GIL released, one call)."""
     project, _diagnostics = Project.loads(ten_k_text)

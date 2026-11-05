@@ -24,6 +24,7 @@ import random
 import time
 from collections.abc import Callable
 
+import pytest
 from PySide6.QtWidgets import QApplication
 
 from adx import engine_bridge
@@ -152,6 +153,7 @@ def gui_edit(studio: MainWindow, rng: random.Random, n: int) -> None:
         )
 
 
+@pytest.mark.serial
 def test_bidirectional(studio: MainWindow, tmp_path: pathlib.Path) -> None:
     path = tmp_path / "both.adx"
     path.write_text(TEXT, encoding="utf-8", newline="")

@@ -166,6 +166,7 @@ class Driver:
         environment.setdefault("ADX_NO_QUICKSTART", "1")
         # Off the monitor the user is working on (adx/screens.py).
         environment.setdefault("ADX_SCREEN", "secondary")
+        environment.setdefault("ADX_BEHIND", "1")
         # Its own settings, so a driven run never touches the user's layout or recent files.
         settings = Path(settings_dir or control_file.parent)
         settings.mkdir(parents=True, exist_ok=True)

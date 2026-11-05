@@ -247,7 +247,7 @@ class ControlServer(QObject):
 
     def _focus(self) -> QWidget:
         """Where typing goes with no target: the focused widget (a dialog's field)."""
-        widget = QApplication.focusWidget()
+        widget = inputs.focused()
         if widget is None:
             raise ControlError("nothing has the keyboard focus", BAD_REQUEST)
         return widget

@@ -190,7 +190,11 @@ jobs:
       - name: pytest
         if: ${{ matrix.python && !cancelled() && steps.install.outcome == 'success' }}
         timeout-minutes: 20
-        run: pytest -m "not gpu" -n auto
+        run: |
+          pytest -m "not gpu and not serial" -n auto
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # Time-budget tests alone, with the CPU to themselves.
+          pytest -m "serial and not gpu"
 
       # Steps 7-14 are the lint gates, and they all carry `if: !cancelled()`.
       #

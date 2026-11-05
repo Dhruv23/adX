@@ -24,7 +24,15 @@ from PySide6.QtGui import (
     QKeySequence,
 )
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QAbstractItemView, QApplication, QComboBox, QMenu, QWidget
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QApplication,
+    QComboBox,
+    QLineEdit,
+    QMainWindow,
+    QMenu,
+    QWidget,
+)
 
 from adx.control.protocol import AMBIGUOUS, BAD_REQUEST, ControlError
 from adx.panels.quick_host import QuickHost
@@ -100,8 +108,9 @@ def drag(
     for i in range(1, steps + 1):
         p = QPoint(a.x() + (b.x() - a.x()) * i // steps, a.y() + (b.y() - a.y()) * i // steps)
         if isinstance(target, QuickHost):
-            # QTest.mouseMove sends no button state; the Quick window needs it to drag.
-            QTest.mouseMove(target, p)
+            # QTest.mouseMove sends no button state, and the Quick scene needs it to
+            # drag. It also moves the real cursor, which a native Quick window then
+            # sees as a buttonless move of its own: send the move directly instead.
             _quick_move(target, p, BUTTONS[button], mods)
         else:
             QTest.mouseMove(target, p)
@@ -134,12 +143,33 @@ def type_text(widget: QWidget, text: str) -> None:
     _settle()
 
 
+def focused() -> QWidget | None:
+    """Where typing goes with no target: Qt's focus widget, or - when the app is not the
+    foreground window (ADX_BEHIND, adx/screens.py) - the one a modal dialog or the
+    active window would give it to."""
+    widget = QApplication.focusWidget()
+    modal = QApplication.activeModalWidget()
+    if modal is not None and (widget is None or widget.window() is not modal):
+        # A dialog just opened and is not active to Qt yet: typing is meant for it.
+        inner = modal.focusWidget() or modal.findChild(QLineEdit)
+        return inner or modal
+    if widget is not None:
+        return widget
+    for top in (modal, QApplication.activeWindow()):
+        if top is not None:
+            return top.focusWidget() or top
+    for top in QApplication.topLevelWidgets():
+        if isinstance(top, QMainWindow) and top.isVisible():
+            return top.focusWidget() or top
+    return None
+
+
 def key(widget: QWidget | None, sequence: str) -> None:
     """A key or chord in QKeySequence's spelling: "Ctrl+Z", "Space", "Delete"."""
     keys = QKeySequence(sequence)
     if keys.isEmpty():
         raise ControlError(f"not a key sequence: {sequence!r}", BAD_REQUEST)
-    receiver = widget or QApplication.focusWidget() or QApplication.activeWindow()
+    receiver = widget or focused()
     if receiver is None:
         raise ControlError("no widget has focus", BAD_REQUEST)
     for i in range(keys.count()):

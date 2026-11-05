@@ -36,6 +36,7 @@ def ten_minutes(tmp_path_factory: pytest.TempPathFactory) -> pathlib.Path:
     return path
 
 
+@pytest.mark.serial
 @pytest.mark.usefixtures("quick")
 def test_ten_minute_file_every_zoom(ten_minutes: pathlib.Path) -> None:
     from adx.panels.waveform.widget import WaveformView

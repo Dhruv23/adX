@@ -30,6 +30,7 @@ def test_example_roundtrips(repo_root: pathlib.Path, name: str) -> None:
         assert again.note_count(pattern) == project.note_count(pattern)
 
 
+@pytest.mark.serial
 def test_load_budget(repo_root: pathlib.Path) -> None:
     """phase_2.md 9: loading stays well inside half a second, even at 100k notes.
 
