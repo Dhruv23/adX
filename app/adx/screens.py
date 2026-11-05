@@ -129,11 +129,10 @@ class _Keeper(QObject):
                 # The Show event comes before the native show, so the attribute still
                 # applies to this one; lowering waits until the window exists.
                 watched.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-                if self.previous and _foreground() == self.previous:
-                    # The user's window is in front: activate to Qt now, as Windows
-                    # would have on show, so the next key (a dialog's Ctrl+A) is the
-                    # dialog's and not a main-window shortcut.
-                    _activate(watched)
+                # Activate to Qt now, as Windows would have on show, so the next key (a
+                # dialog's Ctrl+A) is the dialog's and not a main-window shortcut.
+                # Always: on a CI runner no user window is in front to compare with.
+                _activate(watched)
                 QTimer.singleShot(0, lambda w=watched: _send_back(w, self.previous))
         elif (
             self.behind
