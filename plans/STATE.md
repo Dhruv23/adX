@@ -115,8 +115,8 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 7 — Text-first layer | M | **Done** 2026-10-25 (CI green, run 40243278857; full check run 40248449713; human gate P7-1 closed by the user) |
 | 8 — Audio & export | M | **Built** 2026-10-29 - every automated §6 box observed locally; latency gate `[~]` (P8-1, hardware half in the final review); CI (P8-0) open |
 | 9 — Plugins & MIDI | L | **Built** 2026-10-30 - every automated §6 box observed locally; CI (P9-0), MIDI latency (P9-1, emulated half fails: P9-9), ASIO emulated half (P9-4), real plugins and live crash (P9-2, P9-3; agent-run, closed by Phase 10.5) open |
-| 10 — Analysis, visualization, polish | L | **Done** 2026-11-05 (CI green, run 41991668112; full check on tag `phase-10`) |
-| 10.5 — Agent-run testing | L | **Done** 2026-11-05 (CI green, run 41991668112; full check on tag `phase-10`) |
+| 10 — Analysis, visualization, polish | L | **Done** 2026-11-05 (CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`) |
+| 10.5 — Agent-run testing | L | **Done** 2026-11-05 (CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`) |
 | 11 — Live performance | L | Not started |
 | 12 — Sound-design foundation | XL | Not started |
 | 13 — Core Drums & Machines | M | Not started |
@@ -951,7 +951,7 @@ tests still do not count. Re-carried below.
 
 **Open issues for Phase 9:**
 
-- **P8-0** · **Per-push CI green 2026-11-05** (run 41991668112, with Phases 9-10.5 on top); the full check runs on tag `phase-10`. Was: **BLOCKER for marking Phase 8 done** · Nothing is committed or pushed. Fixed
+- **P8-0** · **Per-push CI green 2026-11-05** (run 41991668112, with Phases 9-10.5 on top); full check green (run 42017826073, tag `phase-10.5-r4`). Was: **BLOCKER for marking Phase 8 done** · Nothing is committed or pushed. Fixed
   when: per-push CI is green on all three jobs, and the full check - including the new
   `three-builds` job, which is `three_clean_builds_identical` - is green on a `phase-8`
   tag; record both run ids here and in phase_8.md §10.
@@ -1037,7 +1037,7 @@ violations while the plugin allocates in its process.
 
 **Open issues for Phase 10:**
 
-- **P9-0** · **Per-push CI green 2026-11-05** (run 41991668112); the full check runs on tag `phase-10`. Was: **BLOCKER for marking Phase 9 done** · Nothing is committed or pushed (and
+- **P9-0** · **Per-push CI green 2026-11-05** (run 41991668112); full check green (run 42017826073, tag `phase-10.5-r4`). Was: **BLOCKER for marking Phase 9 done** · Nothing is committed or pushed (and
   Phase 8 is in the same tree). Fixed when: per-push CI is green, and the full check is
   green on a `phase-9` tag - including `headless_render_with_plugins` - with both run ids
   recorded here and in phase_9.md §10. CI must build the fixture plugins and
@@ -1112,8 +1112,8 @@ violations while the plugin allocates in its process.
 | **Plan** | [phase_10.md](phase_10.md) |
 | **Entry** | Phase 9 §6 complete |
 | **Done when** | [phase_10.md](phase_10.md) §7 — **including `bench_full_project`** |
-| **Status** | Done 2026-11-05. Every [phase_10.md](phase_10.md) §7 box observed: the bench's eight targets (P10-5, P10-6), the one-hour soak, the golden re-bless reviewed and listened to, a clean clone in 90 s, docs examples in CI. Per-push CI green (run 41991668112); the full check runs on tag `phase-10` |
-| **Completed** | 2026-11-05 - CI run 41991668112; full check on tag `phase-10` |
+| **Status** | Done 2026-11-05. Every [phase_10.md](phase_10.md) §7 box observed: the bench's eight targets (P10-5, P10-6), the one-hour soak, the golden re-bless reviewed and listened to, a clean clone in 90 s, docs examples in CI. Per-push CI green (run 41991668112; 42017825970 at `384371e`); full check green, run 42017826073 on tag `phase-10.5-r4` |
+| **Completed** | 2026-11-05 - CI run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4` |
 
 > `bench_full_project` is a hard prerequisite for Phase 11, not a soft one. Do
 > not hand off with it unmet and an open issue in its place.
@@ -1263,8 +1263,8 @@ these; each is re-carried with its reason.
 | **Plan** | [phase_10.5.md](phase_10.5.md) |
 | **Entry** | Phase 9 built (it may run beside Phase 10's remaining work) |
 | **Done when** | [phase_10.5.md](phase_10.5.md) §6 |
-| **Status** | Done 2026-11-05. Every [phase_10.5.md](phase_10.5.md) §6 box observed; per-push CI green (run 41991668112), and the full check (with its scenarios job) runs on tag `phase-10`, which carries this phase too |
-| **Completed** | 2026-11-05 - CI run 41991668112; full check on tag `phase-10` |
+| **Status** | Done 2026-11-05. Every [phase_10.5.md](phase_10.5.md) §6 box observed; per-push CI green (run 41991668112; 42017825970 at `384371e`); full check green, run 42017826073 on tag `phase-10.5-r4`, scenarios job included |
+| **Completed** | 2026-11-05 - CI run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4` |
 
 > Added for FINAL_PLAN §9's rule "Every phase-ending check is agent-run". Software
 > checks that used to need the user get a software path here. Listening and approval

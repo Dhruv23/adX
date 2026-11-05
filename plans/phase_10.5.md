@@ -346,7 +346,7 @@ completion needs the local WannaCry run, recorded in §10.
 
 ## 6. Definition of done
 
-- [x] (2026-11-05: ctest 494/494 in all three, pytest, 26/26 scenarios incl. WannaCry; the full check's scenarios job on tag `phase-10`.) Every §5 test passes locally on Debug, RelWithDebInfo and Release; the
+- [x] (2026-11-05: ctest 494/494 in all three, pytest, 26/26 scenarios incl. WannaCry; the full check's scenarios job, run 42017826073 on tag `phase-10.5-r4`.) Every §5 test passes locally on Debug, RelWithDebInfo and Release; the
       scenarios also pass in the full check (null audio, plugins from the cache, the
       committed stand-in project), and locally on the WannaCry corpus (`[wannacry]`,
       §4.8) with nothing skipped.

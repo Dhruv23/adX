@@ -2,10 +2,12 @@
 
 ## Update, 2026-11-05: Phases 10 and 10.5 are Done; Phase 11 is next
 
-- Per-push CI green at `cbdf906` (run 41991668112). The close-out commit is tagged
-  `phase-10`; that tag's full check (tidy, fuzz, three clean builds, MSI, scenarios)
-  covers Phases 8-10.5. Record its run id in STATE.md under Phase 10 when it finishes.
-  If a job fails, fix it and re-tag.
+- Per-push CI green at `384371e` (run 42017825970). Full check green: run 42017826073
+  on tag `phase-10.5-r4` (tidy on Debug and Release, fuzz, three clean builds, MSI,
+  scenarios). It covers Phases 8-10.5. Two fixes it took: behind mode is off on CI
+  runners, and one partial designated initializer in `test_harmony.cpp`. The full tidy
+  now gets 120 minutes. `phase-10`, `phase-10.5`, `-r2` and `-r3` are older tags, and
+  their runs failed.
 - Phase 11's open issues are in STATE.md under Phase 10: P10-3, P10-4, P10.5-2, P10.5-3,
   P10-7, plus Phase 8/9's hardware and latency items, which don't gate Phase 11.
 - The OverflowError dialog below is fixed: plugin defaults are clamped and the knob
