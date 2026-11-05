@@ -37,7 +37,7 @@ jobs:
   tidy:
     name: clang-tidy, every file (${{ matrix.build_type }})
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 120  # the build plus a full tidy ran past 60 on 4-core runners
     # sccache as in ci.yml: what these jobs check (tidy's findings, the fuzzer, the
     # scenarios) does not depend on how the objects were compiled. three-builds and
     # installer stay uncached on purpose - "from clean" is what they test.

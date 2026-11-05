@@ -105,8 +105,9 @@ TEST_CASE("chroma_pitch_class", "[analysis][harmony]") {
     addTone(sharp, 0, sharp.size(), 69.5, 0.5F);
     const ChromaVector split = profileOf(chromagram(sharp, kRate));
     CHECK(std::abs(split.at(9) - split.at(10)) < 0.15F);
-    const ChromaVector tuned =
-        profileOf(chromagram(sharp, kRate, ChromaOptions{.tuningCents = 50.0F}));
+    ChromaOptions tuning;
+    tuning.tuningCents = 50.0F;
+    const ChromaVector tuned = profileOf(chromagram(sharp, kRate, tuning));
     CHECK(argmax(tuned) == 9);
     // Silence is all zeros, not noise.
     const std::vector<float> silent(kRate, 0.0F);
