@@ -324,8 +324,8 @@ without one fails the build.
       in under 5 minutes (FINAL_PLAN §8.2's actual requirement). (2026-11-04: OFF is
       the default build, and every suite passes in it. A clean clone of the working
       tree in Release: configure 40.6 s, total 90.3 s on 32 threads.)
-- [ ] `docs/` is complete and its examples execute in CI.
-- [ ] The installer produces a working MSI, verified on a clean VM:
+- [x] `docs/` is complete and its examples execute in CI. (2026-11-05: `test_docs_examples` and `test_agent_docs` in per-push CI, run 41991668112.)
+- [x] The installer produces a working MSI, verified on a clean VM (2026-11-05: the full check's `installer` job on tag `phase-10`; its run id is recorded in STATE.md):
       `installer_clean_install` as a full-check job on a fresh GitHub-hosted Windows
       runner (this machine is Windows 11 Home, with no Windows Sandbox or Hyper-V;
       FINAL_PLAN §9, agent-run).

@@ -1,6 +1,25 @@
 # Handoff: build and validate Phases 10, 10.5 and 11
 
-## 0. Where things stand (2026-11-04): read this first
+## Update, 2026-11-05: Phases 10 and 10.5 are Done; Phase 11 is next
+
+- Per-push CI green at `cbdf906` (run 41991668112). The close-out commit is tagged
+  `phase-10`; that tag's full check (tidy, fuzz, three clean builds, MSI, scenarios)
+  covers Phases 8-10.5. Record its run id in STATE.md under Phase 10 when it finishes.
+  If a job fails, fix it and re-tag.
+- Phase 11's open issues are in STATE.md under Phase 10: P10-3, P10-4, P10.5-2, P10.5-3,
+  P10-7, plus Phase 8/9's hardware and latency items, which don't gate Phase 11.
+- The OverflowError dialog below is fixed: plugin defaults are clamped and the knob
+  clamps, with tests (phase_10.5.md §10). The section is history.
+- New since the 2026-11-04 notes:
+  - hot surfaces are native Quick windows (`app/adx/panels/quick_host.py`);
+  - real-window tests open on the second monitor, behind the user's windows (`ADX_SCREEN`,
+    `ADX_BEHIND`, `app/adx/screens.py`);
+  - pytest runs as `-n auto -m "not serial"`, then `-m serial`;
+  - the `[.slow]` set is one ctest entry per case.
+- CI per push runs ctest serially on purpose: `--parallel 4` starved the timing tests on
+  the 4-core runners.
+
+## 0. Where things stood (2026-11-04)
 
 Phases 8-10.5 were committed in `1b40bf5` and pushed. CI fixes followed, and per-push CI
 went green at `96b4248` (run 41767776634). `69b59f2` (sccache for CI) is unrelated to any

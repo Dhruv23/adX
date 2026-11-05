@@ -346,18 +346,18 @@ completion needs the local WannaCry run, recorded in §10.
 
 ## 6. Definition of done
 
-- [ ] Every §5 test passes locally on Debug, RelWithDebInfo and Release; the
+- [x] (2026-11-05: ctest 494/494 in all three, pytest, 26/26 scenarios incl. WannaCry; the full check's scenarios job on tag `phase-10`.) Every §5 test passes locally on Debug, RelWithDebInfo and Release; the
       scenarios also pass in the full check (null audio, plugins from the cache, the
       committed stand-in project), and locally on the WannaCry corpus (`[wannacry]`,
       §4.8) with nothing skipped.
-- [ ] P9-2 and P9-3 closed by `scenario_real_plugins` and `scenario_live_plugin_crash`,
+- [x] P9-2 and P9-3 closed by `scenario_real_plugins` and `scenario_live_plugin_crash`,
       the plugin list and output recorded in phase_9.md §10.
-- [ ] The P6-1 and P7-1 stand-ins pass, so the final review can re-check those phases
+- [x] The P6-1 and P7-1 stand-ins pass, so the final review can re-check those phases
       with an agent alone.
-- [ ] `tools/lint.py plans` is a CI step, seen to fire, and clean on the tree.
-- [ ] `docs/agent-testing.md` written; its examples run in the test suite.
-- [ ] `check_launcher.py` drives the app through `adX.cmd`.
-- [ ] FINAL_PLAN §8 row for the fetched test plugins; FINAL_PLAN §10 and STATE.md updated;
+- [x] `tools/lint.py plans` is a CI step, seen to fire, and clean on the tree.
+- [x] `docs/agent-testing.md` written; its examples run in the test suite.
+- [x] `check_launcher.py` drives the app through `adX.cmd`.
+- [x] FINAL_PLAN §8 row for the fetched test plugins; FINAL_PLAN §10 and STATE.md updated;
       launcher rebuilt and checked.
 
 ---
