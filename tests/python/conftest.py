@@ -110,7 +110,10 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """Tear every Qt widget down before the interpreter does (see :func:`dispose`)."""
     import gc
 
-    from PySide6.QtWidgets import QApplication
+    try:
+        from PySide6.QtWidgets import QApplication
+    except ImportError:  # the installer job: pytest alone, no Qt
+        return
 
     if QApplication.instance() is None:
         return
@@ -208,8 +211,13 @@ def pytest_runtest_protocol(item: pytest.Item, nextitem: pytest.Item | None) -> 
 @pytest.fixture(autouse=True)
 def no_modal_dialogs(monkeypatch: pytest.MonkeyPatch) -> None:
     """A modal dialog in a test waits for a click that never comes, and the run hangs
-    (Phase 7's first push sat for six hours on one). Make opening one fail instead."""
-    from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
+    (Phase 7's first push sat for six hours on one). Make opening one fail instead.
+    Without Qt there is no dialog to refuse: the full check's installer job runs
+    test_installer.py on a clean runner with pytest alone."""
+    try:
+        from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
+    except ImportError:
+        return
 
     def refuse(*args: object, **_kwargs: object) -> None:
         text = " / ".join(str(a) for a in args if isinstance(a, str))
