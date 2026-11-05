@@ -37,6 +37,7 @@ def main() -> int:
         return 1
     report = Path(tempfile.mkdtemp()) / "adx_smoke.json"
     env = dict(os.environ, ADX_SMOKE=str(report))
+    env.setdefault("ADX_SCREEN", "secondary")
     started = subprocess.run(
         ["cmd", "/c", str(LAUNCHER)], env=env, cwd=ROOT, capture_output=True, text=True
     )

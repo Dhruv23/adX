@@ -24,6 +24,9 @@ dependencies = [
 dev = [
     "pytest>=8",
     "pytest-qt>=4.4",
+    # Spreads the suite over the cores (pytest -n auto); each test has its own window,
+    # settings and tmp_path.
+    "pytest-xdist>=3.6",
     # Every linter is pinned exactly, and pulled from PyPI rather than taken from
     # whatever the machine happens to have. A linter release that adds a rule
     # turns CI red on code nobody touched, and clang-format's output changes

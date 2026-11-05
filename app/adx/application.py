@@ -22,6 +22,7 @@ from adx.control import server as control_server
 from adx.engine_bridge import Engine, QuickPluginError
 from adx.mainwindow import MainWindow
 from adx.preferences import Preferences
+from adx.screens import keep_windows_on_screen, place_on_screen
 
 
 def start_engine(
@@ -102,6 +103,7 @@ def create(
     app = existing if isinstance(existing, QApplication) else QApplication(sys.argv[:1])
     app.setApplicationName("adX")
     app.setOrganizationName("adX")
+    keep_windows_on_screen(app)
     engine_bridge.load_quick_plugin()
     if settings is None:
         # A driven run (phase_10.5.md) keeps its layout and recent files out of the user's.
@@ -144,6 +146,7 @@ def run(
         window.open_project(project)
     else:
         window.new_project()
+    place_on_screen(window)
     window.show()
     servers: list[control_server.ControlServer] = []
     if control or control_server.requested():

@@ -35,6 +35,7 @@ from PySide6.QtCore import QSettings, Qt, QTimer
 from adx import engine_bridge
 from adx.application import create
 from adx.engine_bridge import CALLS, PPQ
+from adx.screens import place_on_screen
 
 INSERTS = 200
 
@@ -78,6 +79,8 @@ def main(frames: int) -> int:
     window.new_project()
     build(window)
     window.resize(1600, 1000)
+    os.environ.setdefault("ADX_SCREEN", "secondary")
+    place_on_screen(window)
     window.show()
     window.mixer.show()
     window.mixer.raise_()

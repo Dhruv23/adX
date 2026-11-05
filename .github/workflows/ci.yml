@@ -65,18 +65,26 @@ jobs:
           # clang-tidy runs in Debug and Release only. RelWithDebInfo defines NDEBUG
           # exactly as Release does - the macro the Phase 2 Release-only finding hung
           # on - so tidying it as well checked the same code twice.
+          #
+          # The Python half (pip install, pytest, every source lint) runs in one job.
+          # `pip install -e` builds the bindings through scikit-build-core the same way
+          # whatever the matrix entry, so the three jobs were testing one binary three
+          # times, and the lints read source files, the same in every configuration.
           - build_type: Debug
             preset: windows-x64-debug
             ctest_args: -LE slow
             tidy: true
+            python: false
           - build_type: RelWithDebInfo
             preset: windows-x64-relwithdebinfo
             ctest_args: ''
             tidy: false
+            python: false
           - build_type: Release
             preset: windows-x64-release
             ctest_args: ''
             tidy: true
+            python: true
 
     steps:
       # Full history, so clang-tidy can diff against the push's previous head.
@@ -144,13 +152,24 @@ jobs:
       # keep working.
       - name: Install the Python package
         id: install
+        if: ${{ matrix.python }}
         run: pip install -e ".[dev]"
 
+      # A tidy job without the Python half needs only the pinned clang-tidy, read from
+      # pyproject's dev extra so the pin lives in one place.
+      - name: Install the pinned clang-tidy
+        if: ${{ matrix.tidy && !matrix.python }}
+        run: |
+          $pin = python -c "import tomllib; print(next(d for d in tomllib.load(open('pyproject.toml','rb'))['project']['optional-dependencies']['dev'] if d.startswith('clang-tidy')))"
+          pip install $pin
+
       # 5. C++ tests.
+      # Four at a time, the runner's cores. The [.slow] cases that measure time are
+      # RUN_SERIAL (cmake/AdxTesting.cmake), so ctest runs those alone.
       - name: ctest
         shell: bash
         run: |
-          ctest --preset ${{ matrix.preset }} ${{ matrix.ctest_args }} --output-on-failure 2>&1 | tee ctest.log
+          ctest --preset ${{ matrix.preset }} ${{ matrix.ctest_args }} --parallel 4 --output-on-failure 2>&1 | tee ctest.log
           exit "${PIPESTATUS[0]}"
 
       # Job logs need a token to read; annotations do not. Surface what failed.
@@ -164,12 +183,14 @@ jobs:
       # The GPU frame-rate test cannot run here - no usable GPU on the runners - and is
       # run locally at phase completion (phase_5.md 4.9). Everything else Qt runs on the
       # offscreen platform (tests/python/conftest.py).
-      # A green run takes 3-6 minutes. A hung test is also caught sooner, with its stack,
-      # by the watchdog in tests/python/conftest.py; this limit is the backstop.
+      # A green run took 3-6 minutes serially; pytest-xdist spreads it over the runner's
+      # cores (every test has its own window, settings and tmp_path). A hung test is
+      # also caught sooner, with its stack, by the watchdog in tests/python/conftest.py;
+      # this limit is the backstop.
       - name: pytest
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        if: ${{ matrix.python && !cancelled() && steps.install.outcome == 'success' }}
         timeout-minutes: 20
-        run: pytest -m "not gpu"
+        run: pytest -m "not gpu" -n auto
 
       # Steps 7-14 are the lint gates, and they all carry `if: !cancelled()`.
       #
@@ -180,11 +201,12 @@ jobs:
       # reads the compile database, so it is conditioned on the build having
       # succeeded rather than merely not cancelled.)
       #
-      # The job still fails if any of them fails. There is no warning tier.
+      # The job still fails if any of them fails. There is no warning tier. All but
+      # clang-tidy read only source, so they run in the one job with the Python half.
 
       # 7. Formatting.
       - name: clang-format
-        if: ${{ !cancelled() }}
+        if: ${{ matrix.python && !cancelled() }}
         run: python tools/lint.py format --check
 
       # 8. Static analysis, including the realtime ban list on realtime paths. Per
@@ -203,49 +225,49 @@ jobs:
       # command in a multi-line `run` decides the step's exit status, so chaining
       # them would silently swallow a ruff check failure.
       - name: ruff check
-        if: ${{ !cancelled() }}
+        if: ${{ matrix.python && !cancelled() }}
         run: ruff check app tests/python tools
 
       - name: ruff format
-        if: ${{ !cancelled() }}
+        if: ${{ matrix.python && !cancelled() }}
         run: ruff format --check app tests/python tools
 
       # 10. Python types.
       - name: mypy
-        if: ${{ !cancelled() }}
+        if: ${{ matrix.python && !cancelled() }}
         run: mypy --strict app
 
       # 11. The one hard limit no linter checks.
       - name: Header length
-        if: ${{ !cancelled() }}
+        if: ${{ matrix.python && !cancelled() }}
         run: python tools/lint.py headers
 
       # 12. Phase 2: no exception-based number parsing in the format layer.
       - name: Format safety
-        if: ${{ !cancelled() }}
+        if: ${{ matrix.python && !cancelled() }}
         run: python tools/lint.py format-safety
 
       # 13. Phase 3: the Phase 11 checkpoint. No engine code outside engine/transport/
       # may own a playback position - time is a set of sources, passed as parameters.
       - name: No global position
-        if: ${{ !cancelled() }}
+        if: ${{ matrix.python && !cancelled() }}
         run: python tools/lint.py positions
 
       # 15. Phase 5: FINAL_PLAN 2.2's three rules, mechanically - only engine_bridge.py
       # imports the engine, no binding returns per-note objects, every binding releases
       # the GIL or says why not, no pybind11 in engine/ - and the 150-line limit in app/.
       - name: Three rules
-        if: ${{ !cancelled() }}
+        if: ${{ matrix.python && !cancelled() }}
         run: python tools/lint.py rules
 
       # 14. Phase 4: DSP code calls engine/dsp/Math.h, never a library transcendental,
       # so golden hashes agree across Debug, RelWithDebInfo and Release.
       - name: Deterministic DSP math
-        if: ${{ !cancelled() }}
+        if: ${{ matrix.python && !cancelled() }}
         run: python tools/lint.py dsp-math
 
       # 16. Phase 10.5: a definition-of-done box that asks the user to check software is
       # a gap in the agent's tests; only hardware halves and judgement gates may.
       - name: Plans gate
-        if: ${{ !cancelled() }}
+        if: ${{ matrix.python && !cancelled() }}
         run: python tools/lint.py plans

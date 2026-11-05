@@ -37,6 +37,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow
 
 from adx import engine_bridge
 from adx.engine_bridge import CALLS, Project
+from adx.screens import place_on_screen
 from conftest import roll_text
 
 
@@ -53,6 +54,8 @@ def main(frames: int) -> int:
     panel = PianoRollPanel(window)
     window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, panel)
     window.resize(1600, 1000)
+    os.environ.setdefault("ADX_SCREEN", "secondary")
+    place_on_screen(window)
     window.show()
     panel.set_project(project)
     panel.view.zoom_time(4.0, 0.0)
@@ -81,7 +84,7 @@ def main(frames: int) -> int:
         if index % 40 == 39:
             panel.view.zoom_time(1.6 if (index // 40) % 2 else 1 / 1.6, 800.0)
         panel.apply_view()
-        panel.quick.update()
+        panel.quick.request_frame()
         step_ms[0] = (time.perf_counter() - began) * 1000.0
 
     def synchronizing() -> None:

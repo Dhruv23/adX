@@ -38,6 +38,14 @@ jobs:
     name: clang-tidy, every file (${{ matrix.build_type }})
     runs-on: windows-latest
     timeout-minutes: 60
+    # sccache as in ci.yml: what these jobs check (tidy's findings, the fuzzer, the
+    # scenarios) does not depend on how the objects were compiled. three-builds and
+    # installer stay uncached on purpose - "from clean" is what they test.
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      SKBUILD_CMAKE_DEFINE: CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
     strategy:
       fail-fast: false
       matrix:
@@ -69,8 +77,9 @@ jobs:
           key: qt-${{ runner.os }}-${{ hashFiles('tools/fetch_qt.py') }}
       - name: Fetch the Qt SDK
         run: python tools/fetch_qt.py
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - name: Configure
-        run: cmake --preset ${{ matrix.preset }}
+        run: cmake --preset ${{ matrix.preset }} -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
       # For the pinned clang-tidy (pyproject.toml's dev extra).
@@ -83,6 +92,14 @@ jobs:
     name: fuzz (RelWithDebInfo, 10 min)
     runs-on: windows-latest
     timeout-minutes: 45
+    # sccache as in ci.yml: what these jobs check (tidy's findings, the fuzzer, the
+    # scenarios) does not depend on how the objects were compiled. three-builds and
+    # installer stay uncached on purpose - "from clean" is what they test.
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      SKBUILD_CMAKE_DEFINE: CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -97,8 +114,9 @@ jobs:
           key: deps-${{ runner.os }}-${{ hashFiles('cmake/AdxDependencies.cmake') }}
           restore-keys: |
             deps-${{ runner.os }}-
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - name: Configure
-        run: cmake --preset windows-x64-relwithdebinfo
+        run: cmake --preset windows-x64-relwithdebinfo -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
       - name: Build
         run: cmake --build --preset windows-x64-relwithdebinfo
       - name: Fuzz the loader
@@ -108,13 +126,19 @@ jobs:
         run: build/windows-x64-relwithdebinfo/tests/cpp/adx_tests.exe "[.fuzz]"
 
   # phase_8.md's second gate, three_clean_builds_identical: build Release from nothing
-  # three times and regenerate every golden file each time. Each run must reproduce
+  # three times and regenerate every golden file each time. Each build must reproduce
   # the committed hashes exactly - so the three agree with each other and with the
-  # reference - or `git diff` fails the step and shows which fixture moved.
+  # reference - or `git diff` fails the step and shows which fixture moved. The three
+  # run side by side on three fresh runners: each is compared with the committed files,
+  # not with the others, so running them one after another only added wall time.
   three-builds:
-    name: three clean builds, identical corpus (Release)
+    name: clean build ${{ matrix.build }} of 3, identical corpus (Release)
     runs-on: windows-latest
-    timeout-minutes: 180
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -135,25 +159,22 @@ jobs:
           key: qt-${{ runner.os }}-${{ hashFiles('tools/fetch_qt.py') }}
       - name: Fetch the Qt SDK
         run: python tools/fetch_qt.py
-      - name: Build three times from clean, regenerating the corpus each time
+      - name: Build from clean and regenerate the corpus
         shell: bash
         env:
           ADX_UPDATE_GOLDEN: '1'
+          BUILD: ${{ matrix.build }}
         run: |
           set -euo pipefail
-          for build in 1 2 3; do
-            echo "::group::clean build $build"
-            rm -rf build/windows-x64-release
-            cmake --preset windows-x64-release
-            cmake --build --preset windows-x64-release
-            build/windows-x64-release/tests/cpp/adx_tests.exe "[golden]"
-            echo "::endgroup::"
-            sha256sum tests/golden/*.txt | sed "s/^/build $build: /"
-            if ! git diff --exit-code --stat tests/golden; then
-              git diff tests/golden | head -60 | while IFS= read -r l; do echo "::error title=build $build::${l:0:300}"; done
-              exit 1
-            fi
-          done
+          rm -rf build/windows-x64-release
+          cmake --preset windows-x64-release
+          cmake --build --preset windows-x64-release
+          build/windows-x64-release/tests/cpp/adx_tests.exe "[golden]"
+          sha256sum tests/golden/*.txt | sed "s/^/build $BUILD: /"
+          if ! git diff --exit-code --stat tests/golden; then
+            git diff tests/golden | head -60 | while IFS= read -r l; do echo "::error title=build $BUILD::${l:0:300}"; done
+            exit 1
+          fi
 
   installer:
     name: MSI built, installed and removed on a clean machine
@@ -192,6 +213,14 @@ jobs:
     name: agent-run scenarios (Release, null audio, real plugins)
     runs-on: windows-latest
     timeout-minutes: 120
+    # sccache as in ci.yml: what these jobs check (tidy's findings, the fuzzer, the
+    # scenarios) does not depend on how the objects were compiled. three-builds and
+    # installer stay uncached on purpose - "from clean" is what they test.
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      SKBUILD_CMAKE_DEFINE: CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -219,9 +248,10 @@ jobs:
           key: test-plugins-${{ hashFiles('tools/test_plugins.toml') }}
       - name: Fetch the Qt SDK
         run: python tools/fetch_qt.py
+      - uses: mozilla-actions/sccache-action@v0.0.9
       # The crash scenario hosts adx_test_plugin.clap from the Release tree.
       - name: Configure
-        run: cmake --preset windows-x64-release
+        run: cmake --preset windows-x64-release -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
       - name: Build
         run: cmake --build --preset windows-x64-release
       - name: Install the Python package

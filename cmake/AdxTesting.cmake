@@ -36,10 +36,43 @@ function(adx_add_cpp_test name)
     # Opt-out, not opt-in: this project's central claim is realtime safety, and a gate
     # somebody has to remember to ask for is a gate that rots. `ctest -LE slow` is the
     # fast loop, and it is documented in the README.
-    add_test(NAME ${name}_slow COMMAND ${name} "[.slow]" --allow-running-no-tests)
-    # 1800 s: the whole set takes ~890 s in an unoptimised build (2026-10-04, Debug:
-    # render_bit_identical_200x100k alone is 590 s) - over the 600 s this started with.
-    set_tests_properties(${name}_slow PROPERTIES LABELS slow TIMEOUT 1800)
+    #
+    # One entry per case, not one for the set, so `ctest -j` runs the CPU-bound cases
+    # side by side: the set was 953 s serially in Debug (2026-11-04), most of it
+    # render_bit_identical_200x100k. The cases that measure time or wait on a deadline
+    # are RUN_SERIAL - ctest runs them with nothing else, so a parallel run cannot make
+    # them miss. `${name}_slow` stays as the catch-all for any [.slow] case not named
+    # here, so a new one still runs (and is better added to a list).
+    set(_serial
+        "null_backend_60s_zero_violations"
+        "realtime_gate_60s_under_load"
+        "render_no_alloc_under_load"
+        "arena_high_water_under_load"
+        "scanner_survives_hang_at_the_real_deadline"
+        "overwrite_ring_concurrent"
+        "decode_async_does_not_block"
+        "visualizer_no_audio_thread_work")
+    set(_parallel
+        "render_bit_identical_200x100k"
+        "undo_to_empty_random 100 seeds"
+        "parser_no_exceptions_on_fuzz 100k"
+        "stems_sum_to_master"
+        "golden_all_formats")
+    set(_rest "[.slow]")
+    if(name STREQUAL "adx_tests")
+        foreach(_case IN LISTS _serial _parallel)
+            string(REPLACE " " "_" _id "${_case}")
+            add_test(NAME ${name}_slow.${_id} COMMAND ${name} "${_case}")
+            # 1800 s: render_bit_identical_200x100k alone is ~590 s unoptimised.
+            set_tests_properties(${name}_slow.${_id} PROPERTIES LABELS slow TIMEOUT 1800)
+            if(_case IN_LIST _serial)
+                set_tests_properties(${name}_slow.${_id} PROPERTIES RUN_SERIAL TRUE)
+            endif()
+            string(APPEND _rest "~\"${_case}\"")
+        endforeach()
+    endif()
+    add_test(NAME ${name}_slow COMMAND ${name} "${_rest}" --allow-running-no-tests)
+    set_tests_properties(${name}_slow PROPERTIES LABELS slow TIMEOUT 1800 RUN_SERIAL TRUE)
 
     # Skips itself where there is no audio hardware, which is every CI runner.
     add_test(NAME ${name}_device COMMAND ${name} "[.device]" --allow-running-no-tests)
