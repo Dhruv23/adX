@@ -560,8 +560,8 @@ fails if the null backend is in use.
 - `session_no_alloc` (Debug, 10 minutes under the allocator hook), the whole ctest
   `-LE slow` suite in Release, and in Debug, apart from the known timing flake
   `watchdog_late_block_silences` (it passed 3 of 3 when run alone). Also pytest, parallel and
-  serial; the other scenarios, apart from `scenario_live_plugin_crash[standin]` (late
-  sandbox blocks under load, STATE.md P11-14); ruff, `mypy --strict`, the lint gates,
+  serial; the other scenarios, with `scenario_live_plugin_crash` flaky at first under a
+  leaked instance's load, then 10 of 10 (STATE.md P11-14); ruff, `mypy --strict`, the lint gates,
   tidy and `check_launcher.py`.
 
 **Not covered here:** a physical pad controller (its USB timing, velocity curve and LED

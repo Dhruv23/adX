@@ -1450,17 +1450,18 @@ geometry pipeline (`SessionGeometry`: progress rings, queue marks, one build per
 - **P11-13** · pytest's 240 s `faulthandler_timeout` prints a stack dump during the
   20-minute set (not a failure). Fixed when: the long scenarios set their own timeout
   marker.
-- **P11-14** · `scenario_live_plugin_crash[standin]` failed in 3 of 5 local runs on
-  2026-11-08 (it passed in the 11-07 full run and in CI at `384371e`). Cause measured:
-  Airwindows, in the shared sandbox, misses its deadline for 0-6 blocks in 5 s of play
-  (`plugins.instances[].late`). A late block is silence, so the capture leaves the offline
-  render. The machine was loaded: a test instance leaked from an aborted set run was
-  playing on about 3 cores. Separately, a playing instance on this 32-thread machine
-  spends about 3.5 cores in the crew's helpers, about 12 % each for 31 of them (P10-5's
-  scheduler), even on the small stand-in. Fixed when: the crew is sized to the graph's
-  width (or helpers stop waking for one-step pieces), and the scenario passes 10 of 10
-  on an idle machine, or it reads `late` and reports a deadline miss as such instead of
-  a residual.
+- **P11-14** · **Closed 2026-11-08**: `scenario_live_plugin_crash[standin]` failed 3 of 5
+  local runs. Airwindows, in the shared sandbox, missed its deadline (0-6 late blocks in
+  5 s), and a late block is silence. The load came from a test instance that leaked from
+  an aborted set run and played on about 3 cores. With it gone: 0 late blocks in 8 runs,
+  with and without render workers, and the scenario passed 10 of 10 (5 runs, both
+  materials).
+- **P11-15** · Playing the small stand-in on the timer backend costs about 2.8 cores on
+  this 32-thread machine, and about 1.1 with `ADX_RENDER_WORKERS=0`. The 15 crew helpers
+  (P10-5) wake for every piece and spin 50 µs after each one, whether or not the piece
+  has work for them. It doesn't cause dropouts (`live_set_no_dropouts` passed), but it
+  is wasted CPU. Fixed when: a piece wakes at most as many helpers as its plan is wide,
+  and a one-step piece runs inline.
 
 Phase 11 closes the DAW. Anything still open when it closes is fixed here or
 carried into Phase 12 with a reason, like any other handoff.
@@ -1500,7 +1501,7 @@ carried into Phase 12 with a reason, like any other handoff.
 > Tranches A (format/model), B (DSP), C (tooling). Phase 13 may start once
 > phase_12.md §8's handoff items are done.
 
-**Inherits:** P11-9 to P11-13 (listed under Phase 11 above); P10.5-2 and P10.5-3.
+**Inherits:** P11-9 to P11-13 and P11-15 (listed under Phase 11 above); P10.5-2 and P10.5-3.
 
 **Open issues for Phase 13:**
 
