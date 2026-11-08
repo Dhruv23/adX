@@ -18,11 +18,11 @@ bundles = ["Dexed.vst3", "Dexed.clap"]
 [[plugin]]
 name = "Airwindows Consolidated"
 # The project publishes one rolling Windows build; the date and commit are its version.
-version = "2026-10-31-d013e10"
+version = "2026-11-08-316a048"
 license = "MIT"
 role = "effect"
-url = "https://github.com/baconpaul/airwin2rack/releases/download/DAWPlugin/AirwindowsConsolidated-2026-10-31-d013e10-Windows.zip"
-sha256 = "a21a0df8b0e47a96b4932fed3c05490c3f208fad84eb2fc73f4ca570dd34f292"
+url = "https://github.com/baconpaul/airwin2rack/releases/download/DAWPlugin/AirwindowsConsolidated-2026-11-08-316a048-Windows.zip"
+sha256 = "ece84aff193b1d436fd46ad6c3047d276dc43ddf048e63684bd012b5daedd4a0"
 bundles = ["Airwindows Consolidated.vst3", "Airwindows Consolidated.clap"]
 
 [[plugin]]

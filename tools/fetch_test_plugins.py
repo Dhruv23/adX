@@ -19,6 +19,7 @@ import os
 import shutil
 import sys
 import tomllib
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -53,8 +54,17 @@ def fetch(pin: dict[str, object], root: Path) -> Path:
     archive.parent.mkdir(parents=True, exist_ok=True)
     if not archive.exists() or _sha256(archive) != want:
         partial = archive.with_suffix(archive.suffix + ".part")
-        with urllib.request.urlopen(url, timeout=120) as response, partial.open("wb") as out:
-            shutil.copyfileobj(response, out)
+        try:
+            with urllib.request.urlopen(url, timeout=120) as response, partial.open("wb") as out:
+                shutil.copyfileobj(response, out)
+        except urllib.error.HTTPError as error:
+            partial.unlink(missing_ok=True)
+            # Airwindows publishes one rolling build and deletes the old one, so its pin
+            # goes stale whenever upstream releases; re-pin it in tools/test_plugins.toml.
+            raise SystemExit(
+                f"fetch_test_plugins: {pin['name']}: {url} answered {error.code}; "
+                "if upstream replaced the build, re-pin it in tools/test_plugins.toml"
+            ) from error
         got = _sha256(partial)
         if got != want:
             partial.unlink()
