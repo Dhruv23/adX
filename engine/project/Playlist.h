@@ -21,6 +21,9 @@ namespace adx::project {
 
 struct PatternRef {
     core::PatternId pattern;
+    /// Scales the placement's note velocities (scaledVelocity): what a performance
+    /// recording writes for a clip's gain or a pad's velocity (phase_11.md §4.6).
+    float gain{1.0F};
 
     [[nodiscard]] friend bool operator==(const PatternRef&, const PatternRef&) noexcept = default;
 };

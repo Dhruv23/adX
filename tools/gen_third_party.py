@@ -30,6 +30,7 @@ PYTHON_SIDE = (
         "the user interface; shipped as separate DLLs",
     ),
     ("NumPy", ">=1.26", "BSD-3-Clause", "arrays across the engine boundary"),
+    ("PyYAML", ">=6.0", "MIT", "reads OpenUtau .ustx projects"),
 )
 
 

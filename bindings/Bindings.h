@@ -84,6 +84,11 @@ void registerPresets(pybind11::module_& m);
 void registerPanelGeometry(pybind11::module_& m);
 /// Phase 6: audition, metronome and EQ spectrum on Engine (panels.cpp).
 void defineEngineExtras(pybind11::class_<EngineHandle>& engine);
+/// Phase 11: the session's model on Project, and launching on Engine (live.cpp).
+void defineProjectLive(pybind11::class_<ProjectHandle>& project);
+void defineEngineLive(pybind11::class_<EngineHandle>& engine);
+void defineEnginePads(pybind11::class_<EngineHandle>& engine);
+void registerPads(pybind11::module_& m);
 void registerSync(pybind11::module_& m);
 void registerMini(pybind11::module_& m);
 void registerScript(pybind11::module_& m);

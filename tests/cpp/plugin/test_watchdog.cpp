@@ -72,7 +72,8 @@ bridge::BlockResult send(bridge::RemoteInstance& instance, Block& block,
 }
 
 bridge::WireParam modeParam(int mode) {
-    return bridge::WireParam{.offset = 0, .id = 2, .value = static_cast<double>(mode)};
+    return bridge::WireParam{
+        .offset = 0, .id = 2, .value = static_cast<double>(mode), .flags = 0, .reserved = 0};
 }
 
 template<class Predicate> bool waitFor(Predicate predicate, double seconds) {

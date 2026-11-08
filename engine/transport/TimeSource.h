@@ -65,6 +65,10 @@ public:
     // --- control (audio thread, applied at the next beginBlock) ---
 
     void requestSeek(core::Ticks at) noexcept;
+    /// A seek to a sample of this source's own timeline, which may be before zero: a
+    /// clip launched `k` frames into a block starts its source at -k, so its tick 0
+    /// lands on that exact frame (phase_11.md §4.3).
+    void requestSeekSamples(std::int64_t at) noexcept;
     void requestState(PlayState state) noexcept;
     void requestLoop(LoopRegion loop) noexcept;
     /// 1.0 is normal speed. Unused until Phase 11's tempo nudge; present now because
@@ -188,6 +192,8 @@ private:
     // Pending requests, applied by beginBlock().
     bool m_hasPendingSeek{false};
     core::Ticks m_pendingSeek;
+    std::int64_t m_pendingSeekSamples{0};
+    bool m_pendingSeekIsSamples{false};
     bool m_hasPendingState{false};
     PlayState m_pendingState{PlayState::Stopped};
     bool m_hasPendingLoop{false};

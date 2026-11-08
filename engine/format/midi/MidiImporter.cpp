@@ -1,10 +1,12 @@
 // adx-thread: main
 #include "engine/format/midi/MidiImporter.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <fstream>
 #include <iterator>
+#include <utility>
 
 #include "engine/core/Time.h"
 #include "engine/project/Project.h"
@@ -34,11 +36,156 @@ std::int64_t toAdx(std::uint64_t ticks, std::uint16_t division) {
     return static_cast<std::int64_t>((scaled + (division / 2)) / division);
 }
 
+/// A channel's pitch-bend history and the controller state that sets its range.
+struct ChannelBend {
+    /// (adX tick, cents) at each bend message, in file order.
+    std::vector<std::pair<std::int64_t, double>> events;
+    double semitones{2.0};
+    /// The RPN selected by CC 101/100; 0x7F7F when none.
+    int rpn{0x3FFF};
+    bool rangeSet{false};
+};
+
+/// The bend in effect at `at`, from the history (0 before the first message).
+double bendAt(const ChannelBend& bend, std::int64_t at) {
+    double value = 0.0;
+    for (const auto& [tick, cents] : bend.events) {
+        if (tick > at) {
+            break;
+        }
+        value = cents;
+    }
+    return value;
+}
+
+/// The note's bend points: the value at its start, then every change before its end,
+/// thinned where a straight line through the neighbours is within a cent.
+std::vector<MidiBend> notesBend(const ChannelBend& bend, std::int64_t start, std::int64_t stop) {
+    std::vector<MidiBend> points;
+    points.push_back(
+        MidiBend{.at = 0, .cents = static_cast<std::int16_t>(std::lround(bendAt(bend, start)))});
+    for (const auto& [tick, cents] : bend.events) {
+        if (tick <= start || tick >= stop) {
+            continue;
+        }
+        const auto value = static_cast<std::int16_t>(std::lround(cents));
+        if (points.back().at == tick - start) {
+            points.back().cents = value;
+        } else if (points.back().cents != value) {
+            points.push_back(MidiBend{.at = tick - start, .cents = value});
+        }
+    }
+    std::vector<MidiBend> kept;
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        if (kept.empty() || i + 1 == points.size()) {
+            kept.push_back(points[i]);
+            continue;
+        }
+        const MidiBend& a = kept.back();
+        const MidiBend& b = points[i + 1];
+        const double t =
+            static_cast<double>(points[i].at - a.at) / static_cast<double>(b.at - a.at);
+        const double line = a.cents + ((b.cents - a.cents) * t);
+        if (std::abs(line - points[i].cents) > 1.0) {
+            kept.push_back(points[i]);
+        }
+    }
+    if (std::ranges::all_of(kept, [](const MidiBend& p) { return p.cents == 0; })) {
+        kept.clear();
+    }
+    return kept;
+}
+
+/// A pitch-bend or controller message on `channel`: the bend history, and the RPN
+/// writes that set its range (0) or configure an MPE zone (6).
+void bendMessage(std::array<ChannelBend, 16>& bends, bool& mpe, int channel, std::uint8_t kind,
+                 std::uint8_t d1, std::uint8_t d2, std::int64_t at) {
+    ChannelBend& bend = bends.at(static_cast<std::size_t>(channel));
+    if (kind == 0xE0) {
+        const int value = d1 | (d2 << 7);
+        bend.events.emplace_back(at, (value - 8192) / 8192.0 * bend.semitones * 100.0);
+        return;
+    }
+    if (d1 == 101) {
+        bend.rpn = (d2 << 7) | (bend.rpn & 0x7F);
+    } else if (d1 == 100) {
+        bend.rpn = (bend.rpn & ~0x7F) | d2;
+    } else if (d1 == 6 && bend.rpn == 0) {
+        bend.semitones = d2;
+        bend.rangeSet = true;
+    } else if (d1 == 38 && bend.rpn == 0) {
+        bend.semitones = std::floor(bend.semitones) + (d2 / 100.0);
+    } else if (d1 == 6 && bend.rpn == 6 && (channel == 0 || channel == 15) && d2 > 0) {
+        // MPE: member channels default to 48 semitones of bend.
+        mpe = true;
+        for (ChannelBend& member : bends) {
+            if (!member.rangeSet) {
+                member.semitones = kMpeBendSemitones;
+            }
+        }
+    }
+}
+
+/// A parsed track's notes into the song: each lyric event onto the note it starts, then
+/// an MPE zone as one track, or one track per channel used.
+void finishTrack(std::array<std::vector<MidiNote>, 16>& notes,
+                 const std::vector<std::pair<std::int64_t, std::string>>& lyrics, bool mpe,
+                 const std::string& name, MidiSong& song) {
+    for (const auto& [at, text] : lyrics) {
+        for (std::vector<MidiNote>& mine : notes) {
+            const auto found = std::ranges::find_if(
+                mine, [&](const MidiNote& n) { return n.start == at && n.lyric.empty(); });
+            if (found != mine.end()) {
+                found->lyric = text;
+                break;
+            }
+        }
+    }
+    if (mpe) {
+        // A zone is one instrument: its notes, from every member channel, are one track.
+        std::vector<MidiNote> all;
+        for (std::vector<MidiNote>& mine : notes) {
+            all.insert(all.end(), mine.begin(), mine.end());
+            mine.clear();
+        }
+        if (!all.empty()) {
+            sortNotes(all);
+            MidiTrack track;
+            track.name = name.empty() ? "MPE" : name;
+            track.notes = std::move(all);
+            track.mpe = true;
+            song.tracks.push_back(std::move(track));
+        }
+        return;
+    }
+    const auto used = std::ranges::count_if(notes, [](const auto& n) { return !n.empty(); });
+    for (std::uint8_t channel = 0; channel < 16; ++channel) {
+        std::vector<MidiNote>& mine = notes.at(channel);
+        if (mine.empty()) {
+            continue;
+        }
+        MidiTrack track;
+        track.channel = channel;
+        track.name = name.empty() ? "MIDI Ch " + std::to_string(channel + 1) : name;
+        if (!name.empty() && used > 1) {
+            track.name += " (Ch " + std::to_string(channel + 1) + ")";
+        }
+        sortNotes(mine);
+        track.notes = std::move(mine);
+        song.tracks.push_back(std::move(track));
+    }
+}
+
 /// One MTrk chunk: its notes per channel, and the meta events the song keeps.
 void parseTrack(ByteReader& r, std::size_t end, std::uint16_t division, MidiSong& song) {
     std::string name;
     std::array<std::vector<MidiNote>, 16> notes;
     std::array<std::array<std::vector<Pending>, 128>, 16> pending;
+    std::array<ChannelBend, 16> bends{};
+    /// Lyric meta events, (adX tick, text): each names the note that starts there.
+    std::vector<std::pair<std::int64_t, std::string>> lyrics;
+    /// An MPE zone configured on this track (RPN 6 on channel 1 or 16).
+    bool mpe = false;
     std::uint64_t tick = 0;
     std::uint8_t running = 0;
     const std::span<const std::uint8_t> bytes = r.bytes();
@@ -55,10 +202,13 @@ void parseTrack(ByteReader& r, std::size_t end, std::uint16_t division, MidiSong
         stack.pop_back();
         const std::int64_t stop = toAdx(at, division);
         notes.at(static_cast<std::size_t>(channel))
-            .push_back(MidiNote{.start = started.start,
-                                .length = std::max<std::int64_t>(stop - started.start, 1),
-                                .pitch = static_cast<std::uint8_t>(pitch),
-                                .velocity = started.velocity});
+            .push_back(MidiNote{
+                .start = started.start,
+                .length = std::max<std::int64_t>(stop - started.start, 1),
+                .pitch = static_cast<std::uint8_t>(pitch),
+                .velocity = started.velocity,
+                .bend = notesBend(bends.at(static_cast<std::size_t>(channel)), started.start, stop),
+                .lyric = {}});
     };
 
     bool ended = false;
@@ -109,6 +259,9 @@ void parseTrack(ByteReader& r, std::size_t end, std::uint16_t division, MidiSong
                         static_cast<std::uint8_t>(1U << std::min<unsigned>(bytes[data + 1], 6U))});
             } else if (type == 0x03 && name.empty()) {
                 name.assign(reinterpret_cast<const char*>(bytes.data() + data), length);
+            } else if (type == 0x05) {
+                lyrics.emplace_back(
+                    at, std::string(reinterpret_cast<const char*>(bytes.data() + data), length));
             } else if (type == 0x06) {
                 song.markers.push_back(MidiMarker{
                     .at = at,
@@ -137,6 +290,8 @@ void parseTrack(ByteReader& r, std::size_t end, std::uint16_t division, MidiSong
                     .push_back(Pending{.start = toAdx(tick, division), .velocity = d2});
             } else if (kind == 0x80 || (kind == 0x90 && d2 == 0)) {
                 close(channel, d1, tick);
+            } else if (kind == 0xE0 || kind == 0xB0) {
+                bendMessage(bends, mpe, channel, kind, d1, d2, toAdx(tick, division));
             }
         } else {
             // System common: essentially never in files. 0xF2 carries two data bytes,
@@ -161,22 +316,7 @@ void parseTrack(ByteReader& r, std::size_t end, std::uint16_t division, MidiSong
             }
         }
     }
-    const auto used = std::ranges::count_if(notes, [](const auto& n) { return !n.empty(); });
-    for (std::uint8_t channel = 0; channel < 16; ++channel) {
-        std::vector<MidiNote>& mine = notes.at(channel);
-        if (mine.empty()) {
-            continue;
-        }
-        MidiTrack track;
-        track.channel = channel;
-        track.name = name.empty() ? "MIDI Ch " + std::to_string(channel + 1) : name;
-        if (!name.empty() && used > 1) {
-            track.name += " (Ch " + std::to_string(channel + 1) + ")";
-        }
-        sortNotes(mine);
-        track.notes = std::move(mine);
-        song.tracks.push_back(std::move(track));
-    }
+    finishTrack(notes, lyrics, mpe, name, song);
 }
 
 } // namespace
@@ -275,8 +415,18 @@ std::string importSong(const MidiSong& song, project::Project& project,
         const project::AddChannel* raw = add.get();
         stack.execute(std::move(add), project);
         std::vector<project::Note> notes;
+        std::vector<project::NoteExtrasAt> extras;
         notes.reserve(track.notes.size());
         for (const MidiNote& note : track.notes) {
+            if (!note.bend.empty() || !note.lyric.empty()) {
+                project::NoteExtras bent;
+                for (const MidiBend& point : note.bend) {
+                    bent.pitchCurve.push_back(project::PitchPoint{
+                        .at = core::Ticks{point.at}, .cents = point.cents, .curve = {}});
+                }
+                bent.lyric = note.lyric;
+                extras.push_back(project::NoteExtrasAt{.index = notes.size(), .extras = bent});
+            }
             project::Note value;
             value.start = core::Ticks{note.start};
             value.length = core::Ticks{note.length};
@@ -285,7 +435,7 @@ std::string importSong(const MidiSong& song, project::Project& project,
             notes.push_back(value);
         }
         stack.execute(std::make_unique<project::AddNotes>(patternRaw->created(), raw->created(),
-                                                          std::move(notes)),
+                                                          std::move(notes), std::move(extras)),
                       project);
     }
 

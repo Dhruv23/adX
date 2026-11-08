@@ -149,6 +149,7 @@ class EffectPanel(DockPanel):
             str(plugin["name"]),
             lambda: generic_for_slot(self.session, insert, slot, effect),
             parent=self,
+            uid=str(plugin.get("uid", "")),
         )
         self.plugin_windows[self.slot] = window
         window.show()

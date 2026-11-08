@@ -31,6 +31,7 @@ RenderEngine::RenderEngine(std::unique_ptr<audio::AudioBackend> backend, EngineO
     m_audio.setProcessStep(&graph::EngineCore::processStep, &m_core);
     // Before the stream opens: the scheduler reads its crew on the audio thread.
     m_core.scheduler().setCrew(m_workers.crew());
+    m_core.prepareSession();
     m_builder.setParallel(m_workers.crew() != nullptr);
 }
 
@@ -305,6 +306,64 @@ std::size_t RenderEngine::applyLearned(project::Project& project, project::Comma
 void RenderEngine::setMidiTarget(core::ChannelId channel) {
     graph::EngineMessage message = messageOf(graph::MessageKind::MidiTarget);
     message.tickA = channel.valid() ? channel.value : graph::kNone;
+    post(message);
+}
+
+namespace {
+
+graph::EngineMessage sessionMessage(session::SessionRequest::Kind kind, std::uint32_t track,
+                                    std::uint32_t row, float gain = 0.0F, double value = 0.0) {
+    graph::EngineMessage message;
+    message.kind = graph::MessageKind::Session;
+    message.tickA = static_cast<std::int64_t>(kind);
+    message.tickB = static_cast<std::int64_t>((static_cast<std::uint64_t>(track) << 32U) | row);
+    message.value = gain;
+    message.rate = value;
+    return message;
+}
+
+} // namespace
+
+void RenderEngine::launchClip(std::uint32_t track, std::uint32_t row, float gain) {
+    post(sessionMessage(session::SessionRequest::Kind::Launch, track, row, gain));
+}
+
+void RenderEngine::setSessionRate(double rate) {
+    post(sessionMessage(session::SessionRequest::Kind::Rate, 0, 0, 0.0F, rate));
+}
+
+void RenderEngine::tapTempo(double seconds) {
+    post(sessionMessage(session::SessionRequest::Kind::Tap, 0, 0, 0.0F, seconds));
+}
+
+void RenderEngine::setPadMap(std::size_t slot, const midi::PadMap* map) {
+    if (map == nullptr) {
+        m_core.setPadMap(slot, nullptr);
+        return;
+    }
+    m_padMaps.push_back(std::make_unique<midi::PadMap>(*map));
+    m_core.setPadMap(slot, m_padMaps.back().get());
+}
+
+void RenderEngine::recordPerformance(bool on) {
+    post(sessionMessage(session::SessionRequest::Kind::Record, 0, 0, 0.0F, on ? 1.0 : 0.0));
+}
+
+void RenderEngine::stopClip(std::uint32_t track) {
+    post(sessionMessage(session::SessionRequest::Kind::Stop, track, 0));
+}
+
+void RenderEngine::fireScene(std::uint32_t row, float gain) {
+    post(sessionMessage(session::SessionRequest::Kind::Scene, 0, row, gain));
+}
+
+void RenderEngine::stopAllClips() {
+    post(sessionMessage(session::SessionRequest::Kind::StopAll, 0, 0));
+}
+
+void RenderEngine::setSyncFollow(graph::SyncFollow follow) {
+    graph::EngineMessage message = messageOf(graph::MessageKind::SyncFollow);
+    message.tickA = static_cast<std::int64_t>(follow);
     post(message);
 }
 

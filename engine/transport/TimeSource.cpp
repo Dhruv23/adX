@@ -84,7 +84,14 @@ void TimeSource::bindTempo(core::TempoView tempo, std::uint32_t sampleRate) noex
 
 void TimeSource::requestSeek(core::Ticks at) noexcept {
     m_hasPendingSeek = true;
+    m_pendingSeekIsSamples = false;
     m_pendingSeek = at;
+}
+
+void TimeSource::requestSeekSamples(std::int64_t at) noexcept {
+    m_hasPendingSeek = true;
+    m_pendingSeekIsSamples = true;
+    m_pendingSeekSamples = at;
 }
 
 void TimeSource::requestState(PlayState state) noexcept {
@@ -121,7 +128,8 @@ BlockTransition TimeSource::beginBlock() noexcept {
         m_hasPendingSeek = false;
         transition.seeked = true;
         transition.wasRollingBeforeSeek = isRolling(m_state);
-        m_positionSamples = samplesAt(m_pendingSeek);
+        m_positionSamples =
+            m_pendingSeekIsSamples ? m_pendingSeekSamples : samplesAt(m_pendingSeek);
         m_fractionalSample = 0.0;
         ++m_seekGeneration;
         recomputeNextTempoChange();

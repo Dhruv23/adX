@@ -68,6 +68,11 @@ private:
         std::int64_t endTick;
         std::uint8_t key;
         bool active;
+        /// The note's own pitch offset (slides, pitch curves) in cents, where a glide is
+        /// headed, and the frames left to get there (P9-7).
+        float cents;
+        float target;
+        std::uint32_t remaining;
     };
     static constexpr std::size_t kMaxHeld = 128;
     /// How long a departing plugin is rendered after its release, in seconds.
@@ -75,6 +80,12 @@ private:
 
     void releaseHeld(std::uint32_t offset, bool pastLoopEnd, std::int64_t loopEnd) noexcept;
     void push(const bridge::WireEvent& event) noexcept;
+    /// A tuning event for `held`: its own offset plus the channel's.
+    void tune(const Held& held, std::uint32_t offset) noexcept;
+    /// Glides in flight, as tuning steps across this block.
+    void stepGlides(std::uint32_t frames) noexcept;
+    /// The events in offset order (insertion sort: no allocation, and nearly sorted).
+    void sortEvents() noexcept;
 
     PluginCore m_core;
     std::array<Held, kMaxHeld> m_held{};
@@ -82,6 +93,8 @@ private:
     std::uint32_t m_eventCount{0};
     std::uint32_t m_sampleRate{48000};
     std::uint64_t m_tailLeft{0};
+    /// The channel's pitch offset last sent, in cents.
+    float m_channelCents{0.0F};
 };
 
 } // namespace adx::plugin

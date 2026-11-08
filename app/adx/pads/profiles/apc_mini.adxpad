@@ -1,0 +1,17 @@
+# Akai APC mini (first edition). Pads 0-63, bottom-left 0; scene buttons 82-89 down
+# the right, track buttons 64-71 along the bottom stop each column.
+[PAD_PROFILE]
+NAME="APC mini"
+MATCH_DEVICE="APC MINI"
+GRID=8x8
+NOTE_BASE=56 ROW_STRIDE=-8
+CHANNEL=1
+VELOCITY_SENSITIVE=no
+[FEEDBACK]
+MODE=note CHANNEL=1
+EMPTY=vel:0  STOPPED=vel:5  QUEUED=vel:1,blink  PLAYING=vel:1
+QUEUED_STOP=vel:3,blink  RECORDING=vel:3
+[CONTROLS]
+SCENE_LAUNCH=notes:82,83,84,85,86,87,88,89
+STOP_TRACK=notes:64,65,66,67,68,69,70,71
+STOP_ALL=note:81

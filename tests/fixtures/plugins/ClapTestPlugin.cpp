@@ -103,7 +103,12 @@ void applyEvent(Plugin& plugin, const clap_event_header* header) {
         plugin.core.setParam(value->param_id, value->value);
     } else if (header->type == CLAP_EVENT_NOTE_ON) {
         const auto* note = reinterpret_cast<const clap_event_note*>(header);
-        plugin.core.noteOn(note->key, static_cast<float>(note->velocity));
+        plugin.core.noteOn(note->key, static_cast<float>(note->velocity), note->note_id);
+    } else if (header->type == CLAP_EVENT_NOTE_EXPRESSION) {
+        const auto* expression = reinterpret_cast<const clap_event_note_expression*>(header);
+        if (expression->expression_id == CLAP_NOTE_EXPRESSION_TUNING) {
+            plugin.core.tune(expression->note_id, expression->key, expression->value);
+        }
     } else if (header->type == CLAP_EVENT_NOTE_OFF) {
         const auto* note = reinterpret_cast<const clap_event_note*>(header);
         plugin.core.noteOff(note->key);

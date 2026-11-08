@@ -329,6 +329,8 @@ void defineEngine(py::module_& m) {
     defineEnginePlugins(engine);
     defineEngineCapture(engine);
     adx::bindings::defineEngineExtras(engine);
+    adx::bindings::defineEngineLive(engine);
+    adx::bindings::defineEnginePads(engine);
 }
 
 } // namespace

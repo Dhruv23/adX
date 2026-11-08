@@ -9,6 +9,7 @@
 #include "engine/midi/DeviceNames.h"
 #include "engine/midi/MidiBackend.h"
 #include "engine/midi/MidiInput.h"
+#include "engine/midi/MidiOutput.h"
 #include "engine/render/RenderEngine.h"
 
 namespace adx::midi {
@@ -52,9 +53,27 @@ struct MidiDevices::Open {
     std::unique_ptr<RtMidiIn> port;
 };
 
+struct MidiDevices::OpenOut {
+    std::string name;
+    std::size_t slot{0};
+    std::unique_ptr<MidiOutput> output;
+    std::unique_ptr<RtMidiOut> port;
+    /// Sender thread only: popped, not yet due.
+    std::vector<OutMessage> waiting;
+};
+
 MidiDevices::MidiDevices(render::RenderEngine& engine) : m_engine(engine) {}
 
 MidiDevices::~MidiDevices() {
+    m_stop.store(true, std::memory_order_release);
+    if (m_sender.joinable()) {
+        m_sender.join();
+    }
+    for (const auto& out : m_outs) {
+        std::string ignored;
+        static_cast<void>(guarded(ignored, [&] { out->port->closePort(); }));
+        m_engine.core().setMidiOutput(out->slot, nullptr);
+    }
     for (const auto& open : m_open) {
         std::string ignored;
         static_cast<void>(guarded(ignored, [&] { open->port->closePort(); }));
@@ -151,6 +170,168 @@ std::uint64_t MidiDevices::lost() const {
         total += open->input->lostCount();
     }
     return total;
+}
+
+std::vector<std::string> MidiDevices::outputs() {
+    std::vector<std::string> names;
+    std::string ignored;
+    static_cast<void>(guarded(ignored, [&] {
+        RtMidiOut probe;
+        const unsigned int count = probe.getPortCount();
+        for (unsigned int i = 0; i < count; ++i) {
+            names.push_back(probe.getPortName(i));
+        }
+    }));
+    return names;
+}
+
+bool MidiDevices::openOutput(const std::string& name, std::string& error) {
+    const std::scoped_lock lock(m_outLock);
+    if (std::ranges::any_of(m_outs, [&](const auto& out) { return out->name == name; })) {
+        error = "already open: " + name;
+        return false;
+    }
+    std::size_t slot = 0;
+    while (slot < graph::EngineCore::kMaxMidiOutputs &&
+           std::ranges::any_of(m_outs, [&](const auto& out) { return out->slot == slot; })) {
+        ++slot;
+    }
+    if (slot == graph::EngineCore::kMaxMidiOutputs) {
+        error = "every MIDI output slot is in use";
+        return false;
+    }
+    auto out = std::make_unique<OpenOut>();
+    out->name = name;
+    out->slot = slot;
+    out->output = std::make_unique<MidiOutput>();
+    out->waiting.reserve(MidiOutput::kRingCapacity);
+    const bool ok = guarded(error, [&] {
+        out->port = std::make_unique<RtMidiOut>();
+        unsigned int index = out->port->getPortCount();
+        for (unsigned int i = 0; i < out->port->getPortCount(); ++i) {
+            if (out->port->getPortName(i) == name) {
+                index = i;
+                break;
+            }
+        }
+        if (index == out->port->getPortCount()) {
+            throw RtMidiError("no MIDI output named " + name, RtMidiError::INVALID_DEVICE);
+        }
+        out->port->openPort(index, "adX");
+    });
+    if (!ok) {
+        return false;
+    }
+    m_latencyNanos.store(static_cast<std::int64_t>(m_engine.audio().info().outputLatencyMs * 1e6),
+                         std::memory_order_release);
+    m_engine.core().setMidiOutput(slot, out->output.get());
+    m_outs.push_back(std::move(out));
+    if (!m_sender.joinable()) {
+        m_sender = std::thread([this] { sendLoop(); });
+    }
+    return true;
+}
+
+void MidiDevices::closeOutput(const std::string& name) {
+    const std::scoped_lock lock(m_outLock);
+    const auto found =
+        std::ranges::find_if(m_outs, [&](const auto& out) { return out->name == name; });
+    if (found == m_outs.end()) {
+        return;
+    }
+    std::string ignored;
+    static_cast<void>(guarded(ignored, [&] { (*found)->port->closePort(); }));
+    m_engine.core().setMidiOutput((*found)->slot, nullptr);
+    m_retiredOut.push_back(std::move((*found)->output));
+    m_outs.erase(found);
+}
+
+std::vector<std::string> MidiDevices::openedOutputs() const {
+    const std::scoped_lock lock(m_outLock);
+    std::vector<std::string> names;
+    names.reserve(m_outs.size());
+    for (const auto& out : m_outs) {
+        names.push_back(out->name);
+    }
+    return names;
+}
+
+bool MidiDevices::send(const std::string& name, std::span<const std::uint8_t> bytes,
+                       std::string& error) {
+    if (bytes.empty() || (bytes[0] & 0x80U) == 0) {
+        error = "a MIDI message starts with a status byte";
+        return false;
+    }
+    const std::scoped_lock lock(m_outLock);
+    const auto found =
+        std::ranges::find_if(m_outs, [&](const auto& out) { return out->name == name; });
+    if (found == m_outs.end()) {
+        error = "not open: " + name;
+        return false;
+    }
+    return guarded(error, [&] { (*found)->port->sendMessage(bytes.data(), bytes.size()); });
+}
+
+bool MidiDevices::setSync(const std::string& name, bool clock, bool mtc) {
+    const std::scoped_lock lock(m_outLock);
+    const auto found =
+        std::ranges::find_if(m_outs, [&](const auto& out) { return out->name == name; });
+    if (found == m_outs.end()) {
+        return false;
+    }
+    (*found)->output->sync().clock.store(clock, std::memory_order_release);
+    (*found)->output->sync().mtc.store(mtc, std::memory_order_release);
+    return true;
+}
+
+std::uint64_t MidiDevices::lostOut() const {
+    const std::scoped_lock lock(m_outLock);
+    std::uint64_t total = 0;
+    for (const auto& out : m_outs) {
+        total += out->output->lostCount();
+    }
+    return total;
+}
+
+void MidiDevices::sendLoop() {
+    const double rate = m_engine.options().sampleRate;
+    while (!m_stop.load(std::memory_order_acquire)) {
+        {
+            const std::scoped_lock lock(m_outLock);
+            std::uint64_t frame = 0;
+            std::int64_t wall = 0;
+            const bool clocked = m_engine.core().midiClock().read(frame, wall);
+            // A message's block is heard one output latency after it started.
+            const std::int64_t latency = m_latencyNanos.load(std::memory_order_acquire);
+            const std::int64_t now = nowNanos();
+            for (const auto& out : m_outs) {
+                OutMessage message;
+                while (out->waiting.size() < out->waiting.capacity() && out->output->pop(message)) {
+                    out->waiting.push_back(message);
+                }
+                std::size_t kept = 0;
+                for (const OutMessage& due : out->waiting) {
+                    const auto since =
+                        static_cast<double>(static_cast<std::int64_t>(due.streamFrame) -
+                                            static_cast<std::int64_t>(frame));
+                    const std::int64_t at =
+                        clocked ? wall + static_cast<std::int64_t>(since * 1e9 / rate) + latency
+                                : now;
+                    if (at > now) {
+                        out->waiting[kept++] = due;
+                        continue;
+                    }
+                    std::string ignored;
+                    static_cast<void>(guarded(
+                        ignored, [&] { out->port->sendMessage(due.bytes.data(), due.size); }));
+                    m_sent.fetch_add(1, std::memory_order_acq_rel);
+                }
+                out->waiting.resize(kept);
+            }
+        }
+        // A millisecond: MIDI clock at 300 bpm is a pulse every 8 ms.
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
 }
 
 } // namespace adx::midi

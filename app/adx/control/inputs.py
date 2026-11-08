@@ -267,9 +267,32 @@ def item_point(widget: QWidget, item: str | list[str]) -> QPoint:
 def choose_menu(text: str) -> str:
     """Click the item of the open popup menu whose text is ``text`` (``&`` ignored), as a
     mouse would: on the item's own rectangle."""
-    menu = QApplication.activePopupWidget()
-    if not isinstance(menu, QMenu):
+    top = QApplication.activePopupWidget()
+    if not isinstance(top, QMenu):
         raise ControlError("no menu is open", BAD_REQUEST)
+    # A submenu the last choice opened (it may still be the parent that has focus): the
+    # deepest open one first, then the menu itself.
+    menus = [top]
+    while True:
+        opened = [
+            sub
+            for a in menus[-1].actions()
+            if isinstance(sub := a.menu(), QMenu) and sub.isVisible()
+        ]
+        if not opened:
+            break
+        menus.append(opened[0])
+    menu = next(
+        (
+            m
+            for m in reversed(menus)
+            if any(
+                a.text().replace("&", "").lower() == text.replace("&", "").lower()
+                for a in m.actions()
+            )
+        ),
+        top,
+    )
     wanted = text.replace("&", "").lower()
     for action in menu.actions():
         if action.text().replace("&", "").lower() == wanted:
@@ -282,6 +305,13 @@ def choose_menu(text: str) -> str:
                 menu.actionGeometry(action).center(),
             )
             _settle()
+            sub = action.menu()
+            if isinstance(sub, QMenu) and not sub.isVisible():
+                # A submenu opens on hover after a delay a synthesized click does not
+                # wait for: open it where the mouse would, so the next choice is in it.
+                menu.setActiveAction(action)
+                sub.popup(menu.mapToGlobal(menu.actionGeometry(action).topRight()))
+                _settle()
             return action.text()
     items = [a.text() for a in menu.actions() if a.text()]
     raise ControlError(f"the menu has no item {text!r} ({', '.join(items)})", BAD_REQUEST)

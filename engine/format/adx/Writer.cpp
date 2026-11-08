@@ -428,6 +428,9 @@ void writePlaylistItem(Emitter& emitter, const Project& project,
         text += " offset=";
         text += formatDuration(item.sourceOffset, project.tempo);
     }
+    if (const auto* ref = std::get_if<project::PatternRef>(&item.content)) {
+        appendIfChanged(text, "gain", ref->gain, 1.0F);
+    }
     const auto* audio = std::get_if<project::AudioClipRef>(&item.content);
     if (audio != nullptr) {
         appendIfChanged(text, "stretch", audio->stretch, 1.0F);
@@ -755,6 +758,70 @@ void writeMarkers(Emitter& emitter, const Project& project) {
     emitResidue(emitter, project, "MARKERS", "");
 }
 
+void writeSession(Emitter& emitter, const Project& project) {
+    const project::SessionModel& model = project.session;
+    if (model.empty()) {
+        return;
+    }
+    emitter.section("[SESSION]");
+    emitter.line(keyValue("QUANTIZE", session::toString(model.quantize)));
+    for (const project::SessionScene& scene : model.scenes) {
+        std::string text = "SCENE " + quoteAlways(scene.name);
+        if (scene.tempo) {
+            text += " tempo=" + formatFloat(static_cast<float>(*scene.tempo));
+        }
+        emitter.line(text);
+    }
+    for (const project::SessionTrack& track : model.tracks) {
+        const project::Channel* channel = project.find(track.channel);
+        if (channel == nullptr) {
+            continue;
+        }
+        std::string text = "TRACK " + quoteIfNeeded(channel->name);
+        if (track.linked.valid()) {
+            text += " linked=" + std::to_string(track.linked.value);
+        }
+        if (!track.stopOnEmptyScene) {
+            text += " stop_on_empty=no";
+        }
+        emitter.line(text);
+        for (std::size_t row = 0; row < track.slots.size(); ++row) {
+            if (!track.slots[row].has_value()) {
+                continue;
+            }
+            const project::ClipSlot& slot = *track.slots[row];
+            const project::Pattern* pattern = project.find(slot.pattern);
+            if (pattern == nullptr) {
+                continue;
+            }
+            std::string cell = std::to_string(row + 1) + " " + quoteIfNeeded(pattern->name);
+            if (slot.length.value > 0) {
+                cell += " length=" + formatPosition(slot.length, project.tempo);
+            }
+            if (!slot.loop) {
+                cell += " loop=no";
+            }
+            if (slot.quantize != session::LaunchQuantize::Global) {
+                cell += std::string(" quantize=") + session::toString(slot.quantize);
+            }
+            if (slot.follow != session::FollowAction::None) {
+                cell += std::string(" follow=") + session::toString(slot.follow);
+            }
+            if (slot.followRepeats != 1) {
+                cell += " repeats=" + std::to_string(slot.followRepeats);
+            }
+            if (slot.legato) {
+                cell += " legato=yes";
+            }
+            if (slot.gain != 1.0F) {
+                cell += " gain=" + formatFloat(slot.gain);
+            }
+            emitter.indented(1, cell);
+        }
+    }
+    emitResidue(emitter, project, "SESSION", "");
+}
+
 /// Whole sections the model never understood, re-emitted after everything it did.
 ///
 /// After, not in place: their original position is between two sections whose own
@@ -793,6 +860,7 @@ std::string write(const Project& project, const WriteOptions& options) {
     }
     writeMidi(emitter, project);
     writeMarkers(emitter, project);
+    writeSession(emitter, project);
     writeUnknownSections(emitter, project);
 
     std::string out;

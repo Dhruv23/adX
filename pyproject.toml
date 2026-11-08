@@ -18,6 +18,8 @@ dependencies = [
     # Bump both together. A floating ">=" broke CI the day 6.12.0 shipped.
     "PySide6==6.11.2",
     "numpy>=1.26",
+    # OpenUtau's .ustx is YAML (adx/sung_import.py, STATE.md P9-6).
+    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]

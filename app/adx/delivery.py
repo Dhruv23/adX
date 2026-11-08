@@ -37,6 +37,7 @@ class Delivery:
             track=self.record_track,
             punch_range=self.punch_range,
             directory=self.project_directory,
+            midi_channel=lambda: window.live_midi.target,
             parent=window,
         )
         self.record.message.connect(window.status)
@@ -121,17 +122,30 @@ class Delivery:
     # --- MIDI files -----------------------------------------------------------------
 
     def import_midi_dialog(self) -> None:
-        """Ask for a .mid and import it."""
+        """Ask for a .mid (or a singing-voice project) and import it."""
         path, _filter = QFileDialog.getOpenFileName(
-            self.window, "Import MIDI", self.project_directory(), "MIDI files (*.mid *.midi)"
+            self.window,
+            "Import MIDI",
+            self.project_directory(),
+            "MIDI and vocal files (*.mid *.midi *.ust *.ustx *.vsqx);;MIDI files (*.mid *.midi);;"
+            "UTAU, OpenUtau, Vocaloid (*.ust *.ustx *.vsqx)",
         )
         if path:
             self.import_midi(path)
 
     def import_midi(self, path: str) -> dict[str, Any]:
-        """A Standard MIDI File into the project, one undo step."""
+        """A Standard MIDI File - or a UST, USTX or VSQX - into the project, one undo step."""
         w = self.window
-        result = engine_bridge.import_midi(w.session.require(), path)
+        if Path(path).suffix.lower() in (".ust", ".ustx", ".vsqx"):
+            from adx.sung_import import import_sung
+
+            try:
+                result = import_sung(w.session.require(), path)
+            except (OSError, ValueError, RuntimeError) as error:
+                w.status(f"Import: {error}")
+                return {}
+        else:
+            result = engine_bridge.import_midi(w.session.require(), path)
         w.session.notify()
         w.status(f"Imported {Path(path).name}: {result['tracks']} track(s)")
         return result

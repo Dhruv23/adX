@@ -127,6 +127,28 @@ public:
     /// Live MIDI input (EngineCore::setMidiInput) plays `channel` from the next block; an
     /// invalid id silences it. Notes already held release where they started.
     void setMidiTarget(core::ChannelId channel);
+    /// The session (phase_11.md §4.3): launch the clip in a cell, stop a track's clip,
+    /// fire a scene row, stop every clip - each on its quantize boundary.
+    /// `gain` is a pad's (its velocity through the profile's curve), times the cell's;
+    /// 0 is none.
+    void launchClip(std::uint32_t track, std::uint32_t row, float gain = 0.0F);
+    void stopClip(std::uint32_t track);
+    void fireScene(std::uint32_t row, float gain = 0.0F);
+    void stopAllClips();
+    /// The master rate (phase_11.md §4.8): a nudge while it is held, or a tempo set from
+    /// the transport bar as a multiple of the map's. Every clip follows it.
+    void setSessionRate(double rate);
+    /// A tap of tap tempo at `seconds` on a monotonic clock (negative: the audio clock's
+    /// now). Two taps set the rate.
+    void tapTempo(double seconds = -1.0);
+    /// Arms or disarms the performance log (SessionEngine::takeLogged).
+    void recordPerformance(bool on);
+    /// The MIDI input in `slot` triggers the session through `map` from the next block
+    /// (phase_11.md §4.7); null makes it an ordinary input again. The engine keeps every
+    /// map it was given until it is destroyed: the audio thread may still be reading one.
+    void setPadMap(std::size_t slot, const midi::PadMap* map);
+    /// The arrangement follows incoming MIDI clock or time code, or neither (P9-5).
+    void setSyncFollow(graph::SyncFollow follow);
     /// The click: on every `beat` ticks while the arrangement rolls, the first of every
     /// `beatsPerBar` higher. Realtime only - nothing renders it offline (P5-3).
     void setMetronome(bool enabled, core::Ticks beat, std::uint32_t beatsPerBar);
@@ -204,6 +226,8 @@ private:
     [[nodiscard]] bool send(const graph::EngineMessage& message);
 
     EngineOptions m_options;
+    /// Every pad map handed to the audio thread, kept for as long as it might read one.
+    std::vector<std::unique_ptr<midi::PadMap>> m_padMaps;
     transport::TransportSet m_transport;
     audio::AudioThread m_audio;
     graph::EngineCore m_core;

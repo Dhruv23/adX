@@ -81,6 +81,18 @@ class SlotRow(QWidget):
             self.bypass.set_checked(bool(slot["bypass"]))
             self.mix.set_value(float(slot["mix"]))
 
+    def show_health(self, kind: str, late: int, state: str) -> None:
+        """A hosted plugin's health on its button (P9-8): which plugin is making it stutter."""
+        warn = state not in ("", "running") or late > 0
+        suffix = f"  ⚠ {late}" if late > 0 else ("  ⚠" if warn else "")
+        self.button.setText(kind + suffix)
+        self.button.setProperty("plugin_warn", warn)
+        self.button.setToolTip(
+            f"{kind}: {state or 'not loaded'}, {late} late block(s). Click: edit. Drag: reorder."
+            if state
+            else "Click: edit (or add) the effect. Drag: reorder."
+        )
+
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt's name
         if event.button() == Qt.MouseButton.RightButton:
             self.menu_requested.emit(self.index, self.slot, event.globalPosition().toPoint())

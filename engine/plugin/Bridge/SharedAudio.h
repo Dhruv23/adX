@@ -42,6 +42,10 @@ enum class WireEventKind : std::uint8_t {
     AllNotesOff,
     /// Any other channel message, raw: status in `channel`'s place, data1, data2.
     Midi,
+    /// The note's tuning, `value` semitones from its key: a slide, a pitch curve, the
+    /// channel's pitch offset (STATE.md P9-7). CLAP note expression TUNING; VST3's
+    /// tuning note expression.
+    Tuning,
 };
 
 struct WireEvent {
@@ -54,6 +58,8 @@ struct WireEvent {
     /// Midi: the status byte; data1 and data2 are key and velocity.
     std::uint8_t status;
     std::array<std::uint8_t, 3> pad;
+    /// Tuning: semitones.
+    float value;
 };
 
 struct WireParam {
@@ -61,7 +67,13 @@ struct WireParam {
     std::uint32_t id;
     /// In the plugin's own units (PluginDescriptor.h).
     double value;
+    /// kParamGesture on a change the plugin made inside an edit gesture - its editor,
+    /// a user's hand - rather than one it reported by itself (P9-7, P10.5-2).
+    std::uint32_t flags;
+    std::uint32_t reserved;
 };
+
+inline constexpr std::uint32_t kParamGesture = 1U << 0U;
 
 enum TransportFlags : std::uint32_t {
     kPlaying = 1U << 0U,

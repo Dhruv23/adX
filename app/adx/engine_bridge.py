@@ -338,6 +338,16 @@ class Project:
         return dict(self.native.note_extras(pattern, channel, note))
 
     @_ffi
+    def session_info(self) -> dict[str, Any]:
+        """The [SESSION] model: quantize, scenes and tracks with their cells."""
+        return dict(self.native.session_info())
+
+    @_ffi
+    def set_session(self, info: dict[str, Any]) -> None:
+        """Replace the session (session_info's shape) as one undo step."""
+        self.native.set_session(info)
+
+    @_ffi
     def lyric_cells(
         self, pattern: str, channel: str, tick_start: int, tick_end: int
     ) -> tuple[IdArray, npt.NDArray[np.int64], npt.NDArray[np.int64], list[str], list[str]]:
@@ -648,11 +658,13 @@ class Engine:
         input_device: int | None = None,
         loopback: int | None = None,
         exclusive: bool = False,
+        asio: bool = False,
     ) -> None:
         """``input_channels`` > 0 opens an input for recording. ``loopback`` makes a
         test's engine: no device, rendered by :meth:`render_offline`, its outputs wired
         back to its inputs that many frames later. ``exclusive`` plays the default
-        output in WASAPI exclusive mode (output only; other apps lose the device)."""
+        output in WASAPI exclusive mode (output only; other apps lose the device).
+        ``asio`` opens the default ASIO driver through RtAudio."""
         CALLS.count += 1
         self.native = _native.Engine(
             sample_rate=sample_rate,
@@ -662,6 +674,7 @@ class Engine:
             input_device=input_device,
             loopback=loopback,
             exclusive=exclusive,
+            asio=asio,
         )
         self.null_backend = null_backend
         #: Inputs the stream was opened with: 0 means it cannot record.
@@ -700,6 +713,191 @@ class Engine:
     def set_midi_target(self, channel: int) -> None:
         """The channel live MIDI plays (0: none)."""
         self.native.set_midi_target(channel)
+
+    @_ffi
+    def midi_outputs(self) -> list[str]:
+        """The system's MIDI output ports (after start())."""
+        return [str(name) for name in self.native.midi_outputs()]
+
+    @_ffi
+    def open_midi_output(self, name: str) -> None:
+        """Open a MIDI output (raises RuntimeError): clock, time code and send_midi."""
+        self.native.open_midi_output(name)
+
+    @_ffi
+    def close_midi_output(self, name: str) -> None:
+        """Close a MIDI output."""
+        self.native.close_midi_output(name)
+
+    @property
+    @_ffi
+    def midi_outputs_opened(self) -> list[str]:
+        """The open MIDI outputs."""
+        return [str(name) for name in self.native.midi_outputs_opened]
+
+    @_ffi
+    def send_midi(self, name: str, message: bytes | list[int]) -> None:
+        """Send one message to an open output now, off the audio clock."""
+        self.native.send_midi(name, list(message))
+
+    @_ffi
+    def set_midi_sync(self, name: str, clock: bool = True, mtc: bool = False) -> None:
+        """Whether an open output is sent MIDI clock and time code (30 fps non-drop)."""
+        self.native.set_midi_sync(name, clock, mtc)
+
+    @property
+    @_ffi
+    def midi_sync_counts(self) -> dict[str, int]:
+        """Sync messages sent to outputs, and lost to a full ring."""
+        return {str(k): int(v) for k, v in self.native.midi_sync_counts.items()}
+
+    @_ffi
+    def record_midi(self, on: bool) -> None:
+        """Log what MIDI inputs play while the arrangement rolls (a MIDI take)."""
+        self.native.record_midi(on)
+
+    @_ffi
+    def drain_midi_take(self) -> int:
+        """Move the take's messages off the audio thread (call at UI rate); how many."""
+        return int(self.native.drain_midi_take())
+
+    @_ffi
+    def commit_midi_take(self, project: Project, channel: int, origin: int, stop: int) -> str:
+        """The take as a pattern of ``channel``'s notes from ``origin``'s bar on a new
+        playlist track, one undo step; its name, or "" when nothing was played."""
+        return str(self.native.commit_midi_take(project.native, channel, origin, stop))
+
+    # --- the session (Phase 11) ---------------------------------------------------
+
+    @_ffi
+    def launch_clip(self, track: int, row: int, gain: float = 0.0) -> None:
+        """Launch a session cell's clip on its quantize boundary; `gain` is a pad's
+        (its velocity through the profile's curve) on top of the cell's own."""
+        self.native.launch_clip(track, row, gain)
+
+    @_ffi
+    def stop_clip(self, track: int) -> None:
+        """Stop a session track's clip on its quantize boundary."""
+        self.native.stop_clip(track)
+
+    @_ffi
+    def fire_scene(self, row: int, gain: float = 0.0) -> None:
+        """Launch every track's cell in a scene row."""
+        self.native.fire_scene(row, gain)
+
+    @_ffi
+    def stop_all_clips(self) -> None:
+        """Stop every session clip on its boundary."""
+        self.native.stop_all_clips()
+
+    @_ffi
+    def clip_state(self, track: int, row: int) -> str:
+        """stopped, queued, playing, queued-stop or retriggered."""
+        return str(self.native.clip_state(track, row))
+
+    @_ffi
+    def clip_progress(self, track: int) -> float:
+        """Where a track's playing clip is in its loop, 0..1; -1 for none."""
+        return float(self.native.clip_progress(track))
+
+    @property
+    @_ffi
+    def session_counts(self) -> dict[str, int]:
+        """Clips active, and launches refused for want of a runtime or a time source."""
+        return {str(k): int(v) for k, v in self.native.session_counts.items()}
+
+    # --- performing (phase_11.md 4.6-4.8) ------------------------------------------
+
+    @_ffi
+    def set_session_rate(self, rate: float) -> None:
+        """The master rate every clip follows (a nudge, or a tempo set live)."""
+        self.native.set_session_rate(rate)
+
+    @_ffi
+    def tap_tempo(self, seconds: float = -1.0) -> None:
+        """A tap of tap tempo at `seconds` on a monotonic clock."""
+        self.native.tap_tempo(seconds)
+
+    @property
+    @_ffi
+    def session_rate(self) -> float:
+        return float(self.native.session_rate)
+
+    @property
+    @_ffi
+    def tapped_bpm(self) -> float:
+        return float(self.native.tapped_bpm)
+
+    @_ffi
+    def record_performance(self, on: bool) -> None:
+        """Arm (clearing the last log) or disarm the performance recording."""
+        self.native.record_performance(on)
+
+    @property
+    @_ffi
+    def performance_recording(self) -> bool:
+        return bool(self.native.performance_recording)
+
+    @_ffi
+    def drain_performance(self) -> int:
+        """Gathers what the audio thread logged; call at UI rate while recording."""
+        return int(self.native.drain_performance())
+
+    @property
+    @_ffi
+    def performance_events(self) -> list[dict[str, Any]]:
+        return [dict(e) for e in self.native.performance_events]
+
+    @_ffi
+    def commit_performance(self, project: Project, end_tick: int = -1) -> dict[str, int]:
+        """Writes the recorded performance into the arrangement: one undo step."""
+        return {
+            str(k): int(v)
+            for k, v in self.native.commit_performance(project.native, end_tick).items()
+        }
+
+    @_ffi
+    def set_pad_profile(self, input_name: str, profile: str) -> list[str]:
+        """The open input becomes a pad controller speaking `profile` (its text)."""
+        return [str(w) for w in self.native.set_pad_profile(input_name, profile)]
+
+    @_ffi
+    def clear_pad_profile(self, input_name: str) -> None:
+        self.native.clear_pad_profile(input_name)
+
+    @property
+    @_ffi
+    def pad_presses(self) -> int:
+        return int(self.native.pad_presses)
+
+    @_ffi
+    def set_pad_cells(self, cells: list[tuple[int, int]]) -> None:
+        """Which (track, row) cells hold a clip, for the pads' lights."""
+        self.native.set_pad_cells(cells)
+
+    @_ffi
+    def start_pad_feedback(self, output_name: str, profile: str, hz: float = 30.0) -> None:
+        """Light the controller on the open output from the clip states, on its own thread."""
+        self.native.start_pad_feedback(output_name, profile, hz)
+
+    @_ffi
+    def stop_pad_feedback(self) -> None:
+        self.native.stop_pad_feedback()
+
+    @property
+    @_ffi
+    def pad_feedback(self) -> dict[str, Any]:
+        return dict(self.native.pad_feedback)
+
+    @_ffi
+    def pad_shown(self, column: int, row: int) -> str:
+        """What a pad's light last showed: empty, stopped, queued, playing, ..."""
+        return str(self.native.pad_shown(column, row))
+
+    @_ffi
+    def set_sync_follow(self, source: str) -> None:
+        """Follow incoming MIDI clock ('clock'), time code ('mtc'), or neither ('none')."""
+        self.native.set_sync_follow(source)
 
     @_ffi
     def render_offline(self, frames: int) -> None:
@@ -933,6 +1131,20 @@ class Engine:
     def sync_plugin_states(self, project: Project) -> int:
         """Store every live plugin's state in the project; how many changed."""
         return int(self.native.sync_plugin_states(project.native))
+
+    @_ffi
+    def write_automation(self, on: bool, project: Project | None = None) -> str:
+        """Start writing automation from plugin editors' gestures, or stop and commit the
+        pass into ``project`` (None discards it); the new pattern's name, or ""."""
+        return str(
+            self.native.write_automation(on, project.native if project is not None else None)
+        )
+
+    @property
+    @_ffi
+    def automation_lanes(self) -> int:
+        """Parameters the automation pass has caught so far."""
+        return int(self.native.automation_lanes)
 
     @_ffi
     def apply_plugin_echoes(self, project: Project) -> int:
@@ -1319,6 +1531,71 @@ class StepGridGeometry(_Builder):
         """The whole grid in one C++ build; returns the lit cell count."""
         self.native.build(project.native, pattern, channels, step_ticks, steps, group_size)
         return int(self.native.lit)
+
+
+# --- pad controllers (phase_11.md 4.7) ---------------------------------------------
+
+
+@_ffi
+def parse_pad_profile(text: str) -> dict[str, Any]:
+    """A pad profile: {ok, warnings, profile, text} - ``text`` is it written back."""
+    return dict(_native.parse_pad_profile(text))
+
+
+@_ffi
+def pad_message(profile: str, note: int, look: str, lit: bool = True) -> bytes:
+    """The message that lights pad ``note`` as ``look`` (empty, stopped, queued, ...)."""
+    return bytes(_native.pad_message(profile, note, look, lit))
+
+
+class PadLearn:
+    """Learn mode's native half (engine/midi/PadController.h)."""
+
+    def __init__(self, name: str, columns: int, rows: int) -> None:
+        CALLS.count += 1
+        self.native: Any = _native.PadLearn(name, columns, rows)
+
+    @property
+    def prompt(self) -> str:
+        return str(self.native.prompt)
+
+    @property
+    def done(self) -> bool:
+        return bool(self.native.done)
+
+    @_ffi
+    def press(self, kind: str, channel: int, number: int, value: int) -> bool:
+        return bool(self.native.press(kind, channel, number, value))
+
+    @_ffi
+    def skip(self) -> None:
+        self.native.skip()
+
+    @_ffi
+    def result(self) -> str:
+        return str(self.native.result())
+
+
+class SessionGeometry(_Builder):
+    """engine/geometry/SessionGeometry.h: the session grid, read from the clip states."""
+
+    LAYERS = ("cells", "marks")
+
+    def __init__(self) -> None:
+        super().__init__(_native.SessionGeometry())
+
+    @_ffi
+    def build(
+        self,
+        engine: Engine,
+        tracks: int,
+        rows: int,
+        filled: npt.NDArray[np.uint8],
+        recording: bool = False,
+    ) -> tuple[int, int]:
+        """One build of every cell; returns (playing, queued)."""
+        self.native.build(engine.native, tracks, rows, filled, recording)
+        return int(self.native.playing), int(self.native.queued)
 
 
 class AutomationGeometry(_Builder):
@@ -1819,6 +2096,13 @@ class ExportJob:
 def import_midi(project: Project, path: str) -> dict[str, Any]:
     """A Standard MIDI File into ``project``, one undo step: pattern, tracks, division."""
     return dict(_native.import_midi(project.native, path))
+
+
+@_ffi
+def import_song(project: Project, song: dict[str, Any], name: str = "Song") -> dict[str, Any]:
+    """A song described in Python (tempos, tracks of notes with lyric and bend, adX
+    ticks) into ``project`` as one undo step, the way import_midi does."""
+    return dict(_native.import_song(project.native, song, name))
 
 
 @_ffi

@@ -1,0 +1,18 @@
+# adX's emulated controller (tools/virtual_pad.py) on a loopMIDI port. It presses on
+# channel 1 and is lit on channel 16, so its own lights, looping back through the port,
+# are never taken for presses. Steady lights only: a test compares them with the clip
+# states.
+[PAD_PROFILE]
+NAME="adX Virtual Pad"
+MATCH_DEVICE="loopMIDI"
+GRID=8x8
+NOTE_BASE=0 ROW_STRIDE=8
+CHANNEL=1
+VELOCITY_SENSITIVE=yes VELOCITY_CURVE=linear
+[FEEDBACK]
+MODE=note CHANNEL=16
+EMPTY=vel:0  STOPPED=vel:1  QUEUED=vel:2  PLAYING=vel:3  QUEUED_STOP=vel:4  RECORDING=vel:5
+[CONTROLS]
+SCENE_LAUNCH=notes:64,65,66,67,68,69,70,71
+STOP_TRACK=notes:72,73,74,75,76,77,78,79
+STOP_ALL=cc:100  TAP_TEMPO=cc:101

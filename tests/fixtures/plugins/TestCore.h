@@ -154,7 +154,7 @@ public:
         }
     }
 
-    void noteOn(int key, float velocity) noexcept {
+    void noteOn(int key, float velocity, int noteId = -1) noexcept {
         Voice* slot = &m_voices[0];
         for (Voice& v : m_voices) {
             if (!v.active) {
@@ -165,9 +165,21 @@ public:
         *slot = Voice{};
         slot->active = true;
         slot->key = key;
+        slot->noteId = noteId;
         slot->velocity = velocity;
         slot->increment = 2.0 * 3.14159265358979323846 * 440.0 *
                           std::pow(2.0, (key - 69) / 12.0) / m_sampleRate;
+    }
+
+    /// A tuning expression: the voice with `noteId` (or, given -1, every voice on
+    /// `key`) plays `semitones` from its key (P9-7).
+    void tune(int noteId, int key, double semitones) noexcept {
+        for (Voice& v : m_voices) {
+            if (v.active && ((noteId >= 0 && v.noteId == noteId) || (noteId < 0 && (key < 0 || v.key == key)))) {
+                v.increment = 2.0 * 3.14159265358979323846 * 440.0 *
+                              std::pow(2.0, (v.key - 69 + semitones) / 12.0) / m_sampleRate;
+            }
+        }
     }
 
     void noteOff(int key) noexcept {
@@ -281,6 +293,7 @@ private:
         bool active{false};
         bool released{false};
         int key{0};
+        int noteId{-1};
         float velocity{0.0F};
         double phase{0.0};
         double increment{0.0};

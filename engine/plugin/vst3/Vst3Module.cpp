@@ -21,6 +21,7 @@
 #include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "pluginterfaces/vst/ivstevents.h"
 #include "pluginterfaces/vst/ivstmessage.h"
+#include "pluginterfaces/vst/ivstnoteexpression.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "pluginterfaces/vst/vstspeaker.h"
@@ -254,8 +255,12 @@ public:
             }
             for (const auto& [id, value] : m_edits) {
                 if (io.outCount < io.outParams.size()) {
-                    io.outParams[io.outCount++] =
-                        bridge::WireParam{.offset = 0, .id = id, .value = value};
+                    // performEdit is the editor's: a user's change by definition.
+                    io.outParams[io.outCount++] = bridge::WireParam{.offset = 0,
+                                                                    .id = id,
+                                                                    .value = value,
+                                                                    .flags = bridge::kParamGesture,
+                                                                    .reserved = 0};
                 }
             }
             m_edits.clear();
@@ -277,6 +282,14 @@ public:
                 event.noteOff.pitch = e.key;
                 event.noteOff.velocity = static_cast<float>(e.velocity) / 127.0F;
                 event.noteOff.noteId = e.noteId;
+                m_events.addEvent(event);
+            } else if (e.kind == bridge::WireEventKind::Tuning) {
+                // VST3's tuning expression: plain semitones = 240 * (normalised - 0.5).
+                event.type = vst::Event::kNoteExpressionValueEvent;
+                event.noteExpressionValue.typeId = vst::kTuningTypeID;
+                event.noteExpressionValue.noteId = e.noteId;
+                event.noteExpressionValue.value =
+                    std::clamp(0.5 + (static_cast<double>(e.value) / 240.0), 0.0, 1.0);
                 m_events.addEvent(event);
             } else if (e.kind == bridge::WireEventKind::AllNotesOff) {
                 // VST3 has no wildcard: release every key we have sent on.
@@ -348,7 +361,9 @@ public:
             io.outParams[io.outCount++] =
                 bridge::WireParam{.offset = static_cast<std::uint32_t>(offset),
                                   .id = queue->getParameterId(),
-                                  .value = value};
+                                  .value = value,
+                                  .flags = 0,
+                                  .reserved = 0};
         }
         if (m_latencyChanged.exchange(false)) {
             io.status |= bridge::kLatencyChanged;

@@ -170,6 +170,16 @@ private:
     [[nodiscard]] static std::vector<std::int64_t>
     signatureOf(const std::vector<Placement>& placements, const Channel* channel,
                 core::Ticks miniCycle);
+    /// Where compileSession writes: the snapshot storage's session vectors.
+    struct SessionOut {
+        std::vector<SessionClip>& sessionClips;
+        std::vector<double>& sceneTempo;
+        std::vector<std::uint8_t>& trackStopOnEmpty;
+        std::vector<std::uint32_t>& sessionChannels;
+        std::vector<std::shared_ptr<const void>>& keepAlive;
+    };
+    /// The session's cells as the audio thread plays them (phase_11.md §4.4).
+    static void compileSession(const Project& project, core::Ticks miniCycle, SessionOut& out);
     [[nodiscard]] static std::shared_ptr<const ChannelEvents>
     flatten(const std::vector<Placement>& placements, const Channel* channel,
             core::Ticks miniCycle);

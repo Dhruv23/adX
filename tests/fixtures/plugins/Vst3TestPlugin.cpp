@@ -16,6 +16,7 @@
 #include "pluginterfaces/vst/ivstcomponent.h"
 #include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "pluginterfaces/vst/ivstevents.h"
+#include "pluginterfaces/vst/ivstnoteexpression.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "pluginterfaces/vst/vstspeaker.h"
 #include "pluginterfaces/vst/vsttypes.h"
@@ -202,9 +203,13 @@ public:
                 position = at;
             }
             if (event.type == Vst::Event::kNoteOnEvent) {
-                m_core.noteOn(event.noteOn.pitch, event.noteOn.velocity);
+                m_core.noteOn(event.noteOn.pitch, event.noteOn.velocity, event.noteOn.noteId);
             } else if (event.type == Vst::Event::kNoteOffEvent) {
                 m_core.noteOff(event.noteOff.pitch);
+            } else if (event.type == Vst::Event::kNoteExpressionValueEvent &&
+                       event.noteExpressionValue.typeId == Vst::kTuningTypeID) {
+                m_core.tune(event.noteExpressionValue.noteId, -1,
+                            240.0 * (event.noteExpressionValue.value - 0.5));
             }
         }
         if (position < frames) {

@@ -206,6 +206,13 @@ void ChannelNode::applyChannelStrip(const ProcessContext& context) noexcept {
 void ChannelNode::process(ProcessContext& context) noexcept {
     m_last.capture(context);
     renderBlock(context);
+    if (context.sounding != nullptr) {
+        for (const Voice& voice : m_pool.voices()) {
+            if (voice.phase != VoicePhase::Free && voice.timeSource < transport::kMaxTimeSources) {
+                context.sounding[voice.timeSource].store(1, std::memory_order_relaxed);
+            }
+        }
+    }
     if (m_handover.from != nullptr) {
         ringOutOld(context);
     }

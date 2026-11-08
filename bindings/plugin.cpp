@@ -368,10 +368,38 @@ void defineEnginePlugins(py::class_<EngineHandle>& engine) {
             "apply_plugin_echoes",
             [](EngineHandle& self, ProjectHandle& project) {
                 const py::gil_scoped_release released;
-                return plugin::applyPluginEchoes(*self.engine, project.project, project.stack);
+                // While writing, a gesture lands where the arrangement is now - and only
+                // while it rolls; a change made stopped is an ordinary edit.
+                const bool rolling = adx::transport::isRolling(self.engine->state());
+                return plugin::applyPluginEchoes(
+                    *self.engine, project.project, project.stack,
+                    self.automation.writing() && rolling ? &self.automation : nullptr,
+                    self.engine->positionTicks().value);
             },
             py::arg("project"),
-            "Put parameter changes made in plugins' own editors into the project.")
+            "Put parameter changes made in plugins' own editors into the project (values a "
+            "plugin reports by itself as it loads, and values the project already holds, "
+            "are not edits); while writing automation, gestures become breakpoints.")
+        // GIL: trivial - starts an in-memory pass
+        .def(
+            "write_automation",
+            [](EngineHandle& self, bool on, ProjectHandle* project) -> std::string {
+                const std::int64_t tick = self.engine->positionTicks().value;
+                if (on) {
+                    self.automation.begin(tick);
+                    return {};
+                }
+                if (project == nullptr) {
+                    self.automation.discard();
+                    return {};
+                }
+                return self.automation.commit(project->project, project->stack, tick);
+            },
+            py::arg("on"), py::arg("project") = nullptr,
+            "Start writing automation from plugin editors (on=True), or stop and commit "
+            "the pass into `project` as a pattern of lanes on a new track; its name, or ''.")
+        .def_property_readonly("automation_lanes",
+                               [](const EngineHandle& self) { return self.automation.lanes(); })
         .def(
             "apply_learned",
             [](EngineHandle& self, ProjectHandle& project) {

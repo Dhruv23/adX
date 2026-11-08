@@ -46,8 +46,11 @@ void PluginCore::collectParams(std::span<const float> params,
             m_changeCount >= changes.size()) {
             return;
         }
-        changes[m_changeCount++] =
-            bridge::WireParam{.offset = offset, .id = ids[i], .value = static_cast<double>(value)};
+        changes[m_changeCount++] = bridge::WireParam{.offset = offset,
+                                                     .id = ids[i],
+                                                     .value = static_cast<double>(value),
+                                                     .flags = 0,
+                                                     .reserved = 0};
         sent[i] = value;
     };
     // Block values first, at offset 0; then each moving parameter on the control grid,
@@ -81,6 +84,7 @@ CoreResult PluginCore::process(std::span<const float* const> inputs,
     const std::uint32_t generation = health.generation.load(std::memory_order_acquire);
     if (generation != m_generation) {
         m_generation = generation;
+        m_played = 0;
         std::ranges::fill(m_sent.view(), std::numeric_limits<float>::quiet_NaN());
     }
     const bridge::LinkState state = health.state.load(std::memory_order_acquire);
@@ -136,13 +140,17 @@ CoreResult PluginCore::process(std::span<const float* const> inputs,
     const std::span<const bridge::WireParam> echoes = m_outParams.view().first(outCount);
     const std::span<const std::uint32_t> ids = m_ids.view();
     const std::span<float> sent = m_sent.view();
+    const bool settling = m_played < m_sampleRate / 2;
+    m_played += frames;
     for (const bridge::WireParam& change : echoes) {
         for (std::size_t i = 0; i < ids.size(); ++i) {
             if (ids[i] == change.id) {
                 sent[i] = static_cast<float>(change.value);
-                static_cast<void>(
-                    m_echoes.tryPush(ParamEcho{.index = static_cast<std::uint32_t>(i),
-                                               .value = static_cast<float>(change.value)}));
+                static_cast<void>(m_echoes.tryPush(
+                    ParamEcho{.index = static_cast<std::uint32_t>(i),
+                              .value = static_cast<float>(change.value),
+                              .gesture = (change.flags & bridge::kParamGesture) != 0,
+                              .settling = settling}));
                 break;
             }
         }

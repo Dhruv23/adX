@@ -70,6 +70,13 @@ ROLE_NAMES: tuple[str, ...] = (
     "loudness",
     "particle_young",
     "particle_old",
+    "session_empty",
+    "session_stopped",
+    "session_queued",
+    "session_playing",
+    "session_queued_stop",
+    "session_recording",
+    "session_progress",
 )
 
 
@@ -168,6 +175,13 @@ DARK = Theme(
         "loudness": "#7fd17f",
         "particle_young": "#a03cdc",
         "particle_old": "#3cdce6",
+        "session_empty": "#23272e",
+        "session_stopped": "#3a4150",
+        "session_queued": "#c9922a",
+        "session_playing": "#2fa85a",
+        "session_queued_stop": "#c0532f",
+        "session_recording": "#d23a3a",
+        "session_progress": "#eef2f6",
     },
     syntax={
         "comment": "#6f7782",
@@ -262,6 +276,13 @@ LIGHT = Theme(
         "loudness": "#2e8b2e",
         "particle_young": "#7a1fb0",
         "particle_old": "#0f9aa5",
+        "session_empty": "#e4e7ec",
+        "session_stopped": "#b9c0cc",
+        "session_queued": "#d99a1e",
+        "session_playing": "#22914b",
+        "session_queued_stop": "#c24a24",
+        "session_recording": "#c62828",
+        "session_progress": "#1d2330",
     },
     syntax={
         "comment": "#7a828d",

@@ -35,6 +35,7 @@ PYBIND11_MODULE(adx_engine, m) {
     registerAnalyzerBindings(m);
     adx::bindings::registerSync(m);
     adx::bindings::registerMini(m);
+    adx::bindings::registerPads(m);
     adx::bindings::registerScript(m);
 
     // GIL: trivial - a string constant

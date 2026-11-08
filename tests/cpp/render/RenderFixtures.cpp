@@ -100,13 +100,14 @@ project::Project syntheticProject(const SyntheticSpec& spec) {
         project::PlaylistTrack track;
         track.id = out.newPlaylistTrackId();
         track.name = "T" + std::to_string(c);
-        track.items.push_back(project::PlaylistItem{.id = out.newItemId(),
-                                                    .start = core::Ticks{0},
-                                                    .length = core::Ticks{0},
-                                                    .sourceOffset = core::Ticks{0},
-                                                    .content = project::PatternRef{patterns[c].id},
-                                                    .muted = false,
-                                                    .envelopes = {}});
+        track.items.push_back(
+            project::PlaylistItem{.id = out.newItemId(),
+                                  .start = core::Ticks{0},
+                                  .length = core::Ticks{0},
+                                  .sourceOffset = core::Ticks{0},
+                                  .content = project::PatternRef{.pattern = patterns[c].id},
+                                  .muted = false,
+                                  .envelopes = {}});
         out.playlist.tracks.push_back(std::move(track));
     }
     out.patterns = std::move(patterns);
@@ -155,13 +156,14 @@ project::Project toneProject(const std::vector<NoteSpec>& notes, double bpm,
     project::PlaylistTrack track;
     track.id = out.newPlaylistTrackId();
     track.name = "T";
-    track.items.push_back(project::PlaylistItem{.id = out.newItemId(),
-                                                .start = core::Ticks{0},
-                                                .length = core::Ticks{0},
-                                                .sourceOffset = core::Ticks{0},
-                                                .content = project::PatternRef{pattern.id},
-                                                .muted = false,
-                                                .envelopes = {}});
+    track.items.push_back(
+        project::PlaylistItem{.id = out.newItemId(),
+                              .start = core::Ticks{0},
+                              .length = core::Ticks{0},
+                              .sourceOffset = core::Ticks{0},
+                              .content = project::PatternRef{.pattern = pattern.id},
+                              .muted = false,
+                              .envelopes = {}});
     out.patterns.push_back(std::move(pattern));
     out.playlist.tracks.push_back(std::move(track));
     return out;

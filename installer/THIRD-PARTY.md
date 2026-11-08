@@ -36,3 +36,4 @@ files needed to relink adX against a modified shine are provided.
 | Python 3.12 (embeddable) | 3.12 | PSF-2.0 | the interpreter the app runs on |
 | PySide6 (Qt for Python) | 6.11.2 | LGPL-3.0-only | the user interface; shipped as separate DLLs |
 | NumPy | >=1.26 | BSD-3-Clause | arrays across the engine boundary |
+| PyYAML | >=6.0 | MIT | reads OpenUtau .ustx projects |

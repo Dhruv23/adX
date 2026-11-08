@@ -5,6 +5,9 @@ target_sources(adx_engine_static PRIVATE
     MidiLearn.cpp
     MidiInput.cpp
     MidiRouter.cpp
+    MidiSync.cpp
+    PadController.cpp
+    PadFeedback.cpp
 )
 
 # PRIVATE: RtMidi is an implementation detail of MidiDevices.cpp, as RtAudio is of

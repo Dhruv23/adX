@@ -71,6 +71,14 @@ enum class ColorRole : std::uint8_t {
     kLoudness,
     kParticleYoung,
     kParticleOld,
+    // Phase 11: the session grid.
+    kSessionEmpty,
+    kSessionStopped,
+    kSessionQueued,
+    kSessionPlaying,
+    kSessionQueuedStop,
+    kSessionRecording,
+    kSessionProgress,
     kCount,
 };
 
@@ -134,6 +142,15 @@ inline constexpr std::array<const char*, kColorRoleCount> kColorRoleNames = {
     "loudness",
     "particle_young",
     "particle_old",
+    "session_empty",
+    "session_stopped",
+    "session_queued",
+    "session_playing",
+    "session_queued_stop",
+    "session_recording",
+    "session_progress",
 };
+// A role added without its name leaves a null here, which crashed the module's import.
+static_assert(kColorRoleNames.back() != nullptr, "every ColorRole needs its name");
 
 } // namespace adx::geometry

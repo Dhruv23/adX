@@ -12,6 +12,10 @@ one line per buffer size - reported latency, measured round trip, and how many
 samples the recorded click is from the original - and exits 0 only if every take is
 within one sample (record_latency_alignment, on hardware).
 
+With --asio the engine opens the default ASIO driver instead (STATE.md P9-4). Without
+an interface, FlexASIO over VB-Audio Virtual Cable stands in: point FlexASIO.toml's input
+at "CABLE Output" and its output at "CABLE Input", and the cable is the loopback.
+
 Copy the printed lines into plans/phase_8.md's session table.
 """
 
@@ -70,7 +74,10 @@ def _until_audible(engine: Engine, project: Project) -> None:
         time.sleep(0.005)
 
 
-def _run(block: int, folder: Path, seconds: float, simulate: int | None) -> tuple[bool, str]:
+def _run(
+    block: int, folder: Path, seconds: float, simulate: int | None, asio: bool = False
+) -> tuple[bool | None, str]:
+    """True or False judges the take; None means the loopback was not steady enough to."""
     click = folder / "click.wav"
     _click_wav(click)
     text = (
@@ -79,7 +86,9 @@ def _run(block: int, folder: Path, seconds: float, simulate: int | None) -> tupl
         'TRACK 2 name="Rec"\n\n[MIXER]\nINSERT 1 name="Master"\n'
     )
     project, _ = Project.loads(text, str(folder))
-    engine = Engine(sample_rate=RATE, block_frames=block, input_channels=2, loopback=simulate)
+    engine = Engine(
+        sample_rate=RATE, block_frames=block, input_channels=2, loopback=simulate, asio=asio
+    )
     engine.set_project(project)
     _until_audible(engine, project)
     engine.start()
@@ -105,10 +114,21 @@ def _run(block: int, folder: Path, seconds: float, simulate: int | None) -> tupl
         reported = session.latency
         wait(seconds)
         take = session.stop()
+        # Measure again: a cable whose delay moved during the take (a virtual one
+        # resyncing its clocks) cannot say anything about adX's alignment.
+        again = Calibration(engine)
+        again.begin(project)
+        wait(1.0)
+        after = again.finish()
     finally:
         engine.stop()
     if not take["ok"]:
         return False, f"block {block:5d}: the take failed: {take['error']}"
+    if after != measured:
+        return None, (
+            f"block {block:5d}: the loopback moved during the take ({measured} then "
+            f"{after} samples); not a judgement of adX"
+        )
 
     # The click alone, then the take alone, rendered offline at the same block size.
     items = {int(r["track"]): int(r["item"]) for r in project.playlist_items()}
@@ -122,7 +142,8 @@ def _run(block: int, folder: Path, seconds: float, simulate: int | None) -> tupl
     offset = recorded - original
     reported_rt = reported["input"] + reported["output"]
     line = (
-        f"block {block:5d}: reported {reported_rt:5d} samples, measured {measured:5d}, "
+        f"block {block:5d}: reported {reported_rt:5d} samples (in {reported['input']}, out "
+        f"{reported['output']}), measured {measured:5d}, "
         f"take offset {offset:+d} samples ({offset / RATE * 1000.0:+.3f} ms)"
     )
     return abs(offset) <= 1 and original >= 0 and recorded >= 0, line
@@ -137,13 +158,21 @@ def main() -> int:
         metavar="FRAMES",
         help="no hardware: an offline engine whose cable delays by FRAMES (checks the tool)",
     )
+    parser.add_argument("--asio", action="store_true", help="the default ASIO driver (P9-4)")
+    parser.add_argument(
+        "--attempts", type=int, default=3, help="takes per buffer size while the loopback moves"
+    )
     args = parser.parse_args()
     ok = True
     for block in BLOCKS:
-        with tempfile.TemporaryDirectory() as folder:
-            passed, line = _run(block, Path(folder), args.seconds, args.simulate)
-        print(("PASS  " if passed else "FAIL  ") + line)
-        ok = ok and passed
+        passed: bool | None = None
+        for _ in range(args.attempts):
+            with tempfile.TemporaryDirectory() as folder:
+                passed, line = _run(block, Path(folder), args.seconds, args.simulate, args.asio)
+            print({True: "PASS  ", False: "FAIL  ", None: "MOVED "}[passed] + line, flush=True)
+            if passed is not None:
+                break
+        ok = ok and passed is True
     return 0 if ok else 1
 
 

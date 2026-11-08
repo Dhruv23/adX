@@ -1,6 +1,7 @@
 #include "engine/audio/RtAudioBackend.h"
 
 #include <algorithm>
+#include <utility>
 
 #include <RtAudio.h>
 
@@ -14,6 +15,34 @@ Error fromRtAudio(RtAudioErrorType code, std::string_view context) {
     error.code = code == RTAUDIO_NO_ERROR ? Error::Code::None : Error::Code::BackendFailure;
     error.message.assign(context);
     return error;
+}
+
+} // namespace
+} // namespace adx::audio
+
+#if defined(ADX_ASIO_COMPILED)
+// asio.cpp in RtAudio's static library defines it; asio.h itself needs windows.h.
+// NOLINTNEXTLINE(google-runtime-int,readability-identifier-naming) - the SDK's own name and types
+long ASIOGetLatencies(long* inputLatency, long* outputLatency);
+#endif
+
+namespace adx::audio {
+namespace {
+
+/// The driver's own split, when the stream is ASIO: {input, output} frames, or {0, 0}.
+std::pair<double, double> asioLatencies(RtAudio& rtaudio) noexcept {
+#if defined(ADX_ASIO_COMPILED) && defined(_WIN32)
+    if (rtaudio.getCurrentApi() == RtAudio::WINDOWS_ASIO && rtaudio.isStreamOpen()) {
+        long input = 0;  // NOLINT(google-runtime-int) - ASIO's own type
+        long output = 0; // NOLINT(google-runtime-int)
+        if (::ASIOGetLatencies(&input, &output) == 0 && input >= 0 && output >= 0) {
+            return {static_cast<double>(input), static_cast<double>(output)};
+        }
+    }
+#else
+    static_cast<void>(rtaudio);
+#endif
+    return {0.0, 0.0};
 }
 
 } // namespace
@@ -195,11 +224,33 @@ void RtAudioBackend::updateLatency() noexcept {
     // latency; it is "no answer", and showing a user 0.00 ms is worse than showing them
     // the part we can prove. One block is the floor every stream pays regardless of what
     // the driver adds on top, so that is the fallback.
+    //
+    // With an input open, RtAudio's figure is input plus output (its getStreamLatency()
+    // sums both directions), so it is the round trip and is split, not doubled. ASIO
+    // says how it divides; for any other API the halves are an even split of a true sum.
     const auto reportedFrames = static_cast<double>(m_rtaudio->getStreamLatency());
     const auto blockFrames = static_cast<double>(m_config.blockFrames);
-    const double frames = reportedFrames > 0.0 ? reportedFrames : blockFrames;
-    m_outputLatencyMs = 1000.0 * frames / static_cast<double>(m_config.sampleRate);
+    const double toMs = 1000.0 / static_cast<double>(m_config.sampleRate);
     m_latencyIsMeasured = reportedFrames > 0.0;
+    const bool duplex = m_config.inputChannels > 0 && m_config.inputDeviceId != kNoDevice;
+    if (!duplex) {
+        m_outputLatencyMs = toMs * (m_latencyIsMeasured ? reportedFrames : blockFrames);
+        m_inputLatencyMs = 0.0;
+        return;
+    }
+    if (!m_latencyIsMeasured) {
+        m_outputLatencyMs = toMs * blockFrames;
+        m_inputLatencyMs = toMs * blockFrames;
+        return;
+    }
+    const auto [asioInput, asioOutput] = asioLatencies(*m_rtaudio);
+    if (asioInput + asioOutput > 0.0) {
+        m_inputLatencyMs = toMs * asioInput;
+        m_outputLatencyMs = toMs * asioOutput;
+    } else {
+        m_inputLatencyMs = toMs * reportedFrames / 2.0;
+        m_outputLatencyMs = toMs * reportedFrames / 2.0;
+    }
 }
 
 Error RtAudioBackend::start() {
@@ -276,7 +327,7 @@ StreamInfo RtAudioBackend::info() const noexcept {
     out.outputChannels = m_config.outputChannels;
     out.inputChannels = m_config.inputChannels;
     out.outputLatencyMs = m_outputLatencyMs;
-    out.inputLatencyMs = m_config.inputChannels > 0 ? m_outputLatencyMs : 0.0;
+    out.inputLatencyMs = m_inputLatencyMs;
     out.roundTripLatencyMs = out.outputLatencyMs + out.inputLatencyMs;
     out.callbackCount = m_callbackCount.load(std::memory_order_relaxed);
     out.xrunCount = m_xrunCount.load(std::memory_order_relaxed);

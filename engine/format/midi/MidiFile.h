@@ -24,12 +24,30 @@ namespace adx::format::midi {
 /// What the exporter writes: one file tick per adX tick.
 inline constexpr std::uint16_t kExportDivision = 3840;
 
+/// A note's pitch bend at one moment: `cents` from its pitch, `at` ticks after it starts
+/// (STATE.md P9-6). Straight lines between points, as Note.pitchCurve is.
+struct MidiBend {
+    std::int64_t at{0};
+    std::int16_t cents{0};
+
+    [[nodiscard]] friend bool operator==(const MidiBend&, const MidiBend&) noexcept = default;
+};
+
+/// MPE's default member-channel bend range, and what export writes: 48 semitones.
+inline constexpr int kMpeBendSemitones = 48;
+
 struct MidiNote {
     /// adX ticks.
     std::int64_t start{0};
     std::int64_t length{0};
     std::uint8_t pitch{60};
     std::uint8_t velocity{100};
+    /// Empty when the note is not bent. The first point is at 0 when the note starts
+    /// bent.
+    std::vector<MidiBend> bend;
+    /// A sung syllable (an SMF lyric event at the note-on; UST, USTX, VSQX): becomes
+    /// the note's lyric for the Voice instrument. Empty for none.
+    std::string lyric;
 
     [[nodiscard]] friend bool operator==(const MidiNote&, const MidiNote&) noexcept = default;
 };
@@ -40,6 +58,10 @@ struct MidiTrack {
     /// 0-15. Channel 9 (MIDI channel 10) is General MIDI percussion.
     std::uint8_t channel{0};
     std::vector<MidiNote> notes;
+    /// Written as an MPE lower zone - manager channel 1, a member channel per sounding
+    /// note - so each note bends alone. Set by export for a track with bent notes, and
+    /// by import for a track that configured a zone.
+    bool mpe{false};
 
     [[nodiscard]] bool percussion() const noexcept {
         return channel == 9;
@@ -69,6 +91,8 @@ struct MidiSong {
     std::vector<MidiMarker> markers;
     /// The file's own ticks per quarter, for the import report.
     std::uint16_t division{0};
+    /// What export or import could not keep exactly, for the user.
+    std::vector<std::string> warnings;
 };
 
 /// Sorts a track's notes the way both directions compare them: by start, then pitch,

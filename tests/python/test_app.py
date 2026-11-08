@@ -60,6 +60,7 @@ def test_opens_plays_and_moves_the_playhead(window: object, repo_root: pathlib.P
         "console",
         "plugins",
         "midi",
+        "session",
         "analysis",
         "generate",
         "spectrum",

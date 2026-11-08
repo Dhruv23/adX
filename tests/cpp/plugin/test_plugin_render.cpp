@@ -116,7 +116,7 @@ TEST_CASE("plugin_wrong_latency_detected", "[plugin][pdc]") {
     auto honest = host.create(fx::effectId(PluginFormat::Clap), nullptr, 48000, 512, false, error);
     REQUIRE(honest);
     // Latency 200, honestly reported: measured and reported agree.
-    REQUIRE(sendParams(*honest, {{0, 3, 200.0}}) == bridge::BlockResult::Done);
+    REQUIRE(sendParams(*honest, {{0, 3, 200.0, 0, 0}}) == bridge::BlockResult::Done);
     REQUIRE(waitFor([&] { return honest->latency() == 200; }, 3.0));
     CHECK(host.checkLatency(honest->id()) == 200);
     auto notices = host.takeNotices();
@@ -126,7 +126,8 @@ TEST_CASE("plugin_wrong_latency_detected", "[plugin][pdc]") {
     // The same latency reported as zero (mode 4): the measurement catches it.
     auto liar = host.create(fx::effectId(PluginFormat::Clap), nullptr, 48000, 512, false, error);
     REQUIRE(liar);
-    REQUIRE(sendParams(*liar, {{0, 2, 4.0}, {0, 3, 200.0}}) == bridge::BlockResult::Done);
+    REQUIRE(sendParams(*liar, {{0, 2, 4.0, 0, 0}, {0, 3, 200.0, 0, 0}}) ==
+            bridge::BlockResult::Done);
     // Its own notice: the honest one's may still be on its way.
     REQUIRE(waitFor(
         [&] {
@@ -234,7 +235,8 @@ TEST_CASE("plugin_state_roundtrip", "[plugin][state]") {
         auto live = host.create(fx::effectId(format), nullptr, 48000, 256, false, error);
         REQUIRE(live);
         const double gain = format == PluginFormat::Clap ? 1.5 : 0.75; // plain / normalised
-        REQUIRE(sendParams(*live, {{0, 1, gain}, {0, 4, 0.5}}) == bridge::BlockResult::Done);
+        REQUIRE(sendParams(*live, {{0, 1, gain, 0, 0}, {0, 4, 0.5, 0, 0}}) ==
+                bridge::BlockResult::Done);
         StateBlob state;
         REQUIRE(live->saveState(state));
         auto copy = host.create(fx::effectId(format), &state, 48000, 256, false, error);

@@ -33,7 +33,9 @@ inline constexpr DirtyMask kMixer = 1U << 5U;
 inline constexpr DirtyMask kRouting = 1U << 6U;
 inline constexpr DirtyMask kResources = 1U << 7U;
 inline constexpr DirtyMask kMarkers = 1U << 8U;
-inline constexpr DirtyMask kAll = 0x1FFU;
+/// Phase 11: the session's scenes and clips.
+inline constexpr DirtyMask kSession = 1U << 9U;
+inline constexpr DirtyMask kAll = 0x3FFU;
 } // namespace dirty
 
 /// Identifies a command's type without RTTI.
@@ -137,6 +139,9 @@ enum class CommandId : std::uint16_t {
     kAddMidiBinding,
     kRemoveMidiBinding,
     kSetMidiRoutes,
+
+    // Phase 11: the session.
+    kSetSession,
 };
 
 class Command {

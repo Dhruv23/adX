@@ -47,4 +47,14 @@ struct MidiEvent {
     [[nodiscard]] friend bool operator==(const MidiEvent&, const MidiEvent&) noexcept = default;
 };
 
+/// One message of a MIDI take (STATE.md P9-6): what an input played while the
+/// arrangement rolled with MIDI recording on, at the arrangement tick it played at.
+struct TakeEvent {
+    std::int64_t tick{0};
+    std::uint8_t status{0};
+    std::uint8_t data1{0};
+    std::uint8_t data2{0};
+    std::uint8_t device{0};
+};
+
 } // namespace adx::midi

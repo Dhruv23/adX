@@ -57,7 +57,8 @@ function(adx_add_cpp_test name)
         "undo_to_empty_random 100 seeds"
         "parser_no_exceptions_on_fuzz 100k"
         "stems_sum_to_master"
-        "golden_all_formats")
+        "golden_all_formats"
+        "session_no_alloc")
     set(_rest "[.slow]")
     if(name STREQUAL "adx_tests")
         foreach(_case IN LISTS _serial _parallel)

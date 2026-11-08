@@ -20,6 +20,7 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import time
 from typing import Any
 
 import pytest
@@ -247,6 +248,11 @@ def test_real_plugins(
         app.wait_for("project.open", timeout=30)
         app.wait_for(lambda s: len(s["plugins"]["instances"]) >= 1, timeout=60)
         assert app.state()["project"]["text_sha256"] == _sha(Project.load(str(song))[0].dumps())
+        # A freshly loaded plugin reporting its values is not an edit (P10.5-2): once it
+        # has settled, the reopened project has nothing to undo.
+        time.sleep(2.0)
+        opened = app.state()["project"]
+        assert opened["undo_depth"] == 0, f"{plugin}: reopening made edits: {opened['history']}"
         app.quit(save=True, path=again)
     resaved, original = Project.load(str(again))[0].dumps(), Project.load(str(song))[0].dumps()
     if plugin in EDITOR_IN_STATE:

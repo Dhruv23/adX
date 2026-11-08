@@ -63,6 +63,25 @@ struct SchedulerStats {
     std::uint64_t eventsDispatched{0};
     /// Pieces run on the crew rather than walked in order on one thread.
     std::uint64_t parallelPieces{0};
+    /// Session lane events dispatched, and lanes dropped past kMaxLanesPerChannel.
+    std::uint64_t laneEvents{0};
+    std::uint64_t lanesDropped{0};
+};
+
+/// A launched clip's events (phase_11.md §4.4): `track` played by `channel` on its own
+/// time source, merged into that channel's events beside the arrangement's. A node is
+/// bound to one source, so this is how one channel plays the arrangement and several
+/// clips at once. `stopAt` (offset from the block's start; kNoStop for none) ends the
+/// clip inside the block: its later events are dropped and its voices released there.
+struct SessionLane {
+    static constexpr std::uint32_t kNoStop = 0xFFFFFFFFU;
+    std::uint32_t channel{0};
+    std::uint32_t source{0};
+    const project::EventTrack* track{nullptr};
+    project::EventCursor* cursor{nullptr};
+    std::uint32_t stopAt{kNoStop};
+    /// The clip's gain times its pad's: scales the lane's note velocities.
+    float gain{1.0F};
 };
 
 /// A contiguous run of a track's events that fall in one sub-block.
@@ -135,6 +154,18 @@ public:
     void setAudition(std::span<const AuditionEvent> events) noexcept {
         m_audition = events;
     }
+    /// The launched clips the next render() plays (SessionLane). The lanes and what
+    /// they point at must outlive the render; they stay installed until replaced.
+    /// Audio thread.
+    /// Any thread that renders: the per-source "a voice still sounds" flags.
+    [[nodiscard]] std::span<std::atomic<std::uint8_t>> sounding() noexcept {
+        return m_sounding;
+    }
+    void setSessionLanes(std::span<const SessionLane> lanes) noexcept {
+        m_lanes = lanes;
+    }
+    /// Most lanes one channel plays at once; more are not heard (and counted).
+    static constexpr std::size_t kMaxLanesPerChannel = 32;
 
     /// The helpers a piece may be spread over, or null for one thread. Main thread,
     /// while no audio thread runs this scheduler. A piece runs on the crew when there is
@@ -190,6 +221,11 @@ private:
                               std::uint32_t timeSource, const project::EventTrack& track,
                               EventRange range, std::span<BlockEvent> out,
                               std::uint32_t first) noexcept;
+    /// One lane's events for the piece, its release, wrap and stop among them, from
+    /// index `written`; returns the index after the last.
+    std::uint32_t fillLane(SchedulerStats& stats, transport::TransportSet& transport,
+                           const SessionLane& lane, EventRange range, std::uint32_t frames,
+                           std::span<BlockEvent> events, std::uint32_t written) const noexcept;
     [[nodiscard]] static std::uint32_t lowerBound(SchedulerStats& stats,
                                                   const transport::TimeSource& time,
                                                   const project::EventTrack& track,
@@ -216,8 +252,13 @@ private:
     /// Per source, carried from the top of a block (or the end of the previous piece)
     /// to the first piece that can act on it.
     std::array<bool, transport::kMaxTimeSources> m_releasePending{};
+    /// One flag per time source, set by every channel with a voice of that source still
+    /// sounding after its piece (ProcessContext::sounding); read and cleared by the
+    /// session, which frees a stopped clip's source only once its flag stays down.
+    std::array<std::atomic<std::uint8_t>, transport::kMaxTimeSources> m_sounding{};
     std::array<bool, transport::kMaxTimeSources> m_wrapPending{};
     std::span<const AuditionEvent> m_audition;
+    std::span<const SessionLane> m_lanes;
     /// Where the piece being run starts in its block, for placing audition events.
     std::uint32_t m_pieceStart{0};
 };

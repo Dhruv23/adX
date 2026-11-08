@@ -62,6 +62,7 @@ struct InputEvents {
     std::vector<clap_event_note> notes;
     std::vector<clap_event_midi> midi;
     std::vector<clap_event_param_value> params;
+    std::vector<clap_event_note_expression> expressions;
     std::vector<const clap_event_header_t*> order;
     clap_input_events list{};
 
@@ -69,7 +70,8 @@ struct InputEvents {
         notes.reserve(events);
         midi.reserve(events);
         params.reserve(paramChanges);
-        order.reserve(events + paramChanges);
+        expressions.reserve(events);
+        order.reserve(events + events + paramChanges);
         list.ctx = this;
         list.size = [](const clap_input_events* l) -> uint32_t {
             return static_cast<uint32_t>(static_cast<const InputEvents*>(l->ctx)->order.size());
@@ -84,14 +86,41 @@ struct InputEvents {
 struct OutputEvents {
     ProcessIo* io{nullptr};
     clap_output_events list{};
+    /// Parameters inside a gesture now: their values are the user's (P9-7).
+    std::array<clap_id, 32> gestures{};
+    std::size_t gestureCount{0};
+
+    [[nodiscard]] bool inGesture(clap_id id) const noexcept {
+        return std::find(gestures.begin(),
+                         gestures.begin() + static_cast<std::ptrdiff_t>(gestureCount),
+                         id) != gestures.begin() + static_cast<std::ptrdiff_t>(gestureCount);
+    }
 
     OutputEvents() {
         list.ctx = this;
         list.try_push = [](const clap_output_events* l, const clap_event_header_t* event) -> bool {
             auto* self = static_cast<OutputEvents*>(l->ctx);
-            if (self->io == nullptr || event->space_id != CLAP_CORE_EVENT_SPACE_ID ||
-                event->type != CLAP_EVENT_PARAM_VALUE) {
-                return true; // gestures, note-end: accepted and ignored
+            if (event->space_id != CLAP_CORE_EVENT_SPACE_ID) {
+                return true;
+            }
+            if (event->type == CLAP_EVENT_PARAM_GESTURE_BEGIN ||
+                event->type == CLAP_EVENT_PARAM_GESTURE_END) {
+                const clap_id id =
+                    reinterpret_cast<const clap_event_param_gesture*>(event)->param_id;
+                const auto end =
+                    self->gestures.begin() + static_cast<std::ptrdiff_t>(self->gestureCount);
+                const auto at = std::find(self->gestures.begin(), end, id);
+                if (event->type == CLAP_EVENT_PARAM_GESTURE_BEGIN) {
+                    if (at == end && self->gestureCount < self->gestures.size()) {
+                        self->gestures.at(self->gestureCount++) = id;
+                    }
+                } else if (at != end) {
+                    *at = self->gestures.at(--self->gestureCount);
+                }
+                return true;
+            }
+            if (self->io == nullptr || event->type != CLAP_EVENT_PARAM_VALUE) {
+                return true; // note-end and the rest: accepted and ignored
             }
             ProcessIo& io = *self->io;
             if (io.outCount >= io.outParams.size()) {
@@ -99,7 +128,11 @@ struct OutputEvents {
             }
             const auto* value = reinterpret_cast<const clap_event_param_value*>(event);
             io.outParams[io.outCount++] = bridge::WireParam{
-                .offset = event->time, .id = value->param_id, .value = value->value};
+                .offset = event->time,
+                .id = value->param_id,
+                .value = value->value,
+                .flags = self->inGesture(value->param_id) ? bridge::kParamGesture : 0U,
+                .reserved = 0};
             return true;
         };
     }
@@ -213,6 +246,7 @@ public:
             }
         }
         buildEvents(io);
+        m_flushRequested.store(false); // this process() is the flush it asked for
 
         std::array<float*, bridge::kMaxChannels> inPtrs{};
         std::array<float*, bridge::kMaxChannels> outPtrs{};
@@ -391,11 +425,10 @@ public:
         if (m_callbackRequested.exchange(false)) {
             m_plugin->on_main_thread(m_plugin);
         }
-        // CLAP wants flush() on the audio thread once active; this calls it here between
-        // activate() and the first process() (P10.5-2). Moving it into process() turns a
-        // plugin's post-load value report into project edits, so it stays until echoes
-        // can be told from editor gestures.
-        if (m_flushRequested.exchange(false) && m_params != nullptr && !m_processing) {
+        // CLAP: flush() is the main thread's only while the plugin is inactive; once
+        // active, process() is the flush (P10.5-2, closed with P9-7: a value report from
+        // it carries no gesture, and adX does not record those as edits).
+        if (m_flushRequested.exchange(false) && m_params != nullptr && !m_active) {
             InputEvents none;
             none.reserve(0, 0);
             OutputEvents const out;
@@ -499,6 +532,7 @@ private:
         m_events.notes.clear();
         m_events.midi.clear();
         m_events.params.clear();
+        m_events.expressions.clear();
         m_events.order.clear();
         for (const bridge::WireEvent& e : io.events) {
             const std::uint32_t time = std::min(e.offset, io.frames == 0 ? 0 : io.frames - 1);
@@ -514,6 +548,22 @@ private:
                 midi.data[1] = e.key;
                 midi.data[2] = e.velocity;
                 m_events.midi.push_back(midi);
+                continue;
+            }
+            if (e.kind == bridge::WireEventKind::Tuning) {
+                clap_event_note_expression expression{};
+                expression.header = {.size = sizeof expression,
+                                     .time = time,
+                                     .space_id = CLAP_CORE_EVENT_SPACE_ID,
+                                     .type = CLAP_EVENT_NOTE_EXPRESSION,
+                                     .flags = 0};
+                expression.expression_id = CLAP_NOTE_EXPRESSION_TUNING;
+                expression.note_id = e.noteId;
+                expression.port_index = 0;
+                expression.channel = e.channel;
+                expression.key = e.key;
+                expression.value = static_cast<double>(e.value);
+                m_events.expressions.push_back(expression);
                 continue;
             }
             clap_event_note note{};
@@ -562,6 +612,9 @@ private:
         }
         for (const auto& p : m_events.params) {
             m_events.order.push_back(&p.header);
+        }
+        for (const auto& x : m_events.expressions) {
+            m_events.order.push_back(&x.header);
         }
         // Stable: at one time, parameter values after the notes they follow in the
         // host's list is not promised, but notes keep their own order.

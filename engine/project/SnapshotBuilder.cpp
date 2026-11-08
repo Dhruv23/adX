@@ -70,6 +70,10 @@ struct SnapshotStorage {
     std::vector<midi::MidiRoute> midiRoutes;
     std::vector<midi::CompiledBinding> midiBindings;
     clip::CompiledAudio audio;
+    std::vector<SessionClip> sessionClips;
+    std::vector<double> sceneTempo;
+    std::vector<std::uint8_t> trackStopOnEmpty;
+    std::vector<std::uint32_t> sessionChannels;
 };
 
 /// The project's [MIDI] section as the audio thread reads it.
@@ -126,7 +130,7 @@ Window windowOf(const PlaylistItem& item, core::Ticks naturalLength) {
 /// Voice ids sit above kMiniNoteIdBit and are (cycle, index): stable across an edit
 /// that does not change this source, so such an edit never restarts its voices.
 void appendMiniEvents(std::vector<ScheduledEvent>& out, const MiniNotationSource& source,
-                      const Window& window, std::uint32_t instance, core::Ticks cycle) {
+                      const Window& window, std::uint32_t instance, core::Ticks cycle, float gain) {
     const std::int64_t from = window.placedAt;
     const std::int64_t to = window.place(window.localEnd);
     const std::string text = mini::joinLines(source.lines);
@@ -146,7 +150,7 @@ void appendMiniEvents(std::vector<ScheduledEvent>& out, const MiniNotationSource
                                      .instance = instance,
                                      .kind = EventKind::NoteOn,
                                      .pitch = realized.note.pitch,
-                                     .velocity = realized.note.velocity});
+                                     .velocity = scaledVelocity(realized.note.velocity, gain)});
         out.push_back(ScheduledEvent{.tick = off,
                                      .endTick = off,
                                      .noteId = noteId,
@@ -516,6 +520,10 @@ std::vector<std::int64_t> SnapshotBuilder::signatureOf(const std::vector<Placeme
             signature.insert(signature.end(),
                              {static_cast<std::int64_t>(placement.miniHash), miniCycle.value});
         }
+        if (const auto* ref = std::get_if<PatternRef>(&item.content);
+            (ref != nullptr) && ref->gain != 1.0F) {
+            signature.push_back(static_cast<std::int64_t>(std::bit_cast<std::uint32_t>(ref->gain)));
+        }
     }
     return signature;
 }
@@ -527,8 +535,11 @@ SnapshotBuilder::flatten(const std::vector<Placement>& placements, const Channel
     for (const Placement& placement : placements) {
         const PlaylistItem& item = *placement.item;
         const Window window = windowOf(item, placement.pattern->length);
+        const auto* ref = std::get_if<PatternRef>(&item.content);
+        const float gain = ref != nullptr ? ref->gain : 1.0F;
         if (placement.mini != nullptr) {
-            appendMiniEvents(events->events, *placement.mini, window, item.id.value, miniCycle);
+            appendMiniEvents(events->events, *placement.mini, window, item.id.value, miniCycle,
+                             gain);
             continue;
         }
         for (const Note& note : placement.clip->notes) {
@@ -544,13 +555,14 @@ SnapshotBuilder::flatten(const std::vector<Placement>& placements, const Channel
             }
             const std::int64_t on = window.place(note.start.value);
             const std::int64_t off = window.place(localEnd);
-            events->events.push_back(ScheduledEvent{.tick = on,
-                                                    .endTick = off,
-                                                    .noteId = note.id.value,
-                                                    .instance = item.id.value,
-                                                    .kind = EventKind::NoteOn,
-                                                    .pitch = note.pitch,
-                                                    .velocity = note.velocity});
+            events->events.push_back(
+                ScheduledEvent{.tick = on,
+                               .endTick = off,
+                               .noteId = note.id.value,
+                               .instance = item.id.value,
+                               .kind = EventKind::NoteOn,
+                               .pitch = note.pitch,
+                               .velocity = scaledVelocity(note.velocity, gain)});
             events->events.push_back(ScheduledEvent{.tick = off,
                                                     .endTick = off,
                                                     .noteId = note.id.value,
@@ -570,6 +582,90 @@ SnapshotBuilder::flatten(const std::vector<Placement>& placements, const Channel
     }
     events->lyrics.assign(events->lyricText.begin(), events->lyricText.end());
     return events;
+}
+
+namespace {
+
+/// The launch grid's bar: the meter at tick 0.
+std::int64_t sessionBar(const Project& project) {
+    for (const core::MeterEvent& meter : project.tempo.meterEvents()) {
+        if (meter.at.value <= 0) {
+            return std::max<std::int64_t>(1, core::kPpq * 4 * meter.numerator /
+                                                 std::max(1, static_cast<int>(meter.denominator)));
+        }
+    }
+    return core::kPpq * 4;
+}
+
+} // namespace
+
+void SnapshotBuilder::compileSession(const Project& project, core::Ticks miniCycle,
+                                     SessionOut& storage) {
+    const SessionModel& model = project.session;
+    for (const SessionScene& scene : model.scenes) {
+        storage.sceneTempo.push_back(scene.tempo.value_or(0.0));
+    }
+    for (std::size_t t = 0; t < model.tracks.size(); ++t) {
+        const SessionTrack& track = model.tracks[t];
+        storage.trackStopOnEmpty.push_back(track.stopOnEmptyScene ? 1 : 0);
+        storage.sessionChannels.push_back(track.channel.value);
+        const Channel* channel = project.find(track.channel);
+        for (std::size_t row = 0; row < track.slots.size(); ++row) {
+            if (!track.slots[row].has_value()) {
+                continue;
+            }
+            const ClipSlot& slot = *track.slots[row];
+            const Pattern* pattern = project.find(slot.pattern);
+            if (pattern == nullptr || channel == nullptr) {
+                continue;
+            }
+            const std::int64_t length =
+                slot.length.value > 0 ? slot.length.value : pattern->length.value;
+            // A placement at tick 0 for the clip's length: the pattern's notes in its own
+            // ticks. Its instance id keeps the clip's voices apart from the arrangement's
+            // on the same channel (a voice is keyed by note id and instance).
+            PlaylistItem item;
+            item.id = core::ItemId{0x40000000U | (static_cast<std::uint32_t>(t) << 12U) |
+                                   static_cast<std::uint32_t>(row)};
+            item.start = core::Ticks{0};
+            item.length = core::Ticks{length};
+            item.content = PatternRef{.pattern = pattern->id};
+            const Placement placement{
+                .item = &item, .pattern = pattern, .clip = pattern->clipFor(channel->id)};
+            std::vector<Placement> placements;
+            if (placement.clip != nullptr) {
+                placements.push_back(placement);
+            }
+            // A launchable mini-notation clip (phase_11.md §4.4): the pattern's sources
+            // for this channel, realised from the clip's own tick 0, so `<a b>` and
+            // `every 4` count the clip's cycles, not the song's.
+            for (const MiniNotationSource& source : pattern->mini) {
+                if (source.channel == channel->id) {
+                    placements.push_back(
+                        Placement{.item = &item,
+                                  .pattern = pattern,
+                                  .mini = &source,
+                                  .miniHash = mini::fnv1a(mini::joinLines(source.lines))});
+                }
+            }
+            auto events = flatten(placements, channel, miniCycle);
+            const session::LaunchQuantize quantize =
+                slot.quantize == session::LaunchQuantize::Global ? model.quantize : slot.quantize;
+            storage.sessionClips.push_back(SessionClip{
+                .track = static_cast<std::uint32_t>(t),
+                .row = static_cast<std::uint32_t>(row),
+                .channel = channel->id.value,
+                .events = EventTrack{.events = events->events, .lyrics = events->lyrics},
+                .length = std::max<std::int64_t>(length, 1),
+                .loop = slot.loop,
+                .legato = slot.legato,
+                .quantize = static_cast<std::uint8_t>(quantize),
+                .follow = static_cast<std::uint8_t>(slot.follow),
+                .followRepeats = slot.followRepeats,
+                .gain = slot.gain});
+            storage.keepAlive.push_back(std::move(events));
+        }
+    }
 }
 
 // NOLINTNEXTLINE(readability-function-size)
@@ -734,8 +830,28 @@ SnapshotBuildResult SnapshotBuilder::build(const Project& project, std::uint64_t
     snapshot.paramLanes = storage->paramLanes;
     snapshot.audioTracks = storage->audio.tables;
     compileMidi(project, *storage);
+    {
+        SessionOut out{.sessionClips = storage->sessionClips,
+                       .sceneTempo = storage->sceneTempo,
+                       .trackStopOnEmpty = storage->trackStopOnEmpty,
+                       .sessionChannels = storage->sessionChannels,
+                       .keepAlive = storage->keepAlive};
+        compileSession(project, mini::cycleLength(project.tempo), out);
+    }
     snapshot.midiRoutes = storage->midiRoutes;
     snapshot.midiBindings = storage->midiBindings;
+    snapshot.sessionClips = storage->sessionClips;
+    snapshot.sessionTracks = static_cast<std::uint32_t>(project.session.tracks.size());
+    snapshot.sessionRows = static_cast<std::uint32_t>(project.session.scenes.size());
+    snapshot.sceneTempo = storage->sceneTempo;
+    snapshot.trackStopOnEmpty = storage->trackStopOnEmpty;
+    snapshot.sessionChannels = storage->sessionChannels;
+    snapshot.sessionBarTicks = sessionBar(project);
+    // No project seed exists yet; a fixed one keeps Random follow reproducible.
+    snapshot.sessionSeed = 0x5EED5EEDU;
+    snapshot.sessionQuantize = static_cast<std::uint8_t>(
+        project.session.quantize == session::LaunchQuantize::Global ? session::LaunchQuantize::Bar
+                                                                    : project.session.quantize);
     for (std::size_t i = 0; i < m_graphBuild->audioSources.size(); ++i) {
         if (m_nodes.monitorTrack().valid() &&
             m_graphBuild->audioSources[i].track == m_nodes.monitorTrack()) {

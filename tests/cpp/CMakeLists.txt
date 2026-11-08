@@ -71,6 +71,12 @@ adx_add_cpp_test(adx_tests
         transport/test_seek.cpp
         transport/test_timesource.cpp
         transport/test_two_sources.cpp
+        session/test_spike.cpp
+        session/test_state_machine.cpp
+        session/test_session_format.cpp
+        session/test_session_engine.cpp
+        session/test_release.cpp
+        session/test_recorder.cpp
         render/GoldenHashes.cpp
         render/RenderEvidence.cpp
         render/RenderFixtures.cpp
@@ -106,6 +112,10 @@ adx_add_cpp_test(adx_tests
         record/test_record.cpp
         midi/test_midi_device.cpp
         midi/test_learn.cpp
+        midi/test_midi_sync.cpp
+        midi/test_midi_bend.cpp
+        midi/test_midi_take.cpp
+        midi/test_pads.cpp
         plugin/PluginFixtures.cpp
         plugin/test_protocol.cpp
         plugin/test_cache.cpp
@@ -113,6 +123,7 @@ adx_add_cpp_test(adx_tests
         plugin/test_scanner.cpp
         plugin/test_watchdog.cpp
         plugin/test_plugin_render.cpp
+        plugin/test_plugin_automation.cpp
 )
 
 # The corpus in docs/examples/ is a permanent parser regression fixture

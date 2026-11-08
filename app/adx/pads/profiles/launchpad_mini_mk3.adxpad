@@ -1,0 +1,16 @@
+# Novation Launchpad Mini MK3 in programmer mode (hold Session, press the orange
+# scene button). Pads 11-88, bottom-left 11; the right-hand column sends CCs.
+[PAD_PROFILE]
+NAME="Launchpad Mini MK3"
+MATCH_DEVICE="LPMiniMK3 MIDI"
+GRID=8x8
+NOTE_BASE=81 ROW_STRIDE=-10
+CHANNEL=1
+VELOCITY_SENSITIVE=no
+[FEEDBACK]
+MODE=note CHANNEL=1
+EMPTY=vel:0  STOPPED=vel:1  QUEUED=vel:13,blink  PLAYING=vel:21,pulse
+QUEUED_STOP=vel:5,blink  RECORDING=vel:5,pulse
+[CONTROLS]
+SCENE_LAUNCH=cc:89,79,69,59,49,39,29,19
+STOP_ALL=cc:98  TAP_TEMPO=cc:97

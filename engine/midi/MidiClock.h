@@ -58,6 +58,14 @@ public:
     [[nodiscard]] core::Ticks position() const noexcept {
         return core::Ticks{m_ticks};
     }
+    /// The filtered stream frame of the last pulse, and the filtered pulse period in
+    /// frames (0 until two pulses have arrived).
+    [[nodiscard]] double lastPulse() const noexcept {
+        return m_last;
+    }
+    [[nodiscard]] double periodSamples() const noexcept {
+        return m_period;
+    }
 
 private:
     std::uint32_t m_sampleRate;

@@ -134,6 +134,7 @@ class InstrumentPanel(DockPanel):
             str(info["plugin"]["name"]),
             lambda: generic_for(self.session, channel, instrument),
             parent=self,
+            uid=str(info["plugin"].get("uid", "")),
         )
         self.plugin_windows[channel] = window
         window.show()

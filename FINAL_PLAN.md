@@ -324,11 +324,13 @@ The complete surface, grouped by area. §7 sequences it; this section is the
 definition of "done".
 
 ### 5.1 Sequencing & editing
-Channel rack with step sequencer · piano roll (draw/paint/slice/glue/strum,
+Channel rack with step sequencer · piano roll (draw/paint/slice/**cut**/glue/strum,
 velocity + per-note pan/cutoff/resonance/pitch lanes, **slide notes and a
 freeform per-note pitch curve (A glides into C), a lyric lane for the Voice
 instrument**, ghost notes, scale
-highlighting + snapping, chord and arp tools, quantize/humanize, riff
+highlighting + snapping — **30 presets, a user-defined custom scale, and a lock
+that re-snaps existing notes, not only ones being drawn (added 2026-11-08,
+§5.1 amendment; Phase 11.6)** —, chord and arp tools, quantize/humanize, riff
 generator) · playlist with pattern/audio/automation clips, per-track mute,
 grouping, time markers, arrangement snapshots · automation clips, envelope
 controllers, LFO tool, peak controller, parameter linking with MIDI learn ·
@@ -436,6 +438,34 @@ only from adX's own engine and redistributable data.
 - **Seven packs:** Core Drums & Machines, Hyperpop, Hardcore, Classical
   (orchestra and band), Ambient, Breakcore/Jungle/DnB, and Phonk + Vocal.
   Every preset has a golden hash and a human listening verdict.
+
+### 5.13 Hardware device integration — M-Vave FM-1 (added 2026-11-05, rewritten 2026-11-08)
+Everything the M-Vave FM-1 does from its hardware side. The centrepiece is
+that patches made on it come into adX as **editable native synths**.
+
+- **A DX7-exact native instrument, `dx7`.** The FM-1's engine is a port of
+  msfa, the Dexed core. adX ports the same Apache-2.0 code, so every DX7
+  voice parameter is an automatable, MIDI-learnable `ParamRef`, with an editor
+  panel. The port is tested bit-identical to upstream msfa and against Dexed.
+  An "FM-1 rate" mode renders at the device's 44 118 Hz.
+- **Patch import and export.** Patches come from `.syx` single voices and
+  banks, from a live SysEx dump, or from the V16 Bank Export. Each opens as a
+  dx7 channel. Voices and banks go back out, and DX7 parameter changes let the
+  editor drive the device live. SysEx input reaches the main thread through an
+  RT-safe queue (adX dropped SysEx before).
+- **The device as an external instrument.**
+  - It plays as an 8-part multitimbral instrument (V16), with program change,
+    bend range, part CCs and its effects by name, through versioned
+    `.adxdevice` profiles.
+  - Its USB audio comes back into a channel with measured latency.
+  - adX sends it clock, and its sequencer and arp record as takes.
+  - The FM-1's effects chain is matched by a native `Fm1Effects`.
+- **Its keys as a Phase 11 launcher**, with the V16 key LEDs as pad feedback.
+- **A firmware catalog and updater** for `thefirmwarehub.com`. The updater
+  speaks the device's documented device-pull OTA over USB-MIDI SysEx, verifies
+  the hash, and requires typed confirmation before every write. It detects
+  the UBOOT recovery mode and guides the user to the community recovery tools;
+  it never writes in that mode.
 
 ---
 
@@ -665,6 +695,61 @@ to what was heard. (The physical pad controller is a hardware half, deferred to 
 final review under §9; an emulated controller on a virtual MIDI port, speaking a
 shipped profile's notes and receiving its LED feedback, stands in until then.)
 
+### Phase 11.5 — M-Vave FM-1: full hardware support and native DX7 voices · XL · [plan](plans/phase_11.5.md)
+Added 2026-11-05 for §5.13, and rewritten 2026-11-08 at the user's request to
+cover everything the device's hardware supports.
+
+- **Dependencies.** The hard dependency is Phase 9: MIDI I/O, clock, learn,
+  the plugin host for the Dexed comparison, and external audio input. Phase 11
+  is a soft dependency, needed only for the keys-as-launcher and LED feedback.
+  It neither blocks nor waits for Phases 12–19.
+- **The core work** is a native `dx7` instrument ported from msfa, the
+  Apache-2.0 core that the FM-1 and Dexed both run. Every DX7 voice parameter
+  is editable, so the user's FM-1 patches open in adX as native synths that
+  sound like the device.
+- **Around it:** SysEx transport, the DX7 codec, the librarian (`.syx`, dump,
+  Bank Export), live editing of the device, 8-part external-instrument use
+  with USB audio return, clock and sequencer capture, a native match of its
+  effects, and a hash-verified, confirmation-gated firmware updater.
+
+The first draft's "lossless onto `FmInstrument`" was wrong, because
+`FmInstrument` has no LFO, pitch EG or 4-stage EG (phase_11.5.md §9).
+
+**Done when** the dx7 port is bit-identical to upstream msfa, every voice
+parameter is editable and automatable, and a Bank Export from the emulated
+device opens as playable dx7 channels. The device must also work emulated as
+a part-based external instrument with clock-locked capture, and the firmware
+install and interrupted install must complete against the emulator.
+
+The real device is a hardware half deferred to the final review under §9. It
+covers import, the sound-alike capture with a listening verdict, external
+parts, the sequencer, LEDs, USB audio, and one real flash cycle, which is a
+combined hardware-and-judgement gate.
+
+### Phase 11.6 — Editor polish: scale parity, a piano-roll cut tool, a shortcuts page · S · [plan](plans/phase_11.6.md)
+Added 2026-11-08, for §5.1's amendment and §5.14. Pure software, no functional
+dependency on anything after Phase 6 — it closes three FL Studio-parity gaps
+found reviewing Phases 5 and 6 after the fact, not something either phase was
+blocked on. Independent of Phase 11, 11.5 and 12–19.
+
+Scale highlighting (Phase 5) gains the rest of FL's ~30 presets, a
+user-defined custom scale, and a lock that re-snaps notes already on the grid.
+The piano roll gets a tenth tool, Cut, that discards notes after a clicked bar
+in their row instead of keeping both halves the way Slice does — which in turn
+is why piano-roll tool switching, previously a bare `QKeySequence` outside the
+action registry, is migrated onto the same registered-`ActionSpec` pattern
+Phase 6 already used for the playlist's tools. That migration is also what
+makes the third piece honest: a Shortcuts page in Preferences, built over the
+`ActionRegistry`/`Keymap` pair Phase 6 §4.10 already shipped (declared
+defaults, scopes, persisted overrides, conflict detection) but never gave a UI
+to, as `actions.py`'s own docstring already promised.
+
+**Done when** the Cut tool passes its three row/bar tests, every piano-roll
+tool key is a registered, remappable, conflict-checked action, 30 scales are
+available alongside a working custom-scale editor and a lock that re-snaps
+existing notes, and the Shortcuts page lists, rebinds, flags conflicts in and
+resets every action in the registry.
+
 ### Phases 12–19 — the sound library (§5.12)
 
 Phase 11 completes the DAW. These phases make it sound like something on first
@@ -758,6 +843,8 @@ recorded in its phase log, and §10 shows no phase as Done (hardware deferred).
 | MIDI devices | RtMidi 6.0.0 — **new in Phase 9** | Justified before it was added (§9): MIDI device input and output are §5.6. RtMidi is RtAudio's sibling, from the same author, with the same MIT-style licence, and on Windows it is a thin layer over WinMM with no dependencies of its own. It is hidden behind `engine/midi/MidiBackend.h`, as RtAudio is behind `AudioBackend`, so it is replaceable. Static, no tests, no install rules. |
 | Test plugins | Dexed 1.1.0 (GPL-3.0), Surge XT 1.3.4 (GPL-3.0), Airwindows Consolidated 2026-10-31-d013e10 (MIT) — **Phase 10.5**, test fixtures only | Real third-party plugins are how P9-2 and P9-3 are checked without the user (phase_10.5.md 4.6). Pinned by URL and SHA-256 in `tools/test_plugins.toml`, fetched by `tools/fetch_test_plugins.py` into `%LOCALAPPDATA%/adx-test-plugins` (cached in the full check), never committed, linked or shipped, so their GPL does not reach adX: they are separate programs adX loads in its sandbox child during tests. Between them, VST3 and CLAP instruments and effects, each with an editor. |
 | Sample libraries | VSCO 2 CE, VCSL (CC0); Salamander (CC BY 3.0); Iowa MIS (fetch-only) | Data, not code: nothing links against them. Pinned commits + SHA-256 manifests, a ≤ 100 GB store outside git, a licence gate on the installer (phase_12.md §4.8). |
+| FM-1 DX7 engine | msfa (google/music-synthesizer-for-android), **Apache-2.0** — **new in Phase 11.5** | Justified before it was added (§9): the FM-1's own engine is an msfa port, so the only way an imported FM-1 patch sounds like the device is the same engine. It is ported into `engine/instruments/dx7/msfa/` under the RT rules. The pinned upstream commit is declared in `AdxDependencies.cmake` with its `adx-license` line and also serves as the bit-exact test oracle. Dexed's GPL-3 additions are never used; Dexed stays a test fixture only. |
+| FM-1 firmware catalog | `thefirmwarehub.com`'s published manifest — **new in Phase 11.5**, data only | Fetched and cached outside git, never vendored, with the same pinned-URL + SHA-256 pattern as the row above and as Phase 10.5's test plugins. No library dependency: the updater implements the device's documented device-pull OTA over USB-MIDI SysEx, and adX never writes in UBOOT recovery mode, leaving that to the community recovery tools (phase_11.5.md §4.11). |
 
 ### 8.2 ONNX is optional
 
@@ -852,10 +939,11 @@ software stand-ins for them, so the final review can re-check them.
 completion is recorded in §10.
 
 There is exactly one permitted family of planning documents besides this one:
-`plans/phase_0.md` … `plans/phase_19.md` and `plans/phase_10.5.md`, one per §7 phase.
+`plans/phase_0.md` … `plans/phase_19.md`, `plans/phase_10.5.md`,
+`plans/phase_11.5.md` and `plans/phase_11.6.md`, one per §7 phase.
 They are **subordinate and non-overlapping** — this file owns *what* and *why*, each
 phase file owns *how* for its phase alone, and where they disagree this file
-wins. Every §5 feature is assigned to exactly one phase file, so the twenty-one
+wins. Every §5 feature is assigned to exactly one phase file, so the twenty-two
 together are a complete specification of the remaining work. A phase file is
 updated only by the phase that owns it; scope moving between phases is a change
 to *this* file first.
@@ -887,11 +975,13 @@ of sync with each other and with the code.
 | [5 — Frontend foundation](plans/phase_5.md) | **Done** 2026-10-06 — CI green (run 37509766570); full check green (run 37512932612) | **The §2.2 bet held.** On real hardware (Direct3D 11), panning and zooming a 10,000-note pattern: frame time p99 0.22 ms against 16.6 ms, display vsync-locked at 60.0 fps (one missed vsync in 1,189 frames). A pan is 0 engine calls, a UI frame exactly 1; the three rules are a CI gate (`tools/lint.py rules`), seen to fire. A dockable shell with transport, browser, waveform and meters; the piano roll as a C++ scene-graph item over `engine/geometry/` with nine tools, six lanes and a lyric lane, every gesture one undoable command; the waveform view over the ported `ClipPeakCache`, never blocking. The plugin builds against a Qt SDK matching PySide6 (`tools/fetch_qt.py`) - PySide6 ships none. Twenty corrections in phase_5.md §10. |
 | [6 — The DAW proper](plans/phase_6.md) | **Done** 2026-10-21 — CI green (run 39422153732); full check green (run 39430247203); human gate closed by the user (P6-1) | The rest of the application: channel rack, playlist, mixer with routing matrix, generic parameter editor (every Phase 4 instrument and effect editable, eighteen hand-built overviews beside it), automation lanes and engine-side controllers, browser with typed drag-and-drop, history, inspector, preferences, one action registry and one global selection with the clipboard as `.adx` text. The gate, `test_workflow_end_to_end`, writes, arranges, mixes and exports a 32-bar track through the real panels and re-renders it bit-identical after save and reopen. The mixer holds 60 fps with 200 inserts metering on real hardware at one engine call per frame. Undo coalescing is bounded by gestures (each press), not a clock: a slow drag is one step, two quick ones are two. The user made a track with it (§6 box 2, closed 2026-10-21); three sessions of usability fixes are phase_6.md §11. Fifteen corrections in phase_6.md §10. |
 | [7 — Text-first layer](plans/phase_7.md) | **Done** 2026-10-25 — CI green (run 40243278857), full check green (run 40248449713); human gate (P7-1) closed by the user | The half no other DAW has (§1). A project edits in the GUI, the in-app editor and an external editor at once: a re-parsed file becomes the narrowest commands, one undo step, with ids remapped so every surviving entity keeps its engine node; a watcher reloads on save; conflicts are raised, never guessed. A reload never cuts a voice - effect swaps crossfade, changed or removed instruments ring out. The gates: 200 interleaved GUI and external edits while playing, converging after each (it found two data-loss bugs first), and 100 reloads under a playing pad with output bit-identical to none. Mini-notation ported (and its Euclid fixed), live and lit step by step in the editor; a scripting API over the GUI's commands with a console. Nineteen corrections in phase_7.md §11. |
-| [8 — Audio & export](plans/phase_8.md) | **Built** 2026-10-29 — every automated §6 box observed locally; the latency gate half checked on a virtual cable (P8-1, hardware half deferred to the final review); CI (P8-0) open | adX records, edits and delivers: audio clips with slip, fades, crossfades, envelopes, non-destructive edits, RubberBand stretch, pitch and warp markers; freeze bit-identical; export to WAV/RF64, MP3, FLAC and OGG with stems that sum to the master, ranges, tails, normalise and dither, as a background job; MIDI file I/O exact at 3840 PPQ; collect-and-save; recording with punch, count-in, takes, comping and loopback calibration; `adx render` with no Qt in the process. The golden corpus covers every format. Twenty-two corrections in phase_8.md §11, among them three real bugs the gates found (a capture drain that could swap left and right, a slice tool that dropped clip properties, waveforms never drawn for unpinned clips). |
-| [9 — Plugins & MIDI](plans/phase_9.md) | Built (2026-10-30); not done | Largest risk; out-of-process plugin sandbox. CLAP and VST3 effects and instruments in sandbox children (crash, hang, late, NaN contained; state, automation, learn, PDC); MIDI input, routing, learn and clock; ASIO compiled in. Open: CI (P9-0); the MIDI-latency gate, whose emulated half fails on shared-mode output (P9-1, P9-9); the ASIO gate's emulated half, not yet run (P9-4); and the real-plugin and live-crash gates (P9-2, P9-3), agent-run since 2026-11-01 (§9) and closed by Phase 10.5's scenarios. Hardware halves deferred to the final review. |
+| [8 — Audio & export](plans/phase_8.md) | **Done** 2026-11-05 (hardware deferred) — every §6 box observed; the latency gate `[~]` on a virtual cable (P8-1, hardware half in the final review); per-push CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4` | adX records, edits and delivers: audio clips with slip, fades, crossfades, envelopes, non-destructive edits, RubberBand stretch, pitch and warp markers; freeze bit-identical; export to WAV/RF64, MP3, FLAC and OGG with stems that sum to the master, ranges, tails, normalise and dither, as a background job; MIDI file I/O exact at 3840 PPQ; collect-and-save; recording with punch, count-in, takes, comping and loopback calibration; `adx render` with no Qt in the process. The golden corpus covers every format. Twenty-two corrections in phase_8.md §11, among them three real bugs the gates found (a capture drain that could swap left and right, a slice tool that dropped clip properties, waveforms never drawn for unpinned clips). |
+| [9 — Plugins & MIDI](plans/phase_9.md) | **Done** 2026-11-05 (hardware deferred) — MIDI latency `[~]` at 5.9 ms in WASAPI exclusive mode; ASIO `[~]` through FlexASIO over VB-Cable; real plugins and the live crash green in CI's scenarios job; per-push CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4` | Largest risk; out-of-process plugin sandbox. CLAP and VST3 effects and instruments in sandbox children (crash, hang, late, NaN contained; state, automation, learn, PDC); MIDI input, routing, learn and clock; ASIO compiled in. Hardware halves (a MIDI keyboard, a real ASIO interface) deferred to the final review. |
 | [10 — Analysis, visualization, polish](plans/phase_10.md) | **Done** 2026-11-05 — CI green (run 41991668112); full check green, run 42017826073 on tag `phase-10.5-r4` | Its performance targets gate Phase 11. Chroma, key, chord, tempo, timbre and form analyses run as undoable jobs; six GPU analyzers on one engine call per frame; docs, installer script, benchmark and profiler. Optimization (P10-5) closed: a parallel scheduler that keeps the summation order bit-exact, plus DSP work in six effects and FM (19 hashes re-blessed, listens passed). Audio-thread CPU 8.3 %, worst block 24.2 %. The one-hour soak is flat. Every hot surface is a native Quick window rendered off the GUI thread, which took the display from about 45 to 60 fps with every panel animating (P10-6). Key accuracy on recordings is 51.7 % weighted (P10-1 revised, P10-4). |
 | [10.5 — Agent-run testing](plans/phase_10.5.md) | **Done** 2026-11-05 — CI green (run 41991668112); full check green, run 42017826073 on tag `phase-10.5-r4` | Added 2026-11-01 (§9, "Every phase-ending check is agent-run"). Control channel, driver, capture and glitch detector, headless CLI, the `plans` lint gate; closes P9-2 and P9-3 in software. Every §5 test observed locally on 2026-11-03, the 26 scenarios included (P9-2 and P9-3 closed locally); P10.5-2 and P10.5-3 carried to Phase 11. Test windows open on the second monitor behind the user's (ADX_SCREEN, ADX_BEHIND). |
-| [11 — Live performance](plans/phase_11.md) | Not started | Final DAW stage. Transport prerequisite lands in Phase 3. Needs Phase 10 and Phase 10.5. |
+| [11 — Live performance](plans/phase_11.md) | Built 2026-11-08; every §6 box observed locally (the 20-minute set and the walkthrough by their emulated halves); CI pending | Final DAW stage. Session view, quantized launch, scenes, follow actions, pads with LED feedback and learn mode, mini-notation cells, tempo nudge and tap, performance recording that reopens as an arrangement and renders bit-identically. 30-minute live set on the benchmark project: 0 xruns, UI p99 0.33 ms. The physical pad controller is in the final review; audio cells and playlist dragging carried to Phase 12 (STATE.md P11-9). |
+| [11.5 — M-Vave FM-1: full hardware support and native DX7 voices](plans/phase_11.5.md) | Not started | Added 2026-11-05; rewritten 2026-11-08 to cover the whole device, size L → XL. Needs Phase 9 (Phase 11 is soft, for keys and LEDs). Adds a native msfa-port `dx7` instrument so FM-1 patches import as editable native synths, plus SysEx transport, a librarian, live device editing, 8-part external-instrument use with USB audio return, clock and sequencer capture, a native FX match, and a hash-verified OTA updater. |
+| [11.6 — Editor polish: scale parity, piano-roll cut, shortcuts page](plans/phase_11.6.md) | Not started | Added 2026-11-08 at the user's request; §5.1 amended, §5.14 added. Pure software, no functional dependency past Phase 6; independent of Phase 11, 11.5 and 12–19. 30 scale presets + a custom-scale editor + a re-snap lock; a piano-roll Cut tool that discards notes after a bar instead of splitting them, which forces piano-roll tool keys into the action registry the way the playlist's already are; and the Shortcuts preferences page Phase 6 §4.10 built the backend for but never gave a UI. |
 | Sound-library plans | **Done** | 2026-10-25. `plans/phase_12.md` … `plans/phase_19.md` written from per-pack research; §5.12 added. |
 | [12 — Sound-design foundation](plans/phase_12.md) | Not started | Engine gaps + pack tooling; gates every pack. |
 | [13 — Core Drums & Machines](plans/phase_13.md) | Not started | |

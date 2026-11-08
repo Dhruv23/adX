@@ -5,8 +5,9 @@ agent reads when picking up work, and the last thing it writes before finishing.
 
 ## How this file works
 
-This is a checklist of all twenty-one phases (0 through 19 and 10.5; 12–19, the
-sound library, were added 2026-10-25, and 10.5, agent-run testing, 2026-11-01). The agent that
+This is a checklist of all twenty-two phases (0 through 19, 10.5 and 11.5;
+12–19, the sound library, were added 2026-10-25; 10.5, agent-run testing,
+2026-11-01; and 11.5, M-Vave FM-1 hardware support, 2026-11-05). The agent that
 implements a phase implements it, then marks that phase's checkbox done **and,
 underneath it, lists any open issues for the agent who does the next phase to
 fix.**
@@ -113,11 +114,11 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 5 — Frontend foundation | L | **Done** 2026-10-06 (CI green, run 37509766570; full check run 37512932612) |
 | 6 — The DAW proper | XL | **Done** 2026-10-21 (CI green, run 39422153732; full check run 39430247203; human gate P6-1 closed by the user) |
 | 7 — Text-first layer | M | **Done** 2026-10-25 (CI green, run 40243278857; full check run 40248449713; human gate P7-1 closed by the user) |
-| 8 — Audio & export | M | **Built** 2026-10-29 - every automated §6 box observed locally; latency gate `[~]` (P8-1, hardware half in the final review); CI (P8-0) open |
-| 9 — Plugins & MIDI | L | **Built** 2026-10-30 - every automated §6 box observed locally; CI (P9-0), MIDI latency (P9-1, emulated half fails: P9-9), ASIO emulated half (P9-4), real plugins and live crash (P9-2, P9-3; agent-run, closed by Phase 10.5) open |
+| 8 — Audio & export | M | **Done** 2026-11-05 (hardware deferred: P8-1 `[~]`; per-push CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`) |
+| 9 — Plugins & MIDI | L | **Done** 2026-11-05 (hardware deferred: P9-1 and P9-4 `[~]`; per-push CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`) |
 | 10 — Analysis, visualization, polish | L | **Done** 2026-11-05 (CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`) |
 | 10.5 — Agent-run testing | L | **Done** 2026-11-05 (CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`) |
-| 11 — Live performance | L | Not started |
+| 11 — Live performance | L | Built and observed locally 2026-11-08 (every §6 box, the two hardware boxes by their emulated halves); CI pending |
 | 12 — Sound-design foundation | XL | Not started |
 | 13 — Core Drums & Machines | M | Not started |
 | 14 — Hyperpop | L | Not started |
@@ -910,15 +911,15 @@ and plays); **P6-1**, **P6-0** were closed in Phase 6. The rest re-carried below
 
 ---
 
-## [ ] Phase 8 — Audio & export · M
+## [x] Phase 8 — Audio & export · M
 
 | | |
 |---|---|
 | **Plan** | [phase_8.md](phase_8.md) |
 | **Entry** | Phase 7 §7 complete |
 | **Done when** | [phase_8.md](phase_8.md) §6 |
-| **Status** | In progress: built 2026-10-29. Every automated [phase_8.md](phase_8.md) §6 box observed locally on Debug, RelWithDebInfo and Release; the latency gate half checked (`[~]`, P8-1). **Not done:** CI (P8-0), so the checkbox above stays empty. Once P8-0 is green this phase is Done (hardware deferred) |
-| **Completed** | — |
+| **Status** | Done (hardware deferred) 2026-11-05. Every [phase_8.md](phase_8.md) §6 box observed; the latency gate is `[~]` (P8-1, hardware half in the final review). CI: per-push CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`, its three `three-builds` jobs green |
+| **Completed** | 2026-11-05 - per-push CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4` |
 
 **What exists.** adX records, edits and delivers. Audio clips play (`AudioTrackNode`,
 stateless in position) with slip, trim, fades, crossfades, clip envelopes, destructive
@@ -992,15 +993,15 @@ tests still do not count. Re-carried below.
 
 ---
 
-## [ ] Phase 9 — Plugins & MIDI · L
+## [x] Phase 9 — Plugins & MIDI · L
 
 | | |
 |---|---|
 | **Plan** | [phase_9.md](phase_9.md) |
 | **Entry** | Phase 8 §6 complete |
 | **Done when** | [phase_9.md](phase_9.md) §6 |
-| **Status** | Built 2026-10-30, started at the user's request before Phase 8's entry was met (P8-0 open). Every automated [phase_9.md](phase_9.md) §6 box observed locally on Debug, RelWithDebInfo and Release. **Not done:** CI (P9-0); the MIDI-latency gate, whose emulated half fails (P9-1, P9-9); the ASIO gate's emulated half, not yet run (P9-4); two human gates (P9-2, P9-3). Hardware halves go to the final review. The checkbox above stays empty |
-| **Completed** | — |
+| **Status** | Done (hardware deferred) 2026-11-05. Built 2026-10-30. Every [phase_9.md](phase_9.md) §6 box observed: the MIDI-latency and ASIO gates by their emulated halves (`[~]`, P9-1 and P9-4, hardware halves in the final review); P9-2 and P9-3 by the scenarios, locally and in CI. CI: per-push CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4` |
+| **Completed** | 2026-11-05 - per-push CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4` |
 
 > FINAL_PLAN §10 names this the single largest risk in the project: the only
 > phase whose failure modes are controlled by third-party code. Open issues here
@@ -1043,8 +1044,10 @@ violations while the plugin allocates in its process.
   recorded here and in phase_9.md §10. CI must build the fixture plugins and
   `adx_plugin_host` (they come with the test build) for the Python plugin tests not to
   skip there.
-- **P9-1** · **BLOCKER until its emulated half passes; hardware half deferred to the final
-  review** · `midi_roundtrip_latency`: a hardware keyboard to an audible note, measured
+- **P9-1** · **HALF CHECKED `[~]` 2026-11-05; hardware half deferred to the final review;
+  no longer blocks Phase 9** · Exclusive mode, `tools/measure_midi_latency.py --exclusive`:
+  5.91 / 6.99 ms median at blocks 64 / 128 (12.49 at 256; phase_9.md §10). Was:
+  `midi_roundtrip_latency`: a hardware keyboard to an audible note, measured
   under 10 ms. The emulated half is the loopMIDI run below; it becomes `[~]` when that
   measures under 10 ms (P9-9). The keyboard itself is listed under "Final review".
   The user has no MIDI keyboard (2026-10-30), so the software half has a tool:
@@ -1055,7 +1058,8 @@ violations while the plugin allocates in its process.
   shared mode's period, on this machine). Ran 2026-10-30 with loopMIDI: 67.75 / 69.45 /
   74.24 ms median to the mix at blocks 64 / 128 / 256 - **far over 10 ms**, nearly all of
   it audio output, not MIDI (P9-9). Numbers in phase_9.md §10. Evidence, not P9-1's close.
-- **P9-9** · **open; blocks P9-1** · Output latency on WASAPI shared mode is about 60 ms
+- **P9-9** · **Fixed 2026-11-05**: WASAPI exclusive mode (`WasapiExclusiveBackend`, in
+  Preferences > Audio) measures 5.91 ms at block 64 with the same tool. Was: Output latency on WASAPI shared mode is about 60 ms
   on this machine: `Engine.audition` to the Windows mix measured 62.85 ms at block 64.
   MIDI in adds about 5 ms. Cause: the driver's only shared period is 480 frames with a
   1056-frame buffer; RtAudio 6.0.1 keeps that buffer and its own equal-size ring full,
@@ -1063,34 +1067,61 @@ violations while the plugin allocates in its process.
   WASAPI exclusive-mode backend (miniaudio is already a dependency and supports it), or
   ASIO (P9-4; FlexASIO in exclusive mode needs no hardware interface). Fixed when: the
   same tool measures under 10 ms on this machine.
-- **P9-2** · **BLOCKER; agent-run since 2026-11-01** (FINAL_PLAN §9) · Three real
+- **P9-2** · **Closed 2026-11-05**: `scenario_real_plugins` 16 of 16 locally and green in
+  the full check's scenarios job (run 42017826073); recorded in phase_9.md §6 and §10. Was:
+  **BLOCKER; agent-run since 2026-11-01** (FINAL_PLAN §9) · Three real
   third-party plugins, VST3 and CLAP, instrument and effect: load, automate, save, reload
   (and the editor embeds or falls back). No longer waits for the user. Fixed when:
   `scenario_real_plugins` passes over the pinned open-source plugins of
   `tools/test_plugins.toml` (phase_10.5.md §4.6), with the list and output recorded in
   phase_9.md §10.
-- **P9-3** · **BLOCKER; agent-run since 2026-11-01** · A plugin crashing during playback,
+- **P9-3** · **Closed 2026-11-05**: `scenario_live_plugin_crash` green locally and in run
+  42017826073. Was: **BLOCKER; agent-run since 2026-11-01** · A plugin crashing during playback,
   shown in the running app (load `adx_test_plugin`, set its `mode` to 1 while playing):
   playback of the rest continues, the notice appears, Restart brings it back. Fixed when:
   `scenario_live_plugin_crash` passes (phase_10.5.md §4.6).
-- **P9-4** · **BLOCKER until its emulated half passes; hardware half deferred to the final
-  review** · ASIO: the latency readout against a measured loopback. Emulated half, not yet
+- **P9-4** · **HALF CHECKED `[~]` 2026-11-05; hardware half deferred to the final review**
+  · FlexASIO 1.10b (shared mode) over VB-Cable, `tools/measure_latency.py --asio`: takes 0
+  samples off at 64/256/1024; adX's readout is the driver's own split. The run found that
+  a duplex RtAudio stream reported twice its round trip; fixed (phase_9.md §11 16). Was:
+  ASIO: the latency readout against a measured loopback. Emulated half, not yet
   run: FlexASIO (an open-source ASIO driver over WASAPI) with VB-Audio Virtual Cable as
   the loopback, `tools/measure_latency.py` opening the engine with `Engine(asio=True)`
   (the tool needs an `--asio` flag; the app has no audio-API preference yet). Installing
   FlexASIO needs the user's approval at the UAC prompt. A real interface's own driver is
   listed under "Final review".
-- **P9-5** · MIDI output, sending clock to a device, clock follow wired to the
+- **P9-5** · **Fixed 2026-11-06** (local; not yet in CI): MIDI outputs (`MidiDevices::openOutput`, a sender thread that sends
+  each message when its frame is heard), MIDI clock and MTC out on the audio clock
+  (`MidiSync.h`: ClockSender, MtcSender), clock and MTC follow driving the arrangement's
+  rate and position (`EngineCore::follow`), Preferences > MIDI outputs/sync/follow, and
+  `send_midi` for Phase 11's LEDs. Tests: `test_midi_sync.cpp` (5 cases) and
+  `test_midi_sync.py`, whose loopMIDI case has one engine follow another's clock. Was:
+  MIDI output, sending clock to a device, clock follow wired to the
   arrangement's time source, and MTC (§3 step 3, §4.10). `MidiClock`'s sender and
   follower exist and are tested; nothing drives a device with them. Phase 11's LED
   feedback needs output.
-- **P9-6** · Pitch bend and MPE into `Note.pitchCurve` on input and import, and slides
+- **P9-6** · **Fixed 2026-11-06** (local; not yet in CI): SMF bend in its RPN 0 range and MPE zones into pitch curves, slides
+  and curves out as an MPE zone (`midi_bend_import_roundtrip`, `midi_export_slide_mpe`);
+  live bend moves held notes; MIDI takes (`record/MidiTake`, the toolbar's MIDI button:
+  there was no MIDI note recording at all) keep bend; UST, USTX and VSQX import
+  (`adx/sung_import.py`, with lyrics, and UST/USTX pitch points); SMF lyric events both
+  ways. PyYAML is a new dependency (USTX). Was: Pitch bend and MPE into
+  `Note.pitchCurve` on input and import, and slides
   out as per-note bend on export (§4.1: `midi_bend_import_roundtrip`,
   `midi_export_slide_mpe`); UST/USTX/VSQX import.
-- **P9-7** · A plugin editor's own parameter changes become values in the project, never
+- **P9-7** · **Fixed 2026-11-06** (local; not yet in CI): echoes carry a gesture flag (CLAP gesture begin/end, VST3
+  performEdit); one equal to the project's value, or a value report in an instance's first
+  half second without a gesture, is not an edit; the record toolbar's Auto button writes
+  gestures as automation lanes (`project/AutomationWriter`); plugin instruments follow
+  slides, pitch curves and the channel's pitch offset as per-note tuning (CLAP note
+  expression, VST3 tuning). Tests: `test_plugin_automation.cpp`, `test_plugin_ui.py`.
+  Was: A plugin editor's own parameter changes become values in the project, never
   automation lanes; there is no "write automation" mode. And plugin instruments ignore
   the channel's pitch offset and per-note glides (a plugin does its own pitch).
-- **P9-8** · The app's plugin UI is functional, not finished: no per-plugin "never embed"
+- **P9-8** · **Fixed 2026-11-06** (local; not yet in CI): the plugin window's bar (health, "Don't embed its editor" kept per
+  plugin, Check latency, Restart), late blocks and state on each mixer slot, and a Restart
+  button in the status bar on a crash notice. Was: The app's plugin UI is functional, not
+  finished: no per-plugin "never embed"
   preference, no restart button in the notice (the menu's restart restarts every crashed
   child), no latency-check action (the engine has `plugin_check_latency`), no late-block
   counter in the mixer (the engine reports it: `Plugins.instances()`). FINAL_PLAN §5.6's
@@ -1239,7 +1270,10 @@ these; each is re-carried with its reason.
   (GiantSteps). P10-1 revised the target with the numbers; better profiles or a tuning
   estimate are improvements, not a gate. Fixed when: measured better with
   `tools/measure_key_corpus.py`, or accepted as is.
-- **P10.5-2** · `CARRIED` · CLAP `params.flush()` is called on the main thread while a
+- **P10.5-2** · **Fixed 2026-11-06** (local; not yet in CI) with P9-7: once active, the CLAP flush is `process()` itself;
+  idle() flushes only an inactive plugin. `test_real_plugins` now asserts a reopened
+  project has nothing to undo. Was: `CARRIED` · CLAP `params.flush()` is called on the
+  main thread while a
   plugin is active but not processing (Airwindows logs it). Moving it to `process()`
   needs echo filtering first; see the entry above. Fixed when: the flush runs on the
   audio thread with `test_real_plugins` passing and no spurious undo steps.
@@ -1251,8 +1285,8 @@ these; each is re-carried with its reason.
   window as active that Windows does not; the scenarios pass that way, but a test that
   depends on the OS focus (a real IME, a native file dialog) would need `ADX_BEHIND=0`.
   Fixed when: nothing; recorded so the next agent knows why a window is not in front.
-- **P8-1, P9-1, P9-4, P9-9** · `CARRIED` from their phases (hardware halves, MIDI latency
-  on shared-mode output, ASIO's emulated half). They gate Phases 8 and 9, not Phase 11.
+- **P8-1, P9-1, P9-4** · `CARRIED` from their phases as hardware halves only (their
+  emulated halves passed 2026-11-05; P9-9 is fixed). They wait for the final review.
 
 ---
 
@@ -1329,18 +1363,127 @@ Evidence, 2026-11-03, this machine:
 | **Plan** | [phase_11.md](phase_11.md) |
 | **Entry** | Phase 10 §7 complete, **including `bench_full_project`**, and Phase 10.5 §6 complete |
 | **Done when** | [phase_11.md](phase_11.md) §6 - the pad-controller boxes by their emulated halves; the physical controller is in the final review |
-| **Status** | Not started |
+| **Status** | Built and observed locally 2026-11-08: every [phase_11.md](phase_11.md) §6 box, the 20-minute set and the walkthrough by their emulated halves (`[~]`). CI pending |
 | **Completed** | — |
 
 > Week one validates the Phase 3 transport checkpoint before anything is built
 > on it ([phase_11.md](phase_11.md) §3).
 
-**Open issues remaining at completion:**
+**What exists (2026-11-06, overnight; local, not in CI).** The week-one spike passed, and
+the session's engine core is built and tested; pads, performance recording and the gates
+are not. Details and evidence in [phase_11.md](phase_11.md) §10.
 
-- _to be filled in by the agent that completes this phase_
+- **Spike (§3): the checkpoint held, with one gap.** `spike_two_sources_render` renders two
+  sources with their own positions, rates and loops for 30 s through the existing Scheduler,
+  every onset on its hand-computed frame. The gap: a graph node is bound to one source, so
+  one channel could not play the arrangement *and* a launched clip. Closed by composition,
+  not surgery: `graph::SessionLane` (a clip's events merged into its channel's per piece,
+  on the clip's own source) and `TimeSource::requestSeekSamples` (a source started at -k
+  puts tick 0 on frame k of a block). Nothing in `engine/transport/` changed shape.
+- **`engine/session/`:** `LaunchQuantize`, `ClipState` (the five states, table-tested),
+  `FollowAction` (seven, Random seeded), `SessionEngine` (launch/stop/scene/stop-all on
+  the arrangement's grid or the session's own clock, exact sample offsets, one clip per
+  track, stop as a release at the boundary with the source held for its tail, follow
+  actions, rebind on snapshot swap, 128 runtimes with refusals counted), `TapTempo` and
+  `nudgedRate`. `engine/session` joined lint's realtime paths.
+- **The model and the text:** `project::SessionModel` (scenes, tracks, cells), `[SESSION]`
+  parsed and written losslessly, `SetSession` (one undo step), `dirty::kSession`; the
+  snapshot compiles each cell's notes (`SessionClip`).
+- **App:** `Engine.launch_clip/stop_clip/fire_scene/stop_all_clips/clip_state/clip_progress`,
+  `Project.session_info/set_session`, and the Session dock (a widget grid: click to launch,
+  right-click to edit cells, scenes and stops).
+- **Tests:** `test_spike.cpp`, `test_state_machine.cpp` (state machine, quantize grid,
+  follow, tap tempo, nudge), `test_session_format.cpp`, `test_session_engine.cpp`
+  (launch_quantize_exact at 4 tempos x 4 quantizes, instant, scene, stop_quantized,
+  relaunch_before_boundary, clip_stop_preserves_other_clips_voices, follow, tails,
+  follow-versus-stop), `test_session_panel.py`.
+
+**What was added 2026-11-07/08 (closes P11-1..P11-8 below).** Pads (`PadController`,
+`PadFeedback` on its own 30 Hz thread, `.adxpad` profiles with learn mode, velocity to clip
+gain, `tools/virtual_pad.py`); `PerformanceRecorder` (commit is one command); mini-notation
+cells; clip gain and scene tempo applied; clips follow the master rate, with nudge and tap
+on the transport bar; tails end when the last voice is silent; the session grid on the
+geometry pipeline (`SessionGeometry`: progress rings, queue marks, one build per frame);
+`docs/performance.md`; the gates. Every phase_11.md §5 test exists. Evidence in
+[phase_11.md](phase_11.md) §10.
+
+**Closed:**
+
+- **P11-1** · Pad controllers: built; `pad_profile_parse`, `pad_learn_builds_profile`,
+  `pad_velocity_to_gain`, `pad_feedback_thread`, `virtual_pad_drives_a_set`.
+- **P11-2** · Performance recording: `performance_record_roundtrip` is bit-identical
+  (0 samples differ over 60 bars); with three nudges every onset is within a sample.
+- **P11-3** · Launchable mini-notation cells: `mini_clip_cycles_independently`. Audio
+  clips in cells are not part of §5.11; carried below.
+- **P11-4** · Clip gain and scene tempo applied: `clip_gain_scales_velocity`,
+  `scene_tempo_change`.
+- **P11-5** · Clips follow rate changes: `clips_follow_the_master_rate`,
+  `launch_across_tempo_change`; nudge and tap wired (`tap_tempo_through_the_engine`).
+- **P11-6** · Release, not cut: `clip_stop_releases_not_cuts`,
+  `clip_stop_preserves_effect_tail`, `time_source_released_after_tail`,
+  `relaunch_legato_keeps_phase`, `concurrent_clip_limit`, `session_no_alloc` (10 min).
+- **P11-7** · The session grid is geometry (`session_geometry_budget`). Dragging is
+  carried below.
+- **P11-8** · The gates pass: `live_set_no_dropouts`, `scenario_scripted_set_20min`
+  (both materials), `scenario_performance_walkthrough`.
+
+**Open issues remaining at completion (carried into Phase 12):**
+
+- **P11-9** · Cells hold patterns and mini-notation only; no audio clips. Dragging between
+  playlist and session (phase_11.md §4.9) is not built. Neither is in §5.11 or §6. Fixed
+  when: an audio cell launches on the grid like a pattern cell, and a playlist item
+  dragged into the grid becomes a cell (and back).
+- **P11-10** · A recorded performance is not sample-identical to the capture when a VA
+  or DrumSynth voice plays: their oscillator start phase is seeded from the placement id,
+  and recording makes new placements. `scenario_scripted_set_20min` therefore compares
+  10 ms RMS envelopes (stand-in correlation 0.955 against a 0.95 floor; WannaCry 0.9986).
+  `performance_record_roundtrip` is bit-identical because its instruments don't seed
+  phase. Fixed when: phase seeding follows the source pattern and note, not the
+  placement, and the scenario compares samples.
+- **P11-11** · Bit-identity holds only without rate changes. With nudges or taps, rate
+  and tempo-event rounding differ, so onsets match within one sample, not bit for bit
+  (`performance_record_roundtrip_with_nudges`). Accepted for now. Fixed when: the
+  recorder writes tempo events that reproduce the rate's sample positions exactly.
+- **P11-12** · The `.adx` parser rejects CRLF line endings in some sections (found
+  splicing test projects). Fixed when: a CRLF copy of every golden project parses to the
+  same model.
+- **P11-13** · pytest's 240 s `faulthandler_timeout` prints a stack dump during the
+  20-minute set (not a failure). Fixed when: the long scenarios set their own timeout
+  marker.
+- **P11-14** · `scenario_live_plugin_crash[standin]` failed in 3 of 5 local runs on
+  2026-11-08 (it passed in the 11-07 full run and in CI at `384371e`). Cause measured:
+  Airwindows, in the shared sandbox, misses its deadline for 0-6 blocks in 5 s of play
+  (`plugins.instances[].late`). A late block is silence, so the capture leaves the offline
+  render. The machine was loaded: a test instance leaked from an aborted set run was
+  playing on about 3 cores. Separately, a playing instance on this 32-thread machine
+  spends about 3.5 cores in the crew's helpers, about 12 % each for 31 of them (P10-5's
+  scheduler), even on the small stand-in. Fixed when: the crew is sized to the graph's
+  width (or helpers stop waking for one-step pieces), and the scenario passes 10 of 10
+  on an idle machine, or it reads `late` and reports a deadline miss as such instead of
+  a residual.
 
 Phase 11 closes the DAW. Anything still open when it closes is fixed here or
 carried into Phase 12 with a reason, like any other handoff.
+
+---
+
+## [ ] Phase 11.5 — M-Vave FM-1: full hardware support and native DX7 voices · XL
+
+| | |
+|---|---|
+| **Plan** | [phase_11.5.md](phase_11.5.md) |
+| **Entry** | Phase 9 §6 complete (hard: MIDI I/O, clock, learn, plugin host, external audio input). Phase 11 is soft: only the keys-as-launcher and the LED feedback use it |
+| **Done when** | [phase_11.5.md](phase_11.5.md) §6. The dx7 port is bit-identical to upstream msfa, every voice parameter is editable, and import, live edit, external parts, sequencer capture, FX match, keys/LEDs and firmware install pass by their emulated halves. The real device (import, the sound-alike capture plus listening verdict, parts, sequencer, LEDs, USB audio, one real flash cycle) is in the final review |
+| **Status** | Not started |
+| **Completed** | — |
+
+> Added 2026-11-05; rewritten 2026-11-08 at the user's request ("fully support
+> everything the FM-1 supports from its hardware"; patches must arrive as
+> editable native synths). Does not block and is not blocked by Phases 12–19.
+
+**Open issues remaining at completion:**
+
+- _to be filled in by the agent that completes this phase_
 
 ---
 
@@ -1356,6 +1499,8 @@ carried into Phase 12 with a reason, like any other handoff.
 
 > Tranches A (format/model), B (DSP), C (tooling). Phase 13 may start once
 > phase_12.md §8's handoff items are done.
+
+**Inherits:** P11-9 to P11-13 (listed under Phase 11 above); P10.5-2 and P10.5-3.
 
 **Open issues for Phase 13:**
 
@@ -1496,9 +1641,9 @@ already showed and what the hardware run must add):
 | Id | Phase box | Emulated half | Hardware half still to run |
 |---|---|---|---|
 | P8-1 | phase_8.md §6 `record_latency_alignment` | `[~]` passed 2026-10-30: VB-Audio Virtual Cable, offset 0 at 64/256/1024 after 5 s of settling (phase_8.md §10) | a physical loopback (interface out 1 → in 1, or a 3.5 mm headphone-to-mic cable), direct monitoring off: `py -3.12 tools/measure_latency.py` |
-| P9-4 | phase_9.md §6 ASIO | **not yet run**: FlexASIO (an ASIO driver over WASAPI) with VB-Cable as its loopback, the readout against `tools/measure_latency.py` through `Engine(asio=True)` | a real interface's own ASIO driver, against a physical loopback |
-| P9-1 | phase_9.md §6 `midi_roundtrip_latency` | **ran 2026-10-30 and fails**: loopMIDI to the output mix, ~68-74 ms median, almost all of it shared-mode output (P9-9). Becomes `[~]` when the same tool measures under 10 ms | a hardware MIDI keyboard to an audible note, under 10 ms |
-| P11 | phase_11.md §6 the 20-minute set; the `docs/performance.md` walkthrough | not built yet: the emulated pad controller (phase_11.md §6) | the same set and walkthrough on a physical pad controller with LED feedback |
+| P9-4 | phase_9.md §6 ASIO | `[~]` passed 2026-11-05: FlexASIO 1.10b (shared mode) over VB-Cable, `tools/measure_latency.py --asio`, take offset 0 at 64/256/1024 and the readout equal to the driver's (phase_9.md §10) | a real interface's own ASIO driver, against a physical loopback |
+| P9-1 | phase_9.md §6 `midi_roundtrip_latency` | `[~]` passed 2026-11-05: loopMIDI in, WASAPI exclusive out, 5.91 ms median at block 64 and 6.99 at 128 (`tools/measure_midi_latency.py --exclusive`); shared mode is ~68-74 ms | a hardware MIDI keyboard to an audible note, under 10 ms |
+| P11 | phase_11.md §6 the 20-minute set; the `docs/performance.md` walkthrough | passed 2026-11-08: `scenario_scripted_set_20min` (stand-in and WannaCry, real audio device, 0 xruns, LEDs match) and `scenario_performance_walkthrough`, through `tools/virtual_pad.py` on loopMIDI | the same set and walkthrough on a physical pad controller with LED feedback |
 
 **Then the review of every Done phase:** each phase's §6/§7 checked again on the finished
 tree, by an agent. The human gates the user closed before 2026-11-01 (P6-1, P7-1) are

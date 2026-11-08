@@ -31,10 +31,19 @@ class Preferences:
     exclusive_audio: bool = False
     #: MIDI inputs to open, by port name (phase_9.md 4.1).
     midi_inputs: list[str] = field(default_factory=list)
+    #: MIDI outputs to open, by port name (STATE.md P9-5).
+    midi_outputs: list[str] = field(default_factory=list)
+    #: Send MIDI clock, and MIDI time code (30 fps), to every open output.
+    midi_send_clock: bool = False
+    midi_send_mtc: bool = False
+    #: The arrangement follows an input's clock or time code: none, clock or mtc.
+    sync_follow: str = "none"
     sample_dirs: list[str] = field(default_factory=list)
     preset_dirs: list[str] = field(default_factory=list)
     project_dir: str = ""
     plugin_dirs: list[str] = field(default_factory=list)
+    #: Plugins (by uid) whose editors are not embedded: the generic editor only (P9-8).
+    plugins_never_embed: list[str] = field(default_factory=list)
     theme: str = "dark"
     meter_floor_db: float = -60.0
     default_note_ticks: int = PPQ // 4

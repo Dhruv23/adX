@@ -76,6 +76,9 @@ private:
     std::atomic<std::uint64_t> m_callbackCount{0};
     std::atomic<std::uint64_t> m_xrunCount{0};
     double m_outputLatencyMs{0.0};
+    /// Zero without an input. With one, RtAudio's figure is input plus output, so the
+    /// two are split here (exactly, from the driver, on ASIO).
+    double m_inputLatencyMs{0.0};
     /// False when the figure above is the one-block floor rather than the driver's
     /// own number. Phase 6's device panel should say which it is showing.
     bool m_latencyIsMeasured{false};

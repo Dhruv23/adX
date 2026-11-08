@@ -1,5 +1,6 @@
 target_sources(adx_engine_static PRIVATE
     Automation.cpp
+    AutomationWriter.cpp
     Channel.cpp
     Controller.cpp
     ControllerCompile.cpp

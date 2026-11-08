@@ -33,6 +33,7 @@
 #include "engine/project/commands/PlaylistCommands.h"
 #include "engine/project/commands/PluginCommands.h"
 #include "engine/project/commands/ProjectCommands.h"
+#include "engine/project/commands/SessionCommands.h"
 
 namespace adx::format {
 namespace {
@@ -201,6 +202,9 @@ private:
     /// A `WARP` line under an AUDIO item; false when the line is something else.
     [[nodiscard]] bool parseWarpMarker(const BlockNode& node, project::AudioClipRef& audio);
     void parseMarkers(Section& section);
+    void parseSession(Section& section);
+    void parseSessionTrack(const BlockNode& node, const std::vector<Token>& tokens,
+                           project::SessionModel& model);
     void parseMidi(Section& section);
     /// One SLOT line of an insert, with its STATE child if it has one.
     void parseSlotLine(core::InsertId insert, const BlockNode& child, Line& line,
@@ -478,6 +482,166 @@ void V2Parser::parseMarkers(Section& section) {
         source(project::SourceKind::Marker, raw->created().value, line.contentSpan());
         line.claimed = true;
     }
+}
+
+// --- SESSION --------------------------------------------------------------------
+//
+//   [SESSION]
+//   QUANTIZE=bar
+//   SCENE "Intro" tempo=128
+//   SCENE "Drop"
+//   TRACK "Lead" linked=2 stop_on_empty=yes
+//     1 "A" length=4:0:0 loop=yes quantize=global follow=next repeats=2 legato=no gain=1
+//
+// Scenes are rows in the order written; a track names its channel; each cell line is a
+// scene row (from 1) and a pattern (phase_11.md §4.1).
+
+void V2Parser::parseSession(Section& section) {
+    section.claimed = true;
+    const std::vector<BlockNode> nodes = buildBlocks(lines(), section);
+    KeyTable keys(lines(), nodes, m_diag);
+    project::SessionModel model;
+    if (Line* line = keys.take(lines(), "QUANTIZE")) {
+        if (!session::parseQuantize(line->value.c_str(), model.quantize) ||
+            model.quantize == session::LaunchQuantize::Global) {
+            m_diag.add(code::kUnknownKey, line->valueSpan,
+                       "unknown launch quantize '" + line->value + "'; using bar");
+            model.quantize = session::LaunchQuantize::Bar;
+        }
+    }
+    for (const BlockNode& node : nodes) {
+        Line& line = lines()[node.line];
+        if (line.kind != Line::Kind::Positional) {
+            continue;
+        }
+        const std::vector<Token> tokens = tokenize(line, m_diag);
+        if (tokens.empty()) {
+            continue;
+        }
+        if (tokens.front().text == "SCENE") {
+            project::SessionScene scene;
+            for (std::size_t i = 1; i < tokens.size(); ++i) {
+                const Token& token = tokens[i];
+                if (!token.isKeyValue()) {
+                    scene.name = token.text;
+                } else if (token.text == "tempo") {
+                    double bpm = 0.0;
+                    if (parseDouble(token.value, token.valueSpan, m_diag, bpm) && bpm > 0.0) {
+                        scene.tempo = bpm;
+                    }
+                } else {
+                    m_diag.add(code::kUnknownKey, token.span, "a scene takes name and tempo=");
+                }
+            }
+            model.scenes.push_back(std::move(scene));
+            line.claimed = true;
+        } else if (tokens.front().text == "TRACK") {
+            parseSessionTrack(node, tokens, model);
+            line.claimed = true;
+        } else {
+            m_diag.add(code::kUnknownKey, line.contentSpan(),
+                       "a [SESSION] line is QUANTIZE=, SCENE or TRACK");
+        }
+    }
+    for (project::SessionTrack& track : model.tracks) {
+        if (track.slots.size() < model.scenes.size()) {
+            track.slots.resize(model.scenes.size());
+        }
+    }
+    unknownKeys(keys, nodes);
+    execute(std::make_unique<project::SetSession>(std::move(model)));
+}
+
+void V2Parser::parseSessionTrack(const BlockNode& node, const std::vector<Token>& tokens,
+                                 project::SessionModel& model) {
+    const Line& header = lines()[node.line];
+    if (tokens.size() < 2 || tokens[1].isKeyValue()) {
+        m_diag.add(code::kWrongFieldCount, header.contentSpan(), "TRACK needs a channel name");
+        return;
+    }
+    const project::Channel* channel = m_project.findChannelByName(tokens[1].text);
+    if (channel == nullptr) {
+        m_diag.add(code::kUnknownChannelRef, tokens[1].span,
+                   "no channel named '" + tokens[1].text + "'");
+        return;
+    }
+    project::SessionTrack track;
+    track.channel = channel->id;
+    for (std::size_t i = 2; i < tokens.size(); ++i) {
+        const Token& token = tokens[i];
+        std::int64_t number = 0;
+        if (token.text == "linked" && parseInt64(token.value, token.valueSpan, m_diag, number) &&
+            number > 0) {
+            track.linked = core::PlaylistTrackId{static_cast<std::uint32_t>(number)};
+        } else if (token.text == "stop_on_empty") {
+            static_cast<void>(
+                parseBool(token.value, token.valueSpan, m_diag, track.stopOnEmptyScene));
+        } else if (token.text != "linked") {
+            m_diag.add(code::kUnknownKey, token.span,
+                       "a session track takes linked= and stop_on_empty=");
+        }
+    }
+    for (const BlockNode& child : node.children) {
+        Line& line = lines()[child.line];
+        const std::vector<Token> cell = tokenize(line, m_diag);
+        std::int64_t row = 0;
+        if (cell.size() < 2 || !parseInt64(cell[0].text, cell[0].span, m_diag, row) || row <= 0 ||
+            row > 4096) {
+            m_diag.add(code::kWrongFieldCount, line.contentSpan(),
+                       "a session cell is '<scene row> <pattern> [key=value...]'");
+            continue;
+        }
+        const project::Pattern* pattern = m_project.findPatternByName(cell[1].text);
+        if (pattern == nullptr) {
+            m_diag.add(code::kUnknownPatternRef, cell[1].span,
+                       "no pattern named '" + cell[1].text + "'");
+            continue;
+        }
+        project::ClipSlot slot;
+        slot.pattern = pattern->id;
+        for (std::size_t i = 2; i < cell.size(); ++i) {
+            const Token& token = cell[i];
+            if (token.text == "length") {
+                static_cast<void>(parsePosition(token.value, m_project.tempo, token.valueSpan,
+                                                m_diag, slot.length));
+            } else if (token.text == "loop") {
+                static_cast<void>(parseBool(token.value, token.valueSpan, m_diag, slot.loop));
+            } else if (token.text == "legato") {
+                static_cast<void>(parseBool(token.value, token.valueSpan, m_diag, slot.legato));
+            } else if (token.text == "quantize") {
+                if (!session::parseQuantize(token.value.c_str(), slot.quantize)) {
+                    m_diag.add(code::kUnknownKey, token.valueSpan,
+                               "unknown launch quantize '" + token.value + "'");
+                }
+            } else if (token.text == "follow") {
+                if (!session::parseFollow(token.value.c_str(), slot.follow)) {
+                    m_diag.add(code::kUnknownKey, token.valueSpan,
+                               "unknown follow action '" + token.value + "'");
+                }
+            } else if (token.text == "repeats") {
+                std::int64_t repeats = 1;
+                if (parseInt64(token.value, token.valueSpan, m_diag, repeats)) {
+                    slot.followRepeats =
+                        static_cast<std::uint8_t>(std::clamp<std::int64_t>(repeats, 1, 255));
+                }
+            } else if (token.text == "gain") {
+                double gain = 1.0;
+                if (parseDouble(token.value, token.valueSpan, m_diag, gain)) {
+                    slot.gain = static_cast<float>(std::clamp(gain, 0.0, 4.0));
+                }
+            } else {
+                m_diag.add(code::kUnknownKey, token.span,
+                           "unknown session cell key '" + token.text + "'");
+            }
+        }
+        const auto index = static_cast<std::size_t>(row - 1);
+        if (track.slots.size() <= index) {
+            track.slots.resize(index + 1);
+        }
+        track.slots[index] = slot;
+        line.claimed = true;
+    }
+    model.tracks.push_back(std::move(track));
 }
 
 // --- MIDI ---------------------------------------------------------------------
@@ -1732,6 +1896,7 @@ void V2Parser::parsePlaylistItem(core::PlaylistTrackId track, const BlockNode& n
     }
 
     auto* audio = std::get_if<project::AudioClipRef>(&item.content);
+    auto* patternRef = std::get_if<project::PatternRef>(&item.content);
     for (std::size_t i = 3; i < tokens.size(); ++i) {
         const Token& token = tokens[i];
         if (!token.isKeyValue()) {
@@ -1752,6 +1917,11 @@ void V2Parser::parsePlaylistItem(core::PlaylistTrackId track, const BlockNode& n
             std::int64_t lane = 0;
             if (parseInt64(token.value, token.valueSpan, m_diag, lane)) {
                 item.lane = static_cast<std::uint16_t>(std::clamp<std::int64_t>(lane, 0, 255));
+            }
+        } else if (patternRef != nullptr && token.text == "gain") {
+            double value = 1.0;
+            if (parseDouble(token.value, token.valueSpan, m_diag, value)) {
+                patternRef->gain = static_cast<float>(std::clamp(value, 0.0, 4.0));
             }
         } else if (audio != nullptr && token.text == "stretch") {
             double value = 1.0;
@@ -1990,6 +2160,8 @@ void V2Parser::run() {
     forEach("ARRANGEMENT", [this](Section& s) { parseArrangement(s); });
     forEach("CONTROLLER", [this](Section& s) { parseController(s); });
     forEach("MARKERS", [this](Section& s) { parseMarkers(s); });
+    // After channels and patterns, which its cells name.
+    forEach("SESSION", [this](Section& s) { parseSession(s); });
     // Last: a learned control may name any parameter the sections above created.
     forEach("MIDI", [this](Section& s) { parseMidi(s); });
 

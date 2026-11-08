@@ -12,6 +12,7 @@ whatever a user did to it.
 from __future__ import annotations
 
 import contextlib
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QEvent, QObject, QSettings, Qt, QTimer
@@ -27,6 +28,7 @@ from adx.engine_bridge import PPQ, Engine, Project
 from adx.frame_clock import FrameClock
 from adx.live_midi import LiveMidi
 from adx.menus import register_actions
+from adx.pads import PadControllers
 from adx.panels.analysis.panel import AnalysisPanel
 from adx.panels.analyzers import AnalyzerHost, AnalyzerPanel, make_panels
 from adx.panels.automation.panel import AutomationPanel
@@ -46,8 +48,9 @@ from adx.panels.params import set_learn_hook
 from adx.panels.piano_roll.panel import PianoRollPanel
 from adx.panels.playlist.panel import PlaylistPanel
 from adx.panels.plugins.browser import PluginBrowserPanel
+from adx.panels.session.panel import SessionPanel
 from adx.panels.waveform.widget import WaveformPanel
-from adx.plugin_runtime import PluginRuntime
+from adx.plugin_runtime import PluginRuntime, RestartButton
 from adx.preferences import Preferences
 from adx.scripting import api as scripting_api
 from adx.selection import Context, Kind, Selection
@@ -140,8 +143,28 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Ready")
         frame_clock.errors.error.connect(lambda where, message: self.status(f"{where}: {message}"))
         self.live_midi = LiveMidi(engine, self.session, self.selection, self.status)
+        self.pads = PadControllers(engine, self.settings_dir())
+        self.session_view.controllers = self.pads
+        #: The rate a held nudge returns to (phase_11.md 4.8).
+        self._nudge_base: float | None = None
+        self._refused = 0
+        # Session housekeeping at 5 Hz, off the frame: the frame makes one engine call.
+        self._session_timer = QTimer(self)
+        self._session_timer.setInterval(200)
+        self._session_timer.timeout.connect(self._session_poll)
+        self._session_timer.start()
         if not engine.null_backend and self.prefs.midi_inputs:
             self.live_midi.apply(self.prefs.midi_inputs)
+            self.attach_pads()
+        if not engine.null_backend and (
+            self.prefs.midi_outputs or self.prefs.sync_follow != "none"
+        ):
+            self.live_midi.apply_outputs(
+                self.prefs.midi_outputs,
+                self.prefs.midi_send_clock,
+                self.prefs.midi_send_mtc,
+                self.prefs.sync_follow,
+            )
         self.restore_layout()
         self.clock.start()
 
@@ -152,6 +175,8 @@ class MainWindow(QMainWindow):
         # Plugins and MIDI learn (phase_9.md): the per-tick pump, and what "MIDI learn"
         # in any parameter's menu arms.
         self.plugin_runtime = PluginRuntime(self.engine, s, self.status, self)
+        self.restart_notice = RestartButton(self.plugin_runtime, self)
+        self.statusBar().addPermanentWidget(self.restart_notice)
         set_learn_hook(self.plugin_runtime.arm)
         self.browser = BrowserPanel(str(Path.cwd()), self, session=s)
         self.channel_rack = ChannelRackPanel(s, sel, self)
@@ -167,6 +192,7 @@ class MainWindow(QMainWindow):
         self.clip_editor = ClipEditorPanel(s, sel, self)
         self.plugins = PluginBrowserPanel(s, sel, self)
         self.midi = MidiPanel(s, self.plugin_runtime, self)
+        self.session_view = SessionPanel(s, self)
         self.analysis_panel = AnalysisPanel(s, self)
         self.analyzer_host = AnalyzerHost(self.engine, parent=self)
         self.analyzers = make_panels(self.analyzer_host, self)
@@ -191,6 +217,7 @@ class MainWindow(QMainWindow):
             self.console,
             self.plugins,
             self.midi,
+            self.session_view,
             self.analysis_panel,
             self.generate,
             *self.analyzers,
@@ -203,6 +230,9 @@ class MainWindow(QMainWindow):
         self.transport.loop_toggled.connect(self._loop)
         self.transport.tempo_changed.connect(self._tempo)
         self.transport.metronome_toggled.connect(self._metronome)
+        self.transport.tap_requested.connect(lambda: self.engine.tap_tempo(time.monotonic()))
+        self.transport.nudge_changed.connect(self.nudge)
+        self.transport.perform_record_toggled.connect(self.record_performance)
         self.browser.project_activated.connect(self.open_project)
         self.browser.audio_activated.connect(self.waveform.waveform.open)
         self.piano_roll.seek = self.engine.seek
@@ -383,6 +413,8 @@ class MainWindow(QMainWindow):
             if self.transport.tempo.value() != bpm:
                 self.transport.set_tempo(bpm)
             self.transport.meter = self.project.meter_at(0)
+        if self.project is not None:
+            self.pads.set_cells(self.project.session_info())
         self.piano_roll.refresh()
         self.registry.update_enabled()
 
@@ -527,6 +559,55 @@ class MainWindow(QMainWindow):
         if self.project is not None:
             self.session.execute(engine_bridge.commands.set_tempo(bpm, 0))
 
+    # --- performing (phase_11.md 4.6-4.8) ------------------------------------------
+
+    def nudge(self, direction: int) -> None:
+        """A held nudge: 4 % faster or slower until let go, then back exactly."""
+        if direction != 0:
+            if self._nudge_base is None:
+                self._nudge_base = self.engine.session_rate
+            self.engine.set_session_rate(self._nudge_base * (1.0 + 0.04 * direction))
+        elif self._nudge_base is not None:
+            self.engine.set_session_rate(self._nudge_base)
+            self._nudge_base = None
+
+    def record_performance(self, on: bool) -> None:
+        """Arms the performance recording; disarming writes it into the arrangement."""
+        if on:
+            self.engine.record_performance(True)
+            self.status("Recording the performance")
+            return
+        self.engine.record_performance(False)
+        project = self.project
+        if project is None:
+            return
+        end = self.clock.position_ticks if self.engine.state() == "playing" else -1
+        summary = self.session.call(self.engine.commit_performance, project, end)
+        if isinstance(summary, dict):
+            self.status(
+                f"Performance recorded: {summary['items']} clip(s), "
+                f"{summary['tempo_events']} tempo change(s)"
+            )
+
+    def settings_dir(self) -> Path:
+        """Where the user's own files go: beside an ini, or the app's data folder."""
+        if self.settings.format() == QSettings.Format.IniFormat:
+            return Path(self.settings.fileName()).parent
+        from PySide6.QtCore import QStandardPaths
+
+        location = QStandardPaths.StandardLocation.AppDataLocation
+        return Path(QStandardPaths.writableLocation(location))
+
+    def attach_pads(self) -> None:
+        """Every open input a pad profile matches becomes a clip launcher."""
+        for name in self.engine.midi_opened:
+            if name not in self.pads.attached:
+                profile = self.pads.attach(name)
+                if profile is not None:
+                    self.status(f"{name}: pads ({profile.name})")
+        if self.project is not None:
+            self.pads.set_cells(self.project.session_info())
+
     def _on_frame(self, ticks: int, rolling: bool) -> None:
         """The 60 Hz frame. The clock made the one engine call; this only draws."""
         self.transport.show_position(ticks, self.clock.position_seconds)
@@ -538,6 +619,19 @@ class MainWindow(QMainWindow):
         for analyzer in self.analyzers:
             analyzer.frame(self.clock.analyzer_frame)
 
+    def _session_poll(self) -> None:
+        """The session's rate label, the performance log and refused launches (5 Hz)."""
+        self.transport.show_rate(self.engine.session_rate)
+        if self.transport.perform_action.isChecked():
+            self.engine.drain_performance()
+        refused = self.engine.session_counts["refused"]
+        if refused > self._refused:
+            self.status(
+                f"Session: {refused - self._refused} launch(es) refused - every clip slot "
+                "is in use (128 sounding or releasing)"
+            )
+        self._refused = refused
+
     # --- preferences, layout and theme ----------------------------------------------
 
     def preferences_dialog(self) -> None:
@@ -546,7 +640,10 @@ class MainWindow(QMainWindow):
 
         latency = self.engine.latency_samples() / max(1, self.engine.sample_rate) * 1000.0
         inputs = self.live_midi.available() if not self.engine.null_backend else []
-        dialog = PreferencesDialog(self.prefs, latency, self, midi_inputs=inputs)
+        outputs = self.live_midi.available_outputs() if not self.engine.null_backend else []
+        dialog = PreferencesDialog(
+            self.prefs, latency, self, midi_inputs=inputs, midi_outputs=outputs
+        )
         if dialog.exec() and dialog.result_preferences is not None:
             self.apply_preferences(dialog.result_preferences)
 
@@ -559,6 +656,10 @@ class MainWindow(QMainWindow):
         self.text.set_mode(prefs.sync_mode)
         if not self.engine.null_backend:
             self.live_midi.apply(prefs.midi_inputs)
+            self.attach_pads()
+            self.live_midi.apply_outputs(
+                prefs.midi_outputs, prefs.midi_send_clock, prefs.midi_send_mtc, prefs.sync_follow
+            )
         self.browser.preset_dirs = [self.browser.preset_dirs[0], *prefs.preset_dirs]
         self.browser.refresh()
 
@@ -729,6 +830,7 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         self.clock.stop()
+        self._session_timer.stop()
         self.save_layout()
         app = QApplication.instance()
         if app is not None:

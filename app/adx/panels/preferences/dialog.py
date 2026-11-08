@@ -27,6 +27,7 @@ class PreferencesDialog(QDialog):
         latency_ms: float,
         parent: QWidget | None = None,
         midi_inputs: list[str] | None = None,
+        midi_outputs: list[str] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Preferences")
@@ -36,7 +37,7 @@ class PreferencesDialog(QDialog):
         self.tabs = QTabWidget()
         self.pages: list[Page] = [
             AudioPage(self.prefs, latency_ms),
-            MidiPage(self.prefs, midi_inputs),
+            MidiPage(self.prefs, midi_inputs, midi_outputs),
             PathsPage(self.prefs),
             AppearancePage(self.prefs),
             EditingPage(self.prefs),

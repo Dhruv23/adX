@@ -31,6 +31,7 @@
 #include "engine/project/Pattern.h"
 #include "engine/project/Playlist.h"
 #include "engine/project/Resources.h"
+#include "engine/project/Session.h"
 
 namespace adx::project {
 
@@ -103,6 +104,8 @@ public:
     std::vector<Controller> controllers;
     /// Input routes and learned controls: the [MIDI] section (phase_9.md §3 step 2).
     MidiSettings midi;
+    /// Scenes, tracks and launchable clips: the [SESSION] section (phase_11.md §4.1).
+    SessionModel session;
 
     /// Everything the parser did not understand, carried so the writer can put it
     /// back. This is the one place the project layer depends on the format layer,

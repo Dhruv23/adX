@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Built 2026-10-30. Every automated §6 box observed locally on Debug, RelWithDebInfo and Release. **Not done:** CI (P9-0); MIDI latency, whose emulated half fails (P9-1, P9-9); ASIO's emulated half, not yet run (P9-4); the real-plugin and live-crash gates (P9-2, P9-3), agent-run since 2026-11-01 and closed by Phase 10.5's scenarios - see §10. Hardware halves are deferred to the final review |
+| **Status** | Done (hardware deferred) 2026-11-05. Every §6 box observed, the two hardware boxes by their emulated halves (`[~]`): MIDI latency under 10 ms in WASAPI exclusive mode (P9-9 fixed), and ASIO through FlexASIO over VB-Audio Virtual Cable (P9-4). Real plugins and the live crash (P9-2, P9-3) pass in CI's scenarios job. CI: per-push CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`. Hardware halves are in the final review |
 | **Governs** | VST3 and CLAP hosting, the plugin sandbox, MIDI device I/O, MIDI learn, clock sync, ASIO |
 | **FINAL_PLAN refs** | §5.6, §7 Phase 9, §8 (plugin hosting row), §10 ("the single largest risk") |
 | **Entry criteria** | [phase_8.md](phase_8.md) §6 complete |
@@ -335,21 +335,28 @@ assumes a global position, sync is contained rather than invasive.
 
 ## 6. Definition of done
 
-- [ ] `midi_roundtrip_latency` measured under 10 ms on real hardware, recorded. (hardware half)
-      **Emulated half run and failing (P9-1):** loopMIDI into the engine, measured to the
+- [~] `midi_roundtrip_latency` measured under 10 ms on real hardware, recorded. (hardware half)
+      **Emulated half passed 2026-11-05** in WASAPI exclusive mode
+      (`tools/measure_midi_latency.py --exclusive`, loopMIDI in, the device's own clock
+      out): median 5.91 ms at block 64 and 6.99 ms at block 128, 30 notes each, none
+      missed, 0 xruns (§10). Block 256 measures 12.49 ms: a 256-frame block alone is
+      5.3 ms, so a 10 ms note needs a small block. **Before (2026-10-30, P9-1):** loopMIDI into the engine, measured to the
       output mix, 67.75 to 74.24 ms median (§10); MIDI in is about 5 ms, the rest is
       shared-mode output (P9-9). It becomes `[~]` when that tool measures under 10 ms;
       it does not cover a keyboard's USB link or the device buffer after the mix. The
       hardware keyboard is deferred to the final review (FINAL_PLAN §9).
-- [ ] A VST3 instrument and a VST3 effect load, automate, save and reload
+- [x] A VST3 instrument and a VST3 effect load, automate, save and reload
       (FINAL_PLAN's stated gate), verified with at least three real third-party
       plugins as well as the fixture. **The fixture half is observed**
       (`plugin_state_roundtrip`, `plugin_instrument_plays`,
       `plugin_instrument_round_trips_through_text`, `plugin_latency_compensated`, all
       for VST3). **The three real plugins (P9-2)** are agent-run since 2026-11-01
       (FINAL_PLAN §9): pinned open-source plugins, fetched by hash, driven through the
-      GUI by `scenario_real_plugins` (phase_10.5.md §4.6).
-- [ ] A CLAP instrument and effect do the same. **The fixture half is observed**
+      GUI by `scenario_real_plugins` (phase_10.5.md §4.6). **Passed:** 16 of 16 locally
+      (Dexed, Surge XT and its Effects bundle, Airwindows Consolidated; VST3 and CLAP),
+      and in CI's `agent-run scenarios (Release, null audio, real plugins)` job, full
+      check run 42017826073.
+- [x] A CLAP instrument and effect do the same. **The fixture half is observed**
       (the same tests for CLAP, plus `plugin_params_automatable`); real plugins with
       P9-2.
 - [x] Every `adx_test_plugin` misbehavior mode is handled without taking down the
@@ -362,27 +369,34 @@ assumes a global position, sync is contained rather than invasive.
       (`plugin_malformed_state_handled`), a modal dialog on scan
       (`scanner_survives_dialog_on_scan`), NaN (`plugin_nan_is_contained`) - and a slow
       child (`watchdog_late_block_silences`).
-- [ ] A crashing plugin during playback does not interrupt playback of the rest
+- [x] A crashing plugin during playback does not interrupt playback of the rest
       of the project — shown in the running app, not only in a unit test. **In a test**
       (`watchdog_crash_bypasses`: the other channel bit-identical throughout, the
       hosted path dry after the crash). **Live (P9-3)** is agent-run since 2026-11-01:
       `scenario_live_plugin_crash` launches the app through `adX.cmd`, plays, turns
       `mode` to 1 through the GUI, and checks the notice, Restart, the capture and the
-      xrun count (phase_10.5.md §4.6).
-- [ ] ASIO works with a real interface, with the latency readout matching a
+      xrun count (phase_10.5.md §4.6). **Passed** locally (stand-in and WannaCry) and in
+      the full check's scenarios job, run 42017826073.
+- [~] ASIO works with a real interface, with the latency readout matching a
       measured loopback. (hardware half) **Built and enumerating** (`asio_device_enumeration`
       `[.device]`, `rtaudio_default_api_is_not_asio`). **Emulated half not yet run
       (P9-4):** FlexASIO over VB-Audio Virtual Cable, the readout against
       `tools/measure_latency.py` through `Engine(asio=True)`; it would not cover a real
       interface's own ASIO driver. The real interface is deferred to the final review
-      (FINAL_PLAN §9).
+      (FINAL_PLAN §9). **Emulated half passed 2026-11-05** (`tools/measure_latency.py
+      --asio`, FlexASIO 1.10b in shared mode over VB-Cable): takes land 0 samples from
+      the click at 64, 256 and 1024, and adX's readout is the driver's own split
+      (in 4096 / out 6144 at 1024, as FlexASIO's log returns them). It first showed
+      twice the round trip; fixed (§11). FlexASIO's own report undershoots the measured
+      loopback (its PortAudio estimate), which is why recording uses the calibration.
 - [x] MIDI learn works from the Phase 6 generic editor on both native and plugin
       parameters (`test_panel_midi_learn.py`: the menu entry, enabled, arms learn and
       binds the next control, on a Delay's parameter and on the fixture's `gain`; the
       engine side in `midi_learn_binds_and_persists`).
-- [ ] `headless_render_with_plugins` passes in CI. **Passes locally**
+- [x] `headless_render_with_plugins` passes in CI. **Passes locally**
       (`test_plugin_lifecycle.py::test_headless_render_with_plugins`, `adx render` with
-      no display); **CI is P9-0.**
+      no display), and in CI run 41991668112 (the job builds the host and the fixture
+      before pytest, so the test runs rather than skips).
 - [x] FINAL_PLAN.md §8 gains rows for the VST3 SDK, CLAP and RtMidi (and ASIO); §10
       Phase 9 row updated; the "may need its own plan document" note already points at
       this file.
@@ -580,6 +594,41 @@ hardware gate (P8-1) closed. §3 puts MIDI first because it is the low-risk half
 of it depends on the latency measurement except `midi_roundtrip_latency`, which is a
 hardware gate of its own.
 
+### 2026-11-05: closing the phase
+
+**CI (P9-0 closed).** per-push CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`; the scenarios job ran `scenario_real_plugins` and `scenario_live_plugin_crash` against the pinned plugins of `tools/test_plugins.toml`.
+
+**MIDI latency, exclusive mode (P9-9 fixed, P9-1 emulated half `[~]`).** loopMIDI running, `py -3.12 tools/measure_midi_latency.py --exclusive --notes 30`:
+
+```
+block    64: to the device median   5.91 ms, p95   7.02, max   7.48 (30 notes, 0 missed) [exclusive pcm24, device block 144, reported 6.00 ms, 0 xruns]
+block   128: to the device median   6.99 ms, p95   7.47, max   7.52 (30 notes, 0 missed) [exclusive pcm24, device block 144, reported 6.00 ms, 0 xruns]
+block   256: to the device median  12.49 ms, p95  13.09, max  13.18 (30 notes, 0 missed) [exclusive pcm24, device block 256, reported 10.67 ms, 0 xruns]
+```
+
+Shared mode measured 68-74 ms on the same device; exclusive mode is in Preferences > Audio. Not covered: a keyboard's USB link, and the DAC after the device clock.
+
+**ASIO (P9-4 emulated half `[~]`).** FlexASIO 1.10b installed (winget `dechamps.FlexASIO`), `%USERPROFILE%\FlexASIO.toml` with `backend = "Windows WASAPI"`, input `CABLE Output (VB-Audio Virtual Cable)`, output `CABLE Input (VB-Audio Virtual Cable)`, shared mode. `py -3.12 tools/measure_latency.py --asio --attempts 5`:
+
+```
+MOVED block    64: the loopback moved during the take (4768 then 5248 samples); not a judgement of adX
+PASS  block    64: reported  2239 samples (in 1056, out 1183), measured  5116, take offset +0 samples (+0.000 ms)
+MOVED block   256: the loopback moved during the take (4852 then 5332 samples); not a judgement of adX
+PASS  block   256: reported  2624 samples (in 1056, out 1568), measured  5344, take offset +0 samples (+0.000 ms)
+PASS  block  1024: reported 10240 samples (in 4096, out 6144), measured  8124, take offset +0 samples (+0.000 ms)
+```
+
+The virtual chain's delay moves while a stream runs (FlexASIO's PortAudio buffers resync to VB-Cable's clock: one 480-frame step in shared mode, several smaller ones in exclusive mode, with adX counting 0 xruns throughout), so the tool now calibrates again after each take and judges only a take whose loopback held still; a moved one is printed `MOVED` and retried. In exclusive mode every take moved, so the recorded run is shared mode. A real interface's driver has a fixed delay.
+
+**Checks on this tree (2026-11-05, local).** ctest `-LE slow`: Release 494/494; Debug
+493/494 under `-j 8`, the miss `snapshot_swap_between_blocks` (a Null-backend timing case
+that never touches RtAudio: its "still sounding" peak read 0.028 against 0.05 under load),
+which then passed 3 of 3 alone. pytest with `CI=1`: the parallel and serial sets pass.
+clang-tidy on the changed files clean in Debug and Release; clang-format, ruff, ruff format
+and `mypy --strict` clean. Launcher: `check_launcher: adX.cmd opened adX 0.1.0 - 24
+panels, audio device open`; played `single_tone.adx`, 48,896 frames, 0 xruns, quit cleanly.
+**Not yet in CI:** the RtAudioBackend fix needs a push.
+
 ## 11. Corrections made while executing this plan
 
 1. **The event rings in the shared region are plain arrays** (§4.3 sketched SpscRings).
@@ -643,3 +692,27 @@ hardware gate of its own.
 15. **Automatic clang-tidy fixes renamed the VST3 namespace aliases but not their uses**
     (and only `--fix-errors` applies anything under warnings-as-errors). Reviewed by hand,
     as the Phase 8 note on macro fixes advised.
+16. **A duplex RtAudio stream reported twice its round trip.** `getStreamLatency()` is
+    input plus output once an input is open, and `RtAudioBackend` used that sum as the
+    output latency and copied it to the input as well. Recording without a calibration
+    would have been compensated by a whole extra round trip. The sum is now split: from
+    the driver itself on ASIO (`ASIOGetLatencies`), evenly otherwise. Found by the
+    P9-4 run, where adX showed 8448 samples against FlexASIO's 4224.
+17. **A virtual loopback is not steady.** FlexASIO over VB-Cable moves its delay while
+    the stream runs, so `tools/measure_latency.py` calibrates after each take too and
+    retries a take whose loopback moved (`--attempts`), rather than reading the move as
+    an alignment error. The tool also gained `--asio`, and `Engine` its `asio` argument.
+18. **There was no MIDI note recording.** P9-6 asked for bend "on input recording"; a
+    keyboard could play but nothing kept what it played. MIDI takes (`record/MidiTake`)
+    log input at arrangement ticks on the audio thread and become a pattern through the
+    SMF importer, so a take bends exactly as an imported file does.
+19. **Clock pulses are placed by samples, not by interpolated ticks.** At 120 bpm a tick
+    is six frames, so interpolating the block's tick range put pulses two frames out at
+    block 64 (`midi_clock_out_through_the_engine`). They are placed through the tempo map.
+20. **A plugin's echo needs to say whose it is.** Without a gesture flag, a freshly loaded
+    plugin's value report and a user's turn of its knob looked alike (P10.5-2). The wire's
+    `WireParam` gained `flags`; CLAP gestures and VST3 `performEdit` set it.
+21. **A larger `EngineCore` overflowed a test's stack.** `RenderEngine` holds the core by
+    value and `decode_async_does_not_block` puts one on the stack; an 8192-entry take log
+    (128 KB) was too much in Debug. The log is 2048 entries, drained at UI rate.
+

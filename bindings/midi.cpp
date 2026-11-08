@@ -2,9 +2,11 @@
 // which channel live input plays. The engine owns the devices: an input's messages go
 // straight from the device thread into the engine's ring, never through Python.
 
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -12,6 +14,7 @@
 #include "bindings/Bindings.h"
 #include "bindings/EngineHandle.h"
 #include "engine/midi/MidiBackend.h"
+#include "engine/record/MidiTake.h"
 
 namespace py = pybind11;
 using adx::bindings::EngineHandle;
@@ -30,6 +33,7 @@ adx::midi::MidiDevices& devicesOf(EngineHandle& self) {
 
 } // namespace
 
+// NOLINTNEXTLINE(readability-function-size) - one .def per binding, nothing else.
 void defineEngineMidi(py::class_<EngineHandle>& engine) {
     engine
         // GIL: released - asks the MIDI service for its ports
@@ -79,5 +83,140 @@ void defineEngineMidi(py::class_<EngineHandle>& engine) {
             },
             py::arg("channel"),
             "The channel live MIDI input plays (0: none). Held notes release where they "
-            "started.");
+            "started.")
+        // GIL: released - asks the MIDI service for its ports
+        .def(
+            "midi_outputs",
+            [](EngineHandle& self) {
+                static_cast<void>(devicesOf(self));
+                const py::gil_scoped_release released;
+                return adx::midi::MidiDevices::outputs();
+            },
+            "The system's MIDI output ports, by name.")
+        .def(
+            "open_midi_output",
+            [](EngineHandle& self, const std::string& name) {
+                adx::midi::MidiDevices& devices = devicesOf(self);
+                std::string error;
+                bool ok = false;
+                {
+                    const py::gil_scoped_release released;
+                    ok = devices.openOutput(name, error);
+                }
+                if (!ok) {
+                    throw std::runtime_error(error);
+                }
+            },
+            py::arg("name"), "Open a MIDI output (P9-5): clock, time code and send_midi.")
+        .def(
+            "close_midi_output",
+            [](EngineHandle& self, const std::string& name) {
+                adx::midi::MidiDevices& devices = devicesOf(self);
+                const py::gil_scoped_release released;
+                devices.closeOutput(name);
+            },
+            py::arg("name"))
+        // GIL: trivial - copies a few names
+        .def_property_readonly("midi_outputs_opened",
+                               [](EngineHandle& self) {
+                                   return self.midi ? self.midi->openedOutputs()
+                                                    : std::vector<std::string>{};
+                               })
+        .def(
+            "send_midi",
+            [](EngineHandle& self, const std::string& name,
+               const std::vector<std::uint8_t>& bytes) {
+                adx::midi::MidiDevices& devices = devicesOf(self);
+                std::string error;
+                bool ok = false;
+                {
+                    const py::gil_scoped_release released;
+                    ok = devices.send(name, bytes, error);
+                }
+                if (!ok) {
+                    throw std::runtime_error(error);
+                }
+            },
+            py::arg("name"), py::arg("message"),
+            "Send one message to an open output now (a controller's LEDs, a script).")
+        // GIL: trivial - two atomic stores
+        .def(
+            "set_midi_sync",
+            [](EngineHandle& self, const std::string& name, bool clock, bool mtc) {
+                if (!devicesOf(self).setSync(name, clock, mtc)) {
+                    throw std::runtime_error("not open: " + name);
+                }
+            },
+            py::arg("name"), py::arg("clock") = true, py::arg("mtc") = false,
+            "Whether an open output is sent MIDI clock and MIDI time code (30 fps).")
+        // GIL: trivial - atomic loads
+        .def_property_readonly("midi_sync_counts",
+                               [](EngineHandle& self) {
+                                   py::dict out;
+                                   out["sent"] = self.midi ? self.midi->sent() : 0;
+                                   out["lost"] = self.midi ? self.midi->lostOut() : 0;
+                                   return out;
+                               })
+        // GIL: trivial - posts one message to the audio thread
+        .def(
+            "set_sync_follow",
+            [](EngineHandle& self, const std::string& source) {
+                adx::graph::SyncFollow follow = adx::graph::SyncFollow::None;
+                if (source == "clock") {
+                    follow = adx::graph::SyncFollow::Clock;
+                } else if (source == "mtc") {
+                    follow = adx::graph::SyncFollow::Mtc;
+                } else if (source != "none") {
+                    throw std::invalid_argument("follow 'none', 'clock' or 'mtc'");
+                }
+                self.engine->setSyncFollow(follow);
+            },
+            py::arg("source"),
+            "The arrangement follows incoming MIDI clock ('clock'), time code ('mtc'), or "
+            "neither ('none'), from any open input.")
+        // GIL: trivial - one atomic store
+        .def(
+            "record_midi",
+            [](EngineHandle& self, bool on) {
+                self.engine->core().setRecordingMidi(on);
+                if (on) {
+                    self.take.clear();
+                }
+            },
+            py::arg("on"),
+            "Log what MIDI inputs play while the arrangement rolls: a MIDI take (P9-6).")
+        // GIL: trivial - drains a ring into a vector
+        .def(
+            "drain_midi_take",
+            [](EngineHandle& self) {
+                adx::midi::TakeEvent event;
+                std::size_t got = 0;
+                while (self.engine->core().takeMidi(event)) {
+                    self.take.push_back(event);
+                    ++got;
+                }
+                return got;
+            },
+            "Move logged take messages off the audio thread; how many arrived. Call at UI "
+            "rate while recording, so the log never fills.")
+        .def_property_readonly("midi_take_size",
+                               [](const EngineHandle& self) { return self.take.size(); })
+        // GIL: trivial - a take is a few thousand messages, then one undo group
+        .def(
+            "commit_midi_take",
+            [](EngineHandle& self, adx::bindings::ProjectHandle& project, std::uint32_t channel,
+               std::int64_t origin, std::int64_t stop) {
+                adx::midi::TakeEvent event;
+                while (self.engine->core().takeMidi(event)) {
+                    self.take.push_back(event);
+                }
+                std::string name =
+                    adx::record::commitTake(self.take, origin, stop, adx::core::ChannelId{channel},
+                                            project.project, project.stack);
+                self.take.clear();
+                return name;
+            },
+            py::arg("project"), py::arg("channel"), py::arg("origin"), py::arg("stop"),
+            "The take as a pattern of `channel`'s notes from `origin`'s bar, on a new "
+            "playlist track, one undo step; its name, or '' when nothing was played.");
 }

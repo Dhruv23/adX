@@ -62,6 +62,25 @@ struct AutomationLane {
     [[nodiscard]] float valueAt(std::int64_t tick) const noexcept;
 };
 
+/// One filled session cell as the audio thread plays it (phase_11.md §4.4): the
+/// pattern's notes for the track's channel, in the pattern's own ticks from 0.
+struct SessionClip {
+    std::uint32_t track{0};
+    std::uint32_t row{0};
+    std::uint32_t channel{0};
+    EventTrack events;
+    /// The loop length in ticks.
+    std::int64_t length{0};
+    bool loop{true};
+    bool legato{false};
+    /// session::LaunchQuantize, already resolved (never Global).
+    std::uint8_t quantize{0};
+    /// session::FollowAction.
+    std::uint8_t follow{0};
+    std::uint8_t followRepeats{1};
+    float gain{1.0F};
+};
+
 struct Snapshot {
     /// The CommandStack revision this was built from.
     std::uint64_t revision{0};
@@ -114,6 +133,26 @@ struct Snapshot {
     std::span<const midi::MidiRoute> midiRoutes;
     /// Learned controls, compiled: device names resolved to slots.
     std::span<const midi::CompiledBinding> midiBindings;
+
+    /// The session (phase_11.md §4.4): its filled cells sorted by (track, row), the
+    /// grid's size, each row's scene tempo (0: none), each track's stop-on-empty, and
+    /// the bar the launch grid counts in (the meter at tick 0).
+    std::span<const SessionClip> sessionClips;
+    std::uint32_t sessionTracks{0};
+    std::uint32_t sessionRows{0};
+    std::span<const double> sceneTempo;
+    std::span<const std::uint8_t> trackStopOnEmpty;
+    std::span<const std::uint32_t> sessionChannels;
+    std::int64_t sessionBarTicks{3840 * 4};
+    /// The project seed's share in a Random follow action.
+    std::uint32_t sessionSeed{0};
+    /// The global launch quantize (session::LaunchQuantize, never Global): where a
+    /// scene's tempo takes over.
+    std::uint8_t sessionQuantize{4};
+
+    /// The cell at (track, row), or null. Binary search: a handful of cells per track.
+    [[nodiscard]] const SessionClip* sessionClip(std::uint32_t track,
+                                                 std::uint32_t row) const noexcept;
 
     /// What the reaper destroys when this snapshot retires: the storage that owns
     /// every span above, on the main thread. The audio thread copies it into the

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtCore import QPoint, Qt, QTimer, Signal
 from PySide6.QtWidgets import QHBoxLayout, QScrollArea, QSplitter, QToolBar, QVBoxLayout, QWidget
 
 from adx import dnd, engine_bridge
@@ -57,6 +57,11 @@ class MixerPanel(DockPanel):
         self.session = session
         self.selection = selection
         self.meters = MeterGeometry()
+        # Once a second, each hosted plugin's late blocks on its slot (P9-8).
+        self._health = QTimer(self)
+        self._health.setInterval(1000)
+        self._health.timeout.connect(self.refresh_plugin_health)
+        self._health.start()
         self.strips: list[MixerStrip] = []
         self._effects = [
             str(t["name"]) for t in engine_bridge.type_catalog() if t["kind"] == "effect"
@@ -243,6 +248,26 @@ class MixerPanel(DockPanel):
     def attach(self, clock: FrameClock) -> None:
         """Have the frame clock build this panel's meters in its one call per frame."""
         clock.meters = self.meters
+
+    def refresh_plugin_health(self) -> int:
+        """Every hosted plugin's late blocks and state on its slot button (P9-8); returns
+        how many slots show a warning."""
+        from adx.engine_bridge import Plugins
+
+        rows = {int(r["id"]): r for r in Plugins.instances()}
+        warned = 0
+        for strip in self.strips:
+            for row in strip.slots:
+                if not row.slot:
+                    continue
+                instance = self.session.engine.plugin_instance_of_slot(row.slot)
+                health = rows.get(instance) if instance else None
+                if health is None:
+                    continue
+                kind = row.button.text().split("  \u26a0")[0]
+                row.show_health(kind, int(health["late"]), str(health["state"]))
+                warned += int(bool(row.button.property("plugin_warn")))
+        return warned
 
     def frame(self, clock: FrameClock) -> None:
         """Upload the meters the frame clock just built: a Qt call, no engine call."""

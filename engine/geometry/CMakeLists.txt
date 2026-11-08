@@ -13,6 +13,7 @@ target_sources(adx_engine_static PRIVATE
     ScopeGeometry.cpp
     SpectrogramGeometry.cpp
     SpectrumGeometry.cpp
+    SessionGeometry.cpp
     StepGridGeometry.cpp
     VectorGeometry.cpp
     WaveformGeometry.cpp

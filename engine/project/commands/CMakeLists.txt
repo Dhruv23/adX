@@ -5,6 +5,7 @@ target_sources(adx_engine_static PRIVATE
     CommandStack.cpp
     EditNotes.cpp
     MidiCommands.cpp
+    SessionCommands.cpp
     MixerCommands.cpp
     NoteCommands.cpp
     PatchCommands.cpp

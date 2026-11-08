@@ -2,15 +2,18 @@
 the take will be moved back by.
 
 Arming starts a take on the playlist track the window names; disarming stops it and
-places it. The session does the transport itself (seek to the pre-roll, play, stop), so
-the toolbar holds nothing but the session between the two.
+places it. The MIDI button records what the keyboard plays into the channel it plays
+(STATE.md P9-6): a pattern of notes, bends in their pitch curves, on a new track; the
+Auto button writes automation from plugin editors (P9-7). The session does the transport
+itself (seek to the pre-roll, play, stop), so the toolbar holds nothing but the session
+between the two.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel, QSpinBox, QToolBar, QToolButton, QWidget
 
 from adx.engine_bridge import Engine, RecordSession
@@ -35,6 +38,7 @@ class RecordToolbar(QToolBar):
         punch_range: RangeProvider,
         directory: Callable[[], str],
         round_trip: Callable[[], int | None] = lambda: None,
+        midi_channel: Callable[[], int] = lambda: 0,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__("Record", parent)
@@ -46,6 +50,12 @@ class RecordToolbar(QToolBar):
         self._directory = directory
         self._round_trip = round_trip
         self.recording: RecordSession | None = None
+        self._midi_channel = midi_channel
+        #: The tick a MIDI take started at, while one is recording.
+        self.midi_origin: int | None = None
+        self._drain = QTimer(self)
+        self._drain.setInterval(50)
+        self._drain.timeout.connect(self._engine.drain_midi_take)
 
         self.arm = QToolButton()
         self.arm.setText("● Rec")
@@ -53,6 +63,26 @@ class RecordToolbar(QToolBar):
         self.arm.setToolTip("Record on the selected playlist track (Ctrl+R)")
         self.arm.toggled.connect(self._armed)
         self.addWidget(self.arm)
+        self.midi = QToolButton()
+        self.midi.setObjectName("record_midi")
+        self.midi.setText("● MIDI")
+        self.midi.setCheckable(True)
+        self.midi.setToolTip(
+            "Record the MIDI keyboard into the channel it plays: a new pattern on a new "
+            "playlist track, pitch bend kept in each note's pitch curve"
+        )
+        self.midi.toggled.connect(self._midi_armed)
+        self.addWidget(self.midi)
+        self.automation = QToolButton()
+        self.automation.setObjectName("write_automation")
+        self.automation.setText("● Auto")
+        self.automation.setCheckable(True)
+        self.automation.setToolTip(
+            "Write automation: turn a plugin's own controls while playing, and each one "
+            "becomes a lane in a new pattern when you turn this off"
+        )
+        self.automation.toggled.connect(self._automation_armed)
+        self.addWidget(self.automation)
         self.monitor = QComboBox()
         self.monitor.addItem("Direct monitoring", "direct")
         self.monitor.addItem("Software monitoring", "software")
@@ -103,6 +133,60 @@ class RecordToolbar(QToolBar):
             if region is not None:
                 settings["punch_in"], settings["punch_out"] = region
         return settings
+
+    def _automation_armed(self, on: bool) -> None:
+        project = self._session.project
+        if on:
+            if project is None:
+                self.message.emit("Write automation: no project open")
+                self.automation.blockSignals(True)
+                self.automation.setChecked(False)
+                self.automation.blockSignals(False)
+                return
+            self._engine.write_automation(True)
+            self.message.emit("Writing automation: move a plugin's controls while it plays")
+            return
+        name = self._engine.write_automation(False, project)
+        self._session.notify()
+        self.message.emit(
+            f"Automation written: {name}" if name else "Write automation: nothing moved"
+        )
+
+    def _midi_armed(self, on: bool) -> None:
+        if on:
+            self._start_midi()
+        else:
+            self._stop_midi()
+
+    def _start_midi(self) -> None:
+        if self._session.project is None or self._midi_channel() == 0:
+            self.message.emit("Record MIDI: select the channel the keyboard should play")
+            self.midi.blockSignals(True)
+            self.midi.setChecked(False)
+            self.midi.blockSignals(False)
+            return
+        self.midi_origin = self._engine.position_ticks()
+        self._engine.record_midi(True)
+        self._drain.start()
+        if self._engine.state() != "playing":
+            self._engine.play()
+        self.message.emit("Recording MIDI…")
+
+    def _stop_midi(self) -> None:
+        if self.midi_origin is None:
+            return
+        stop = self._engine.position_ticks()
+        self._engine.record_midi(False)
+        self._drain.stop()
+        project = self._session.project
+        origin, self.midi_origin = self.midi_origin, None
+        if project is None:
+            return
+        name = self._engine.commit_midi_take(project, self._midi_channel(), origin, stop)
+        self._session.notify()
+        self.message.emit(
+            f"MIDI take recorded: {name}" if name else "Record MIDI: nothing was played"
+        )
 
     def _armed(self, on: bool) -> None:
         if on:

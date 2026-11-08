@@ -4,6 +4,8 @@
 // Everything here that touches audio runs with the GIL released (Rule 3), and returns
 // paths and numbers rather than samples (Rule 2).
 
+#include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <stdexcept>
@@ -146,6 +148,7 @@ void registerFreezeAndAnalysis(py::module_& m);
 
 } // namespace
 
+// NOLINTNEXTLINE(readability-function-size) - one .def per binding, nothing else.
 void registerExportBindings(py::module_& m) {
     m.def(
         "export_project",
@@ -211,6 +214,56 @@ void registerExportBindings(py::module_& m) {
         py::arg("project"), py::arg("path"),
         "Import a Standard MIDI File into `project` as one undo step: a channel per track, "
         "one pattern of their notes placed at the start, its tempo, meter and markers.");
+    // GIL: trivial - builds a song from Python lists, then the import's commands
+    m.def(
+        "import_song",
+        [](adx::bindings::ProjectHandle& project, const py::dict& song, const std::string& name) {
+            adx::format::midi::MidiSong out;
+            for (const py::handle tempo : song["tempos"].cast<py::list>()) {
+                const auto pair = tempo.cast<py::tuple>();
+                out.tempos.push_back(adx::format::midi::MidiTempo{
+                    .at = pair[0].cast<std::int64_t>(), .bpm = pair[1].cast<double>()});
+            }
+            for (const py::handle track : song["tracks"].cast<py::list>()) {
+                const auto t = track.cast<py::dict>();
+                adx::format::midi::MidiTrack built;
+                built.name = t["name"].cast<std::string>();
+                for (const py::handle note : t["notes"].cast<py::list>()) {
+                    const auto n = note.cast<py::dict>();
+                    adx::format::midi::MidiNote made;
+                    made.start = n["start"].cast<std::int64_t>();
+                    made.length = std::max<std::int64_t>(1, n["length"].cast<std::int64_t>());
+                    made.pitch =
+                        static_cast<std::uint8_t>(std::clamp(n["pitch"].cast<int>(), 0, 127));
+                    made.velocity = static_cast<std::uint8_t>(std::clamp(
+                        n.contains("velocity") ? n["velocity"].cast<int>() : 100, 1, 127));
+                    if (n.contains("lyric")) {
+                        made.lyric = n["lyric"].cast<std::string>();
+                    }
+                    if (n.contains("bend")) {
+                        for (const py::handle point : n["bend"].cast<py::list>()) {
+                            const auto p = point.cast<py::tuple>();
+                            made.bend.push_back(adx::format::midi::MidiBend{
+                                .at = p[0].cast<std::int64_t>(),
+                                .cents = static_cast<std::int16_t>(
+                                    std::clamp(p[1].cast<int>(), -32000, 32000))});
+                        }
+                    }
+                    built.notes.push_back(std::move(made));
+                }
+                adx::format::midi::sortNotes(built.notes);
+                out.tracks.push_back(std::move(built));
+            }
+            py::dict result;
+            result["pattern"] = adx::format::midi::importSong(out, project.project, project.stack,
+                                                              name.empty() ? "Song" : name);
+            result["tracks"] = out.tracks.size();
+            return result;
+        },
+        py::arg("project"), py::arg("song"), py::arg("name") = "Song",
+        "Import a song described in Python - tempos [(tick, bpm)] and tracks [{name, notes: "
+        "[{start, length, pitch, velocity, lyric, bend: [(tick, cents)]}]}], adX ticks - as "
+        "one undo step, the way import_midi does (UST/USTX/VSQX, P9-6).");
     m.def(
         "export_midi",
         [](adx::bindings::ProjectHandle& project, const std::string& path) {

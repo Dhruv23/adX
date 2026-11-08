@@ -33,6 +33,11 @@ struct PluginBinding;
 struct ParamEcho {
     std::uint32_t index;
     float value;
+    /// Inside an edit gesture: the user's hand, not the plugin reporting itself.
+    bool gesture;
+    /// In the instance's first half second: a freshly loaded plugin telling adX what
+    /// it loaded (P10.5-2), unless it is a gesture.
+    bool settling;
 };
 
 enum class CoreResult : std::uint8_t {
@@ -99,6 +104,8 @@ private:
     bool m_offline{false};
     std::uint32_t m_sampleRate{48000};
     std::uint32_t m_generation{0};
+    /// Frames this instance (this generation of it) has played.
+    std::uint64_t m_played{0};
     bridge::LateCounter m_late;
     /// Per declared parameter: the plugin id, and the value last sent (NaN: never).
     rt::OwnedArray<std::uint32_t> m_ids;

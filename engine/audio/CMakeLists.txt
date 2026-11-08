@@ -13,6 +13,11 @@ target_sources(adx_engine_static PRIVATE
 # windows.h out of the rest of the tree (FINAL_PLAN non-goals: the engine stays
 # portable C++20 so macOS/Linux is later work, not a rewrite).
 target_link_libraries(adx_engine_static PRIVATE rtaudio)
+# RtAudioBackend asks an ASIO driver how its round trip divides (ASIOGetLatencies,
+# compiled into rtaudio with the ASIO host files).
+if(ADX_ENABLE_ASIO AND WIN32)
+    target_compile_definitions(adx_engine_static PRIVATE ADX_ASIO_COMPILED)
+endif()
 
 # WasapiExclusiveBackend talks to WASAPI itself; MMCSS for its thread is in avrt.
 if(WIN32)

@@ -141,7 +141,7 @@ void ProjectBuilder::place(std::string_view track, core::PatternId pattern, std:
                                               .start = core::Ticks{startBar * kBar},
                                               .length = core::Ticks{bars * kBar},
                                               .sourceOffset = core::Ticks{0},
-                                              .content = project::PatternRef{pattern},
+                                              .content = project::PatternRef{.pattern = pattern},
                                               .muted = false,
                                               .envelopes = {}});
 }

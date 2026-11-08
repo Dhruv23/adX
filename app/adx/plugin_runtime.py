@@ -20,6 +20,7 @@ from collections.abc import Callable
 from typing import Any
 
 from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtWidgets import QPushButton, QWidget
 
 from adx.engine_bridge import Engine, Plugins
 from adx.session import Session
@@ -163,6 +164,32 @@ class PluginRuntime(QObject):
         restarted = Plugins.restart(0)
         if restarted:
             self.report(f"Restarted {restarted} plugin process(es)")
+        return restarted
+
+
+class RestartButton(QPushButton):
+    """The crash notice's restart (P9-8): shown in the status bar when a plugin crashes,
+    restarting that instance with its last state; hidden again once it has."""
+
+    def __init__(self, runtime: PluginRuntime, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("plugin-restart-notice")
+        self.instance = 0
+        self.hide()
+        runtime.crashed.connect(self.offer)
+        self.clicked.connect(self.restart)
+
+    def offer(self, instance: int) -> None:
+        name = next((str(r["name"]) for r in Plugins.instances() if int(r["id"]) == instance), "")
+        self.instance = instance
+        self.setText(f"Restart {name}" if name else "Restart the plugin")
+        self.setToolTip("Bring the crashed plugin back with its last state")
+        self.show()
+
+    def restart(self) -> int:
+        restarted = Plugins.restart(self.instance) if self.instance else 0
+        self.instance = 0
+        self.hide()
         return restarted
 
 

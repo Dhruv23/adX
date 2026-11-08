@@ -2,12 +2,16 @@
 #include "engine/format/midi/MidiExporter.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <fstream>
 #include <tuple>
+#include <utility>
 #include <variant>
 
 #include "engine/format/mininotation/PatternCompiler.h"
+#include "engine/project/CurveCompile.h"
+#include "engine/project/EventCompile.h"
 #include "engine/project/Project.h"
 
 namespace adx::format::midi {
@@ -60,6 +64,67 @@ Event metaText(std::int64_t at, std::uint8_t type, std::string_view text) {
     return meta(at, type, data);
 }
 
+/// A pitch-bend message: `cents` within +-range semitones, 14 bits, centre 8192.
+std::vector<std::uint8_t> bendBytes(std::uint8_t channel, double cents, int semitones) {
+    const double unit = 8192.0 / (static_cast<double>(semitones) * 100.0);
+    const auto value =
+        static_cast<int>(std::clamp<long long>(std::llround(8192.0 + (cents * unit)), 0, 16383));
+    return {static_cast<std::uint8_t>(0xE0U | channel), static_cast<std::uint8_t>(value & 0x7F),
+            static_cast<std::uint8_t>((value >> 7) & 0x7F)};
+}
+
+/// The four controller messages of one RPN write: select, data entry MSB and LSB.
+void rpn(std::vector<Event>& events, std::uint8_t channel, std::uint8_t number, std::uint8_t msb,
+         std::uint8_t lsb) {
+    const auto cc = static_cast<std::uint8_t>(0xB0U | channel);
+    for (const auto& [control, value] : std::array<std::pair<std::uint8_t, std::uint8_t>, 4>{
+             {{101, 0}, {100, number}, {6, msb}, {38, lsb}}}) {
+        events.push_back(Event{.at = 0, .order = -1, .length = 0, .bytes = {cc, control, value}});
+    }
+}
+
+/// A note's pitch offset as bend points: every corner of its chain, and a point every
+/// kBendStep ticks along each straight segment, so a receiver stepping between them is
+/// within a few cents of the line.
+constexpr std::int64_t kBendStep = 60;
+
+std::vector<MidiBend> bendOf(const project::NoteExtras& extras, std::int64_t length) {
+    std::vector<MidiBend> out;
+    const std::vector<project::Knot> chain = project::pitchOffsetChain(extras);
+    if (chain.empty()) {
+        return out;
+    }
+    const auto add = [&](std::int64_t at, float cents) {
+        if (at < 0 || at >= length) {
+            return;
+        }
+        const auto value = static_cast<std::int16_t>(std::lround(cents));
+        if (!out.empty() && out.back().at == at) {
+            out.back().cents = value;
+            return;
+        }
+        if (!out.empty() && out.back().cents == value) {
+            return;
+        }
+        out.push_back(MidiBend{.at = at, .cents = value});
+    };
+    add(0, project::knotValueAt(chain.data(), chain.size(), 0));
+    for (std::size_t i = 0; i + 1 < chain.size(); ++i) {
+        const project::Knot& a = chain[i];
+        const project::Knot& b = chain[i + 1];
+        for (std::int64_t at = std::max<std::int64_t>(a.tick, 0); at < b.tick; at += kBendStep) {
+            const double t =
+                static_cast<double>(at - a.tick) / static_cast<double>(b.tick - a.tick);
+            add(at, static_cast<float>(a.value + ((b.value - a.value) * t)));
+        }
+        add(b.tick, b.value);
+    }
+    if (std::ranges::all_of(out, [](const MidiBend& p) { return p.cents == 0; })) {
+        out.clear();
+    }
+    return out;
+}
+
 /// Every note a pattern placement plays, in arrangement ticks: the snapshot builder's
 /// window rule - notes that start inside it, cut at its end.
 void placeNotes(const project::Project& project, const project::PlaylistItem& item,
@@ -81,11 +146,17 @@ void placeNotes(const project::Project& project, const project::PlaylistItem& it
                 continue;
             }
             const std::int64_t end = std::min(note.end().value, to);
-            byChannel[c].push_back(
-                MidiNote{.start = item.start.value + (note.start.value - from),
+            MidiNote out{.start = item.start.value + (note.start.value - from),
                          .length = std::max<std::int64_t>(end - note.start.value, 1),
                          .pitch = note.pitch,
-                         .velocity = std::max<std::uint8_t>(note.velocity, 1)});
+                         .velocity = std::max<std::uint8_t>(note.velocity, 1),
+                         .bend = {},
+                         .lyric = {}};
+            if (const project::NoteExtras* extras = clip.extrasFor(note.id)) {
+                out.bend = bendOf(*extras, out.length);
+                out.lyric = extras->lyric;
+            }
+            byChannel[c].push_back(std::move(out));
         }
     }
     const core::Ticks cycle = mini::cycleLength(project.tempo);
@@ -104,7 +175,9 @@ void placeNotes(const project::Project& project, const project::PlaylistItem& it
                     MidiNote{.start = on,
                              .length = off - on,
                              .pitch = realized.note.pitch,
-                             .velocity = std::max<std::uint8_t>(realized.note.velocity, 1)});
+                             .velocity = std::max<std::uint8_t>(realized.note.velocity, 1),
+                             .bend = {},
+                             .lyric = {}});
             }
         }
     }
@@ -162,10 +235,85 @@ MidiSong songOf(const project::Project& project) {
         next = static_cast<std::uint8_t>((next + 1) % 16);
         sortNotes(byChannel[c]);
         track.notes = std::move(byChannel[c]);
+        track.mpe =
+            std::ranges::any_of(track.notes, [](const MidiNote& n) { return !n.bend.empty(); });
+        if (track.mpe) {
+            song.warnings.push_back(
+                "\"" + track.name +
+                "\" bends, so it is written as an MPE zone on all 16 MIDI channels; "
+                "play it on a port of its own");
+        }
         song.tracks.push_back(std::move(track));
     }
     return song;
 }
+
+namespace {
+
+/// An MPE lower zone (MPE 1.0 §2): the manager is MIDI channel 1 (0 here), members 2-16
+/// (1-15), each set to kMpeBendSemitones. Each note takes the member channel that has
+/// been free longest, and its bend goes on that channel alone. More than fifteen notes
+/// at once share channels, and their bends with them: the one lossy case.
+void appendMpe(const MidiTrack& track, std::vector<Event>& events) {
+    constexpr std::uint8_t kManager = 0;
+    constexpr std::uint8_t kMembers = 15;
+    rpn(events, kManager, 6, kMembers, 0); // the MPE configuration message
+    for (std::uint8_t member = 1; member <= kMembers; ++member) {
+        rpn(events, member, 0, kMpeBendSemitones, 0);
+    }
+    std::array<std::int64_t, kMembers + 1> freeAt{};
+    std::array<std::int64_t, kMembers + 1> usedAt{};
+    for (const MidiNote& note : track.notes) {
+        std::uint8_t channel = 1;
+        bool free = false;
+        for (std::uint8_t m = 1; m <= kMembers; ++m) {
+            if (freeAt.at(m) <= note.start && (!free || usedAt.at(m) < usedAt.at(channel))) {
+                channel = m;
+                free = true;
+            }
+        }
+        if (!free) {
+            for (std::uint8_t m = 1; m <= kMembers; ++m) {
+                if (freeAt.at(m) < freeAt.at(channel)) {
+                    channel = m;
+                }
+            }
+        }
+        freeAt.at(channel) = std::max(freeAt.at(channel), note.start + note.length);
+        usedAt.at(channel) = note.start;
+        if (!note.lyric.empty()) {
+            events.push_back(metaText(note.start, 0x05, note.lyric));
+        }
+        // The bend the note starts with goes before its note-on; the rest during it.
+        const double first =
+            note.bend.empty() || note.bend.front().at > 0 ? 0.0 : note.bend.front().cents;
+        events.push_back(Event{.at = note.start,
+                               .order = 1,
+                               .length = note.length,
+                               .bytes = bendBytes(channel, first, kMpeBendSemitones)});
+        events.push_back(Event{
+            .at = note.start,
+            .order = 2,
+            .length = note.length,
+            .bytes = {static_cast<std::uint8_t>(0x90U | channel), note.pitch, note.velocity}});
+        for (const MidiBend& point : note.bend) {
+            if (point.at > 0) {
+                events.push_back(
+                    Event{.at = note.start + point.at,
+                          .order = 3,
+                          .length = 0,
+                          .bytes = bendBytes(channel, point.cents, kMpeBendSemitones)});
+            }
+        }
+        events.push_back(
+            Event{.at = note.start + note.length,
+                  .order = 0,
+                  .length = 0,
+                  .bytes = {static_cast<std::uint8_t>(0x80U | channel), note.pitch, 64}});
+    }
+}
+
+} // namespace
 
 std::vector<std::uint8_t> writeMidi(const MidiSong& song) {
     ByteWriter out;
@@ -201,8 +349,16 @@ std::vector<std::uint8_t> writeMidi(const MidiSong& song) {
     for (const MidiTrack& track : song.tracks) {
         std::vector<Event> events;
         events.push_back(metaText(0, 0x03, track.name));
+        if (track.mpe) {
+            appendMpe(track, events);
+            appendTrack(out, events);
+            continue;
+        }
         for (const MidiNote& note : track.notes) {
             const auto channel = static_cast<std::uint8_t>(track.channel & 0x0FU);
+            if (!note.lyric.empty()) {
+                events.push_back(metaText(note.start, 0x05, note.lyric));
+            }
             events.push_back(Event{
                 .at = note.start,
                 .order = 1,

@@ -1,6 +1,7 @@
 """Live MIDI in the window (phase_9.md 4.1): the inputs the preferences name are opened
 at start, and whatever channel is selected is the one a keyboard plays - as in a
-channel rack, where the selected row is the one under your fingers.
+channel rack, where the selected row is the one under your fingers. Outputs, MIDI
+clock and time code out, and following another device's clock are P9-5's.
 
 The notes themselves never pass through Python: the device thread timestamps them into
 the engine's ring and the audio thread places them sample-accurately (MidiInput.h).
@@ -61,6 +62,47 @@ class LiveMidi:
             return list(wanted)
         self.follow()
         return failed
+
+    def available_outputs(self) -> list[str]:
+        """The system's MIDI outputs; empty when there is no MIDI service (or none)."""
+        try:
+            return self.engine.midi_outputs()
+        except RuntimeError:
+            return []
+
+    def apply_outputs(
+        self, wanted: list[str], clock: bool, mtc: bool, follow: str = "none"
+    ) -> list[str]:
+        """Open exactly the outputs in ``wanted`` that exist, send each the clock and time
+        code asked for, and set what the arrangement follows; return the ones that failed."""
+        failed: list[str] = []
+        try:
+            opened = set(self.engine.midi_outputs_opened)
+            for name in opened - set(wanted):
+                self.engine.close_midi_output(name)
+            for name in wanted:
+                if name not in opened:
+                    try:
+                        self.engine.open_midi_output(name)
+                    except RuntimeError as error:
+                        failed.append(name)
+                        self.report(f"MIDI out: {error}")
+                        continue
+                self.engine.set_midi_sync(name, clock, mtc)
+            self.engine.set_sync_follow(follow if follow in ("clock", "mtc") else "none")
+        except RuntimeError as error:
+            self.report(f"MIDI out: {error}")
+            return list(wanted)
+        return failed
+
+    def send(self, name: str, message: bytes | list[int]) -> bool:
+        """One message to an open output now (a controller's LEDs); False if it failed."""
+        try:
+            self.engine.send_midi(name, message)
+        except RuntimeError as error:
+            self.report(f"MIDI out: {error}")
+            return False
+        return True
 
     def follow(self) -> None:
         """Point live input at the selected channel; with none selected, keep the last

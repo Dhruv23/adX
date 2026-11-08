@@ -88,6 +88,76 @@ class MidiOut:
         self.close()
 
 
+#: winmm's MIM_DATA: a short message arrived.
+_MIM_DATA = 0x3C3
+_CALLBACK_FUNCTION = 0x30000
+_MidiInProc = (
+    ctypes.WINFUNCTYPE(
+        None, ctypes.c_void_p, ctypes.c_uint, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t
+    )
+    if sys.platform == "win32"
+    else None
+)
+
+
+class MidiIn:
+    """A winmm input, found by a part of its name: every short message it receives,
+    with its arrival time, in a list a reader drains (``take``). loopMIDI lets this and
+    the app open the same port at once."""
+
+    def __init__(self, port: str) -> None:
+        import threading
+
+        self._winmm = _winmm()
+        inputs = ports()["inputs"]
+        matches = [i for i, name in enumerate(inputs) if port.lower() in name.lower()]
+        if not matches:
+            raise MidiError(f"no MIDI input like {port!r} (inputs: {', '.join(inputs) or 'none'})")
+        self.name = inputs[matches[0]]
+        self._lock = threading.Lock()
+        self._received: list[tuple[float, bytes]] = []
+
+        def proc(_handle: object, message: int, _instance: int, param1: int, _p2: int) -> None:
+            if message != _MIM_DATA:
+                return
+            status = param1 & 0xFF
+            size = 2 if status & 0xF0 in (0xC0, 0xD0) else 3
+            data = bytes((param1 >> (8 * i)) & 0xFF for i in range(size))
+            with self._lock:
+                self._received.append((time.perf_counter(), data))
+
+        assert _MidiInProc is not None
+        self._proc = _MidiInProc(proc)  # kept: winmm calls it from its own thread
+        self._handle = ctypes.c_void_p()
+        opened = self._winmm.midiInOpen(
+            ctypes.byref(self._handle),
+            matches[0],
+            ctypes.cast(self._proc, ctypes.c_void_p),
+            None,
+            _CALLBACK_FUNCTION,
+        )
+        if opened != 0:
+            raise MidiError(f"could not open MIDI input {self.name!r}")
+        self._winmm.midiInStart(self._handle)
+
+    def take(self) -> list[tuple[float, bytes]]:
+        """Everything received since the last take, oldest first."""
+        with self._lock:
+            out, self._received = self._received, []
+        return out
+
+    def close(self) -> None:
+        self._winmm.midiInStop(self._handle)
+        self._winmm.midiInReset(self._handle)
+        self._winmm.midiInClose(self._handle)
+
+    def __enter__(self) -> MidiIn:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.close()
+
+
 _STATUS = {
     "note_off": 0x80,
     "note_on": 0x90,

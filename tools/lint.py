@@ -43,6 +43,8 @@ RT_PATHS = (
     "engine/transport",
     "engine/instruments",
     "engine/effects",
+    # Phase 11: launch scheduling and clip runtime run on the audio thread.
+    "engine/session",
 )
 
 #: FINAL_PLAN 9: "Headers declare; implementation files implement. No 500-line
@@ -193,12 +195,18 @@ def cmd_format(args: argparse.Namespace) -> int:
 
     flags = ["--dry-run", "--Werror"] if args.check else ["-i"]
     command = [str(clang_format), "--style=file:" + str(REPO_ROOT / ".clang-format"), *flags]
-    result = subprocess.run(
-        [*command, *(str(path) for path in files)],
-        cwd=REPO_ROOT,
-        check=False,
-    )
-    if result.returncode != 0:
+    # In batches, by relative path: every file on one command line passes Windows'
+    # 32,767-character limit once the tree has a few hundred sources (WinError 206).
+    paths = [_relative(path) for path in files]
+    failed = False
+    for start in range(0, len(paths), 100):
+        result = subprocess.run(
+            [*command, *paths[start : start + 100]],
+            cwd=REPO_ROOT,
+            check=False,
+        )
+        failed = failed or result.returncode != 0
+    if failed:
         return _fail(
             "formatting differs from .clang-format. Fix it with: python tools/lint.py format"
         )

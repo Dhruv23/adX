@@ -342,8 +342,30 @@ EventView Scheduler::eventsFor(const NodeStep& step, project::Snapshot& snapshot
     for (const AuditionEvent& audition : m_audition) {
         auditions += inPiece(audition) ? 1U : 0U;
     }
+    // Launched clips on this channel (SessionLane), each walked on its own source.
+    std::array<const SessionLane*, kMaxLanesPerChannel> lanes{};
+    std::array<EventRange, kMaxLanesPerChannel> laneRanges{};
+    std::uint32_t laneCount = 0;
+    std::uint32_t laneEvents = 0;
+    for (const SessionLane& lane : m_lanes) {
+        if (lane.channel != channel || channel == kNone || lane.track == nullptr ||
+            lane.cursor == nullptr) {
+            continue;
+        }
+        if (laneCount == lanes.size()) {
+            ++stats.lanesDropped;
+            continue;
+        }
+        const transport::TimeSource& laneTime = transport.get(transport::TimeSourceId{lane.source});
+        const bool laneWrapped = lane.source < m_wrapPending.size() && m_wrapPending[lane.source];
+        laneRanges.at(laneCount) =
+            advance(stats, laneTime, *lane.track, *lane.cursor, frames, laneWrapped);
+        // Its events, and up to three of its own: a release, a wrap, a stop.
+        laneEvents += (laneRanges.at(laneCount).end - laneRanges.at(laneCount).begin) + 3;
+        lanes.at(laneCount++) = &lane;
+    }
     const std::uint32_t special = (release ? 1U : 0U) + (wrapped ? 1U : 0U) + auditions;
-    const std::uint32_t count = (range.end - range.begin) + special;
+    const std::uint32_t count = (range.end - range.begin) + special + laneEvents;
     if (count == 0) {
         return {};
     }
@@ -410,7 +432,76 @@ EventView Scheduler::eventsFor(const NodeStep& step, project::Snapshot& snapshot
         }
         events[at] = placed;
     }
+    for (std::uint32_t l = 0; l < laneCount; ++l) {
+        written =
+            fillLane(stats, transport, *lanes.at(l), laneRanges.at(l), frames, events, written);
+    }
+    if (laneCount > 0) {
+        // Each lane is sorted, the arrangement and auditions are: one stable insertion
+        // pass puts the whole in offset order, as a node expects. No allocation.
+        for (std::uint32_t i = specials + 1; i < written; ++i) {
+            const BlockEvent moving = events[i];
+            std::uint32_t at = i;
+            while (at > specials && events[at - 1].offset > moving.offset) {
+                events[at] = events[at - 1];
+                --at;
+            }
+            events[at] = moving;
+        }
+    }
     return EventView{events.data(), written};
+}
+
+std::uint32_t Scheduler::fillLane(SchedulerStats& stats, transport::TransportSet& transport,
+                                  const SessionLane& lane, EventRange range, std::uint32_t frames,
+                                  std::span<BlockEvent> events,
+                                  std::uint32_t written) const noexcept {
+    const transport::TimeSource& time = transport.get(transport::TimeSourceId{lane.source});
+    const auto own = [&](BlockEventKind kind, std::uint32_t offset, std::int64_t endTick) {
+        events[written++] = BlockEvent{.offset = offset,
+                                       .noteId = 0,
+                                       .instance = 0,
+                                       .timeSource = lane.source,
+                                       .endTick = endTick,
+                                       .value = 0.0F,
+                                       .duration = 0,
+                                       .kind = kind,
+                                       .pitch = 0,
+                                       .velocity = 0};
+    };
+    if (lane.source < m_releasePending.size() && m_releasePending[lane.source]) {
+        own(BlockEventKind::ReleaseAll, 0, 0);
+    }
+    if (lane.source < m_wrapPending.size() && m_wrapPending[lane.source]) {
+        own(BlockEventKind::LoopWrap, 0, time.loop().end.value);
+    }
+    const std::uint32_t begin = written;
+    written = fill(stats, time, lane.source, *lane.track, range, events, written);
+    if (lane.gain != 1.0F) {
+        for (std::uint32_t i = begin; i < written; ++i) {
+            if (events[i].kind == BlockEventKind::NoteOn) {
+                events[i].velocity = project::scaledVelocity(events[i].velocity, lane.gain);
+            }
+        }
+    }
+    if (lane.stopAt != SessionLane::kNoStop) {
+        // Stopped inside this block: nothing at or after the stop plays, and the
+        // clip's own voices release there (a release, never a cut: §4.5).
+        const bool earlier = lane.stopAt < m_pieceStart;
+        const std::uint32_t cut = earlier ? 0 : lane.stopAt - m_pieceStart;
+        std::uint32_t kept = begin;
+        for (std::uint32_t i = begin; i < written; ++i) {
+            if (events[i].offset < cut) {
+                events[kept++] = events[i];
+            }
+        }
+        written = kept;
+        if (!earlier && cut < frames) {
+            own(BlockEventKind::ReleaseAll, cut, 0);
+        }
+    }
+    stats.laneEvents += written - begin;
+    return written;
 }
 
 void Scheduler::applyAutomation(project::Snapshot& snapshot,
@@ -546,6 +637,7 @@ void Scheduler::runPiece(project::Snapshot& snapshot, transport::TransportSet& t
         ProcessContext context =
             contextFor(step, ports, snapshot, transport, arena, inputs, outputs, events, automation,
                        offset, frames, m_input, m_inputChannels);
+        context.sounding = m_sounding.data();
         if (profiling && stepIndex < NodeProfile::kSteps) {
             const auto began = std::chrono::steady_clock::now();
             step.node->process(context);
@@ -716,6 +808,7 @@ void Scheduler::runParallelStep(std::uint32_t stepIndex, std::uint32_t lane) noe
     ProcessContext context =
         contextFor(step, ports, snapshot, transport, arena, inputs, outputs, events, automation,
                    offset, frames, m_input, m_inputChannels);
+    context.sounding = m_sounding.data();
     step.node->process(context);
     if (float value = 0.0F;
         step.modulates < snapshot.params.size() && step.node->modulation(value)) {

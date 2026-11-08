@@ -2,6 +2,8 @@
 #include "engine/plugin/ProjectSync.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -11,6 +13,7 @@
 #include "engine/plugin/PluginInstrument.h"
 #include "engine/plugin/PluginNode.h"
 #include "engine/plugin/StateBlob.h"
+#include "engine/project/AutomationWriter.h"
 #include "engine/project/ParamRegistry.h"
 #include "engine/project/Project.h"
 #include "engine/project/commands/ChannelCommands.h"
@@ -79,8 +82,17 @@ std::size_t syncPluginStates(render::RenderEngine& engine, project::Project& pro
     return changed;
 }
 
+bool echoIsEdit(const ParamEcho& echo, double stored) noexcept {
+    if (!std::isnan(stored) && std::abs(static_cast<double>(echo.value) - stored) <=
+                                   1e-6 * std::max(1.0, std::abs(stored))) {
+        return false; // what the project already says
+    }
+    return echo.gesture || !echo.settling;
+}
+
 std::size_t applyPluginEchoes(render::RenderEngine& engine, project::Project& project,
-                              project::CommandStack& stack) {
+                              project::CommandStack& stack, project::AutomationWriter* writer,
+                              std::int64_t tick) {
     std::size_t applied = 0;
     // Slot ids and channel ids first: the commands below may move the vectors.
     std::vector<core::SlotId> slots;
@@ -106,16 +118,29 @@ std::size_t applyPluginEchoes(render::RenderEngine& engine, project::Project& pr
             if (key.empty() || slot == nullptr) {
                 continue;
             }
+            const auto found = std::ranges::find(slot->params, key, &project::SlotParam::name);
+            if (!echoIsEdit(echo, found != slot->params.end()
+                                      ? found->value
+                                      : std::numeric_limits<double>::quiet_NaN())) {
+                continue;
+            }
+            if (found == slot->params.end()) {
+                stack.execute(std::make_unique<project::SetSlotValue>(id, key, echo.value),
+                              project);
+            }
+            slot = project.mixer.findSlot(id);
             const auto match = std::ranges::find(slot->params, key, &project::SlotParam::name);
             if (match != slot->params.end()) {
                 const project::ParamRef ref{
                     .owner = id.value,
                     .index = static_cast<std::uint16_t>(match - slot->params.begin()),
                     .kind = project::ParamKind::SlotParam};
-                static_cast<void>(engine.setParam(project, stack, ref, echo.value));
-            } else {
-                stack.execute(std::make_unique<project::SetSlotValue>(id, key, echo.value),
-                              project);
+                if (found != slot->params.end()) {
+                    static_cast<void>(engine.setParam(project, stack, ref, echo.value));
+                }
+                if (writer != nullptr && echo.gesture) {
+                    writer->add(ref, tick, echo.value);
+                }
             }
             ++applied;
         }
@@ -129,6 +154,19 @@ std::size_t applyPluginEchoes(render::RenderEngine& engine, project::Project& pr
             if (key.empty() || channel == nullptr) {
                 continue;
             }
+            const auto found =
+                std::ranges::find(channel->instrument.params, key, &project::ParamValue::name);
+            if (!echoIsEdit(echo, found != channel->instrument.params.end()
+                                      ? static_cast<double>(found->value)
+                                      : std::numeric_limits<double>::quiet_NaN())) {
+                continue;
+            }
+            const bool known = found != channel->instrument.params.end();
+            if (!known) {
+                stack.execute(std::make_unique<project::SetChannelParam>(id, key, echo.value),
+                              project);
+            }
+            channel = project.find(id);
             const auto& values = channel->instrument.params;
             const auto match = std::ranges::find(values, key, &project::ParamValue::name);
             if (match != values.end()) {
@@ -136,10 +174,12 @@ std::size_t applyPluginEchoes(render::RenderEngine& engine, project::Project& pr
                                             .index =
                                                 static_cast<std::uint16_t>(match - values.begin()),
                                             .kind = project::ParamKind::ChannelInstrumentParam};
-                static_cast<void>(engine.setParam(project, stack, ref, echo.value));
-            } else {
-                stack.execute(std::make_unique<project::SetChannelParam>(id, key, echo.value),
-                              project);
+                if (known) {
+                    static_cast<void>(engine.setParam(project, stack, ref, echo.value));
+                }
+                if (writer != nullptr && echo.gesture) {
+                    writer->add(ref, tick, echo.value);
+                }
             }
             ++applied;
         }

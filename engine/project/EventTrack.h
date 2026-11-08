@@ -62,6 +62,20 @@ struct ScheduledEvent {
 };
 
 static_assert(std::is_trivially_copyable_v<ScheduledEvent>);
+
+/// A note-on's velocity scaled by a clip's gain: a session cell's, a pad press's, or a
+/// placement's (PatternRef::gain). One function for all three, so a performance and the
+/// arrangement it records into land on the same velocity. 0 stays 0 (a note-off).
+[[nodiscard]] constexpr std::uint8_t scaledVelocity(std::uint8_t velocity, float gain) noexcept {
+    if (velocity == 0 || gain == 1.0F) {
+        return velocity;
+    }
+    const float scaled = (static_cast<float>(velocity) * gain) + 0.5F;
+    if (scaled < 1.0F) {
+        return 1;
+    }
+    return scaled >= 127.0F ? std::uint8_t{127} : static_cast<std::uint8_t>(scaled);
+}
 // The per-block walk touches every event in a block; two to a cache line.
 static_assert(sizeof(ScheduledEvent) == 32);
 

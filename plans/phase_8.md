@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Built 2026-10-29. Every automated §6 box observed locally on Debug, RelWithDebInfo and Release; the latency gate half checked on a virtual cable (P8-1, hardware half in the final review). **Not done:** CI (P8-0) - see §10. Done (hardware deferred) once CI is green |
+| **Status** | Done (hardware deferred) 2026-11-05. Every §6 box observed: locally on Debug, RelWithDebInfo and Release, and in CI (per-push CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`, whose `three-builds` jobs are `three_clean_builds_identical`). The latency gate is `[~]` (P8-1); its hardware half is in the final review |
 | **Governs** | recording, clip editing, time-stretch/warp, the full export matrix, stems, bundling, MIDI I/O, `adx render` |
 | **FINAL_PLAN refs** | §3.1 (ExportRenderer, MidiImporter, AudioClipProcessor, BpmDetector), §5.5, §5.7, §5.6 MIDI file I/O, §7 Phase 8, §9 golden hashes |
 | **Entry criteria** | [phase_7.md](phase_7.md) §7 complete |
@@ -309,7 +309,7 @@ dependencies. FINAL_PLAN §8's table gains a row when this phase starts.
 ## 6. Definition of done
 
 - [x] `golden_all_formats` passes. Locally, all three configurations (§10).
-- [ ] `three_clean_builds_identical` passes. The job exists (`full-check.yml`, `three-builds`, §11 19) and has not run: it runs on the `phase-8` tag (P8-0).
+- [x] `three_clean_builds_identical` passes. In CI: full check run 42017826073 (tag `phase-10.5-r4`, which carries this phase's code), all three `clean build N of 3, identical corpus (Release)` jobs green.
 - [x] `stems_sum_to_master` passes, including on a fixture with sidechains (`sidechain_duck.adx`; waveshapers bypassed, §11 3).
 - [~] `record_latency_alignment` passes on real hardware at 3 buffer sizes, with
       the measured offsets recorded in the phase log. **Half checked (P8-1):** the
@@ -318,7 +318,7 @@ dependencies. FINAL_PLAN §8's table gains a row when this phase starts.
       The physical loopback (`py -3.12 tools/measure_latency.py`, §11 20) is deferred to
       the final review (FINAL_PLAN §9; STATE.md "Final review").
 - [x] `freeze_is_transparent` passes bit-identically.
-- [x] `adx render` works headless with no Qt import (`render_cli` asserts no PySide6 module is loaded). In CI once P8-0 runs.
+- [x] `adx render` works headless with no Qt import (`render_cli` asserts no PySide6 module is loaded). In CI too: run 41991668112.
 - [x] The `docs/examples/` corpus is self-contained — no sample reference
       resolves into `_archive/` (`docs/examples/samples/`).
 - [x] libvorbis justified in FINAL_PLAN §8 before it is added.
@@ -366,6 +366,8 @@ Phase 9 inherits:
 ---
 
 ## 10. Evidence
+
+**CI, 2026-11-05 (P8-0 closed).** Phase 8 was first pushed together with Phases 9 to 10.5 (`1b40bf5` onward). Per-push CI green on all three configurations, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`: clang-tidy over every file in Debug and Release, the 10-minute fuzz, the MSI job, the scenarios job, and the three clean Release builds with identical corpus hashes (`three_clean_builds_identical`). No `phase-8` tag was pushed: the tag that ran the full check sits on a later commit containing all of this phase's code.
 
 Observed locally, 2026-10-29, on the final tree unless said otherwise:
 

@@ -8,6 +8,8 @@ pybind11_add_module(adx_engine MODULE
     export.cpp
     format.cpp
     generate.cpp
+    live.cpp
+    pads.cpp
     geometry.cpp
     meters.cpp
     midi.cpp

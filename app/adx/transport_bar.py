@@ -1,5 +1,7 @@
 """The transport bar: undo and redo, return to start, play, stop, record, loop, tempo,
-position, metronome.
+position, metronome - and the performer's controls (phase_11.md 4.8): tap tempo, tempo
+nudge (held: the rate moves while the button is down and returns exactly when let go),
+and arming the performance recording.
 
 Every button is one engine call; the position display reads the frame clock (one engine
 call a frame, shared with the meters and the playhead) and never calls the engine
@@ -15,7 +17,7 @@ from collections.abc import Callable
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QDoubleSpinBox, QLabel, QToolBar, QWidget
+from PySide6.QtWidgets import QDoubleSpinBox, QLabel, QToolBar, QToolButton, QWidget
 
 from adx.engine_bridge import PPQ
 
@@ -39,6 +41,12 @@ class TransportBar(QToolBar):
     loop_toggled = Signal(bool)
     tempo_changed = Signal(float)
     metronome_toggled = Signal(bool)
+    #: A tap of tap tempo.
+    tap_requested = Signal()
+    #: A nudge held (+1 faster, -1 slower) or let go (0).
+    nudge_changed = Signal(int)
+    #: The performance recording armed or disarmed.
+    perform_record_toggled = Signal(bool)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__("Transport", parent)
@@ -86,6 +94,39 @@ class TransportBar(QToolBar):
         self.addWidget(self.tempo)
         self.addAction(self.metronome_action)
         self.addSeparator()
+        self.tap = QToolButton()
+        self.tap.setObjectName("transport-tap")
+        self.tap.setText("Tap")
+        self.tap.setToolTip("Tap tempo: four taps set the tempo every clip runs at")
+        self.tap.pressed.connect(self.tap_requested)
+        self.nudge_down = QToolButton()
+        self.nudge_down.setObjectName("transport-nudge-down")
+        self.nudge_down.setText("◀◀")
+        self.nudge_down.setToolTip("Hold to slow everything 4 %; it returns when let go")
+        self.nudge_down.pressed.connect(lambda: self.nudge_changed.emit(-1))
+        self.nudge_down.released.connect(lambda: self.nudge_changed.emit(0))
+        self.nudge_up = QToolButton()
+        self.nudge_up.setObjectName("transport-nudge-up")
+        self.nudge_up.setText("▶▶")
+        self.nudge_up.setToolTip("Hold to speed everything up 4 %; it returns when let go")
+        self.nudge_up.pressed.connect(lambda: self.nudge_changed.emit(1))
+        self.nudge_up.released.connect(lambda: self.nudge_changed.emit(0))
+        self.rate = QLabel("x1.000")
+        self.rate.setObjectName("transport-rate")
+        self.rate.setToolTip("The master rate the session runs at")
+        self.perform_action = QAction("● Perform", self, checkable=True)
+        self.perform_action.setObjectName("transport-perform")
+        self.perform_action.setToolTip(
+            "Record the session performance; let go to write it into the arrangement"
+        )
+        self.perform_action.toggled.connect(self.perform_record_toggled)
+        for widget in (self.tap, self.nudge_down, self.nudge_up, self.rate):
+            self.addWidget(widget)
+        self.addAction(self.perform_action)
+        button = self.widgetForAction(self.perform_action)
+        if button is not None:
+            button.setObjectName("transport-perform")
+        self.addSeparator()
         self.position = QLabel(format_position(0, 4, 4, 0.0))
         self.position.setObjectName("position")
         self.addWidget(self.position)
@@ -109,6 +150,12 @@ class TransportBar(QToolBar):
         self._quiet = True
         self.tempo.setValue(bpm)
         self._quiet = False
+
+    def show_rate(self, rate: float) -> None:
+        """The session's master rate, as the performer last left it."""
+        text = f"x{rate:.3f}"
+        if self.rate.text() != text:
+            self.rate.setText(text)
 
     def set_playing(self, playing: bool) -> None:
         """Flip the play button's label."""

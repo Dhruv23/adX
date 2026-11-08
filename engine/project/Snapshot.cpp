@@ -1,6 +1,7 @@
 #include "engine/project/Snapshot.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace adx::project {
 
@@ -44,6 +45,14 @@ float AutomationLane::valueAt(std::int64_t tick) const noexcept {
     const auto span = static_cast<double>(to.tick - from.tick);
     const auto t = static_cast<float>(static_cast<double>(tick - from.tick) / span);
     return core::interpolate(from.curve, from.value, to.value, t);
+}
+
+const SessionClip* Snapshot::sessionClip(std::uint32_t track, std::uint32_t row) const noexcept {
+    const auto found =
+        std::ranges::lower_bound(sessionClips, std::pair{track, row}, {},
+                                 [](const SessionClip& c) { return std::pair{c.track, c.row}; });
+    return found != sessionClips.end() && found->track == track && found->row == row ? &*found
+                                                                                     : nullptr;
 }
 
 } // namespace adx::project

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Not started |
+| **Status** | In progress (started 2026-11-06) |
 | **Governs** | `engine/session/`, the session view, launch scheduling, pad mapping, performance recording |
 | **FINAL_PLAN refs** | §1 (live performance is in scope), §5.11 in full, §7 Phase 3 checkpoint, §7 Phase 11, §10 |
 | **Entry criteria** | [phase_10.md](phase_10.md) §7 complete — **including `bench_full_project`**, which is a hard prerequisite, not a soft one — and [phase_10.5.md](phase_10.5.md) §6 complete (the driver, capture and glitch detector this phase's gates are written against) |
@@ -405,11 +405,11 @@ FINAL_PLAN §7's gate, unpacked:
 > recorded performance reopens as an editable arrangement that renders
 > identically to what was heard.
 
-- [ ] `performance_record_roundtrip` passes **bit-identically**.
-- [ ] `live_set_no_dropouts` passes for 30 minutes.
-- [ ] `clip_stop_releases_not_cuts` passes.
-- [ ] `session_no_alloc` passes.
-- [ ] **A human has performed a real set** on real hardware, for at least 20
+- [x] `performance_record_roundtrip` passes **bit-identically**.
+- [x] `live_set_no_dropouts` passes for 30 minutes.
+- [x] `clip_stop_releases_not_cuts` passes.
+- [x] `session_no_alloc` passes.
+- [~] **A human has performed a real set** on real hardware, for at least 20
       minutes, and reported no glitches — recorded in the phase log. Every other
       criterion is a proxy for this one, and this one is the claim being made.
       Under FINAL_PLAN §9 this box splits. **Emulated half** (makes it `[~]`),
@@ -426,11 +426,11 @@ FINAL_PLAN §7's gate, unpacked:
       a real device's USB timing, velocity curve or sysex throughput. **Hardware
       half:** the same set on a physical pad controller, deferred to the final review
       (STATE.md "Final review"). (hardware half)
-- [ ] Every §5.11 item exists: session view, per-clip positions, quantized launch
+- [x] Every §5.11 item exists: session view, per-clip positions, quantized launch
       with queued-next indicator, scenes, follow actions, pad mapping with
       velocity and LED feedback, performance recording, tempo nudge, tap tempo,
       launchable mini-notation clips.
-- [ ] `docs/performance.md` written and its setup walkthrough verified on a real
+- [~] `docs/performance.md` written and its setup walkthrough verified on a real
       device. **Emulated half** (makes it `[~]`): `scenario_performance_walkthrough`
       follows `docs/performance.md` step by step through the driver against the
       emulated controller, learn mode included, asserting the state each step says
@@ -477,3 +477,92 @@ FINAL_PLAN.md is amended and a new phase file joins this directory.
 | Performance recording is not bit-identical because something is not seeded | Every stochastic element was seeded from Phase 3 onward as a deliberate precondition (§4.10 condition 6); if one is found unseeded, that is a bug in the earlier phase and is fixed there |
 | 128 concurrent clips is too few for an ambitious set | It is a constant, preallocated; raising it is a one-line change with a memory cost that is measured. Exhaustion is surfaced, never silent |
 | Phase 10's optimization targets slipped and this phase inherits a slow engine | `bench_full_project` is a hard entry criterion (§ header). Starting this phase on an engine that drops out would make its gate unreachable by definition |
+
+---
+
+## 10. Evidence and progress
+
+### 2026-11-06: the week-one spike, and the session's engine core (overnight)
+
+**The spike (§3) held, with one gap, closed by composition.** `spike_two_sources_render`
+(tests/cpp/session/test_spike.cpp) runs the §3 recipe: the arrangement and a second
+source, the second started at beat 2, looping beats 2-4 at 1.5 times speed, a pattern
+on each, 30 seconds rendered offline in 512-frame blocks. Every onset of both lands on
+its hand-computed frame (the looping one within a frame of `ceil(position / 1.5)`, 90
+onsets). Nothing outside `engine/transport/` assumed a single position.
+
+What the spike found is narrower: a graph *node* is bound to one source
+(`NodeStep::timeSource`), so one channel could not play its arrangement notes and a
+launched clip's at the same time - which is the normal case in a session. Fixed without
+touching the transport's shape: `graph::SessionLane` hands the scheduler a clip's event
+track, cursor and source, and the scheduler merges its events into that channel's per
+piece (sorted, no allocation), with the clip's own release, wrap and an in-block stop
+(`stopAt`). Voices are keyed by note id and instance, so a cell's events carry an
+instance id of their own (`0x40000000 | track << 12 | row`). And `TimeSource::
+requestSeekSamples` lets a source start at -k samples, so a launch k frames into a
+block lands its tick 0 on exactly that frame. The spike's second section asserts both:
+one channel playing the arrangement and a clip launched at frame 13100, and a stop
+inside a block that drops the clip's next note and leaves the arrangement's.
+
+A test bug cost an hour and is worth a line: `EventTrack::events` is a span, and a span
+over a temporary vector reads freed memory (note ids of 0xDDDDDDDD in Debug).
+
+**Built.** `engine/session/` (LaunchQuantize, ClipState, FollowAction, SessionEngine,
+TempoNudge), `project::SessionModel` with `[SESSION]` and `SetSession`, the snapshot's
+`SessionClip`s, bindings (`bindings/live.cpp`), the Python wrappers and a Session dock.
+`SessionEngine`'s arrays live on the heap (`prepare()`): `RenderEngine` holds the core
+by value and two Debug tests keep one on the stack, and 25 KB more overflowed it.
+
+**Observed locally.** The session tests (C++: 7 files' worth of cases, 1160+ assertions
+at the time of writing; Python: `test_session_panel.py`), the whole C++ suite in Debug,
+and the checks recorded in STATE.md. Not in CI: nothing is committed.
+
+**Not built:** see STATE.md P11-1 to P11-8.
+
+### 2026-11-08: pads, performance recording, the session grid, and the gates
+
+**Built since 2026-11-06.** `PadController`, `PadFeedback` (its own thread, 30 Hz, a full
+refresh every 2 s, only changed lights sent), `.adxpad` profiles (three shipped, including
+`adX Virtual Pad`) and learn mode; `PerformanceRecorder`; mini-notation cells; clip gain
+and scene tempo applied; clips that follow the master rate; nudge and tap on the transport
+bar; tails held until the last voice is silent; `SessionGeometry` (the grid, progress
+rings, queue marks) on the geometry pipeline; `docs/performance.md`;
+`tools/virtual_pad.py`; `bench/bench_live_set.py` and the two scenarios.
+
+**Two bugs the gates found.**
+- The frame clock made extra engine calls (session rate, performance drain), so the
+  one-FFI-call-per-frame tests read 72 calls in 60 frames. That housekeeping moved to its
+  own 5 Hz timer.
+- `set_pad_cells` cleared the shared cell table and then refilled it. The LED thread
+  could read in between and send "empty" for a filled cell, which showed up as 1-in-200
+  light mismatches over a 20-minute set. It now builds the table and stores each cell
+  once.
+
+Both long runs first went out on the driver's default timer backend. Neither checked for
+that, so a pass there proved nothing about dropouts. Each now launches with real audio and
+fails if the null backend is in use.
+
+**Observed locally, 2026-11-08.**
+- `performance_record_roundtrip`: 40 launches, 6 scenes, 60 bars, 0 samples differ. With
+  three nudges (`..._with_nudges`) every onset is within one sample (STATE.md P11-11).
+- `live_set_no_dropouts`, 30 minutes on the benchmark project with its arrangement looping
+  underneath, on the real device: 0 xruns, 567 of 567 set steps, 0 launches refused, UI
+  frame work p50 0.16 ms, p99 0.33 ms, worst 3.3 ms; worst audio callback 18.6 ms with no
+  xrun. Report in `build/bench/live_set.json`.
+- `scenario_scripted_set_20min` on the real device, both materials: 0 xruns, 0 glitch
+  findings, every settled light matching its clip, 0 refused. The recording rendered
+  offline follows the capture: RMS-envelope correlation 0.9986 (WannaCry) and 0.955
+  (stand-in), median level difference 0.07 and 0.42 dB over 1191 s. It is an envelope
+  match, not bit-identity, because VA and DrumSynth phases are seeded per placement
+  (STATE.md P11-10). Bit-identity is `performance_record_roundtrip`'s claim.
+- `scenario_performance_walkthrough`: every step of `docs/performance.md`, learn mode
+  included, against the virtual pad.
+- `session_no_alloc` (Debug, 10 minutes under the allocator hook), the whole ctest
+  `-LE slow` suite in Release, and in Debug, apart from the known timing flake
+  `watchdog_late_block_silences` (it passed 3 of 3 when run alone). Also pytest, parallel and
+  serial; the other scenarios, apart from `scenario_live_plugin_crash[standin]` (late
+  sandbox blocks under load, STATE.md P11-14); ruff, `mypy --strict`, the lint gates,
+  tidy and `check_launcher.py`.
+
+**Not covered here:** a physical pad controller (its USB timing, velocity curve and LED
+sysex throughput). That is the hardware half, in STATE.md's final review.

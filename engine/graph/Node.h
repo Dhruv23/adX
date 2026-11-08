@@ -8,6 +8,7 @@
 // clock it was not handed.
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <span>
 #include <string_view>
@@ -111,6 +112,10 @@ struct ProcessContext {
     /// every other node.
     std::span<const float> input{};
     std::uint32_t inputChannels{0};
+    /// One flag per time source (transport::kMaxTimeSources): a channel sets its voices'
+    /// sources' flags after rendering them, so the session knows when a stopped clip's
+    /// releases are over (phase_11.md §4.5). Null outside the scheduler.
+    std::atomic<std::uint8_t>* sounding{nullptr};
 };
 
 /// Parameter `index` at frame `frame` of this call: the automated value when there is
