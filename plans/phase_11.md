@@ -436,7 +436,7 @@ FINAL_PLAN §7's gate, unpacked:
       emulated controller, learn mode included, asserting the state each step says
       the reader should see. **Hardware half:** a physical controller, deferred to the
       final review. (hardware half)
-- [ ] FINAL_PLAN.md §10 Phase 11 row set to Done.
+- [x] FINAL_PLAN.md §10 Phase 11 row set to Done.
 
 ---
 
@@ -566,3 +566,9 @@ fails if the null backend is in use.
 
 **Not covered here:** a physical pad controller (its USB timing, velocity curve and LED
 sysex throughput). That is the hardware half, in STATE.md's final review.
+
+**CI.** Per-push CI green at `0c6c614` (run 42494990727). The first full check, on tag
+`phase-11`, failed only at fetching the test plugins: Airwindows had deleted the rolling
+build it was pinned to. Re-pinned to 2026-11-08-316a048, and all 18 real-plugin scenarios
+passed locally against it. Then a full check green, run 42530469039 on tag `phase-11-r2`,
+scenarios job included; per-push CI green, run 42530467288.

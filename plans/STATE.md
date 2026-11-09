@@ -118,7 +118,7 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 9 — Plugins & MIDI | L | **Done** 2026-11-05 (hardware deferred: P9-1 and P9-4 `[~]`; per-push CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`) |
 | 10 — Analysis, visualization, polish | L | **Done** 2026-11-05 (CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`) |
 | 10.5 — Agent-run testing | L | **Done** 2026-11-05 (CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`) |
-| 11 — Live performance | L | Built and observed locally 2026-11-08 (every §6 box, the two hardware boxes by their emulated halves); CI green, run 42494990727 at `0c6c614`; the tag-triggered full check not run yet |
+| 11 — Live performance | L | **Done** 2026-11-08 (CI green, run 42530467288; full check green, run 42530469039 on tag `phase-11-r2`) |
 | 12 — Sound-design foundation | XL | Not started |
 | 13 — Core Drums & Machines | M | Not started |
 | 14 — Hyperpop | L | Not started |
@@ -1354,7 +1354,7 @@ Evidence, 2026-11-03, this machine:
 
 ---
 
-## [ ] Phase 11 — Live performance · L
+## [x] Phase 11 — Live performance · L
 
 **The final stage.**
 
@@ -1363,8 +1363,8 @@ Evidence, 2026-11-03, this machine:
 | **Plan** | [phase_11.md](phase_11.md) |
 | **Entry** | Phase 10 §7 complete, **including `bench_full_project`**, and Phase 10.5 §6 complete |
 | **Done when** | [phase_11.md](phase_11.md) §6 - the pad-controller boxes by their emulated halves; the physical controller is in the final review |
-| **Status** | Built and observed locally 2026-11-08: every [phase_11.md](phase_11.md) §6 box, the 20-minute set and the walkthrough by their emulated halves (`[~]`). CI green, run 42494990727 at `0c6c614`; the tag-triggered full check not run yet |
-| **Completed** | — |
+| **Status** | Done 2026-11-08. Every [phase_11.md](phase_11.md) §6 box observed, the 20-minute set and the walkthrough by their emulated halves (`[~]`; the physical controller is in the final review); CI green, run 42530467288; full check green, run 42530469039 on tag `phase-11-r2` |
+| **Completed** | 2026-11-08 - CI green, run 42530467288; full check green, run 42530469039 on tag `phase-11-r2` |
 
 > Week one validates the Phase 3 transport checkpoint before anything is built
 > on it ([phase_11.md](phase_11.md) §3).
