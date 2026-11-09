@@ -15,6 +15,7 @@
 #include "engine/effects/Ported.h"
 #include "engine/effects/Spectral.h"
 #include "engine/effects/Vocal.h"
+#include "engine/effects/fm1/Fm1Effects.h"
 #include "engine/plugin/PluginNode.h"
 #include "engine/project/PluginRef.h"
 #include "engine/project/TypeCatalog.h"
@@ -38,6 +39,9 @@ namespace {
 } // namespace
 
 std::shared_ptr<graph::SlotNode> makeEffect(std::string_view type) {
+    if (type == "Fm1Effects") {
+        return std::make_shared<Fm1Effects>();
+    }
     if (type == "Reverb") {
         return std::make_shared<Reverb>();
     }

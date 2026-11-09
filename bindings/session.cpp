@@ -421,10 +421,42 @@ void defineSplit(py::class_<ProjectHandle>& project) {
         "item's id, or None when `at` is not inside it.");
 }
 
+void defineChannelPresets(py::class_<ProjectHandle>& project) {
+    project.def(
+        "save_channel_preset",
+        [](const ProjectHandle& handle, std::uint32_t channel, const std::string& path,
+           const std::string& name, const std::string& pack) {
+            const project::Channel* found = nullptr;
+            for (const project::Channel& c : handle.project.channels) {
+                if (c.id.value == channel) {
+                    found = &c;
+                }
+            }
+            if (found == nullptr) {
+                throw std::invalid_argument("no channel " + std::to_string(channel));
+            }
+            if (!found->instrument.zones.empty()) {
+                throw std::invalid_argument("a channel with samples is saved as a pack");
+            }
+            adx::preset::Preset preset;
+            preset.name = name;
+            preset.type = found->instrument.type;
+            preset.pack = pack;
+            preset.params = found->instrument.params;
+            if (!adx::preset::savePreset(preset, path)) {
+                throw std::runtime_error("cannot write " + path);
+            }
+        }, // GIL: trivial - a few hundred bytes to a file
+        py::arg("channel"), py::arg("path"), py::arg("name"), py::arg("pack") = "",
+        "A channel's instrument and its parameters as an .adxpreset (a dx7 voice, "
+        "phase_11.5.md 4.3). Channels with samples are not saved this way.");
+}
+
 } // namespace
 
 void defineSession(py::class_<ProjectHandle>& project) {
     defineSplit(project);
+    defineChannelPresets(project);
     project
         // GIL: trivial - opens a transaction
         .def(

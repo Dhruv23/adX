@@ -587,6 +587,11 @@ class Project:
         return int(self.native.add_sampler_channel(name, path, output))
 
     @_ffi
+    def save_channel_preset(self, channel: int, path: str, name: str, pack: str = "") -> None:
+        """A channel's instrument and parameters as an .adxpreset."""
+        self.native.save_channel_preset(channel, path, name, pack)
+
+    @_ffi
     def apply_preset(self, channel: int, path: str) -> list[dict[str, Any]]:
         """An instrument preset, samples included, onto a channel: one step."""
         return list(self.native.apply_preset(channel, path))
@@ -699,9 +704,37 @@ class Engine:
         return [str(name) for name in self.native.midi_inputs()]
 
     @_ffi
-    def open_midi(self, name: str) -> None:
-        """Open a MIDI input (raises RuntimeError); it plays the MIDI target channel."""
-        self.native.open_midi(name)
+    def open_midi(self, name: str, sysex: bool = False) -> None:
+        """Open a MIDI input (raises RuntimeError); it plays the MIDI target channel.
+        With ``sysex`` its SysEx is kept for :meth:`drain_sysex` (phase_11.5.md 4.4)."""
+        self.native.open_midi(name, sysex)
+
+    @_ffi
+    def drain_sysex(self) -> list[tuple[str, bytes]]:
+        """Whole SysEx messages received since the last call: (input name, bytes)."""
+        return [(str(name), bytes(data)) for name, data in self.native.drain_sysex()]
+
+    @property
+    @_ffi
+    def sysex_dropped(self) -> int:
+        """SysEx lost to a full queue, over-size, an interruption or a timeout."""
+        return int(self.native.sysex_dropped)
+
+    @_ffi
+    def send_sysex(self, name: str, message: bytes | list[int], gap_ms: int = 0) -> None:
+        """Queue one SysEx message (F0..F7) for an open output, ``gap_ms`` after the
+        last one queued, so a slow transport is not overrun."""
+        self.native.send_sysex(name, list(message), gap_ms)
+
+    @_ffi
+    def midi_output_slot(self, name: str) -> int:
+        """The slot a midiout channel's ``port`` parameter names for an open output (-1)."""
+        return int(self.native.midi_output_slot(name))
+
+    @_ffi
+    def sysex_pending(self, name: str) -> int:
+        """SysEx messages still queued for an output."""
+        return int(self.native.sysex_pending(name))
 
     @_ffi
     def close_midi(self, name: str) -> None:
@@ -1551,6 +1584,62 @@ def parse_pad_profile(text: str) -> dict[str, Any]:
 def pad_message(profile: str, note: int, look: str, lit: bool = True) -> bytes:
     """The message that lights pad ``note`` as ``look`` (empty, stopped, queued, ...)."""
     return bytes(_native.pad_message(profile, note, look, lit))
+
+
+# --- DX7 voices (phase_11.5.md 4.4) -------------------------------------------------
+
+
+@_ffi
+def dx7_read(data: bytes) -> dict[str, Any]:
+    """Every DX7 voice in .syx data or a dump: voices (156-int lists), messages,
+    bad_checksums, clamped, skipped."""
+    out = dict(_native.dx7_read(bytes(data)))
+    out["voices"] = [list(v) for v in out["voices"]]
+    return out
+
+
+@_ffi
+def dx7_single_sysex(voice: list[int], channel: int = 0) -> bytes:
+    """The single-voice dump (163 bytes) of a voice."""
+    return bytes(_native.dx7_single_sysex(list(voice), channel))
+
+
+@_ffi
+def dx7_bank_sysex(voices: list[list[int]], channel: int = 0) -> bytes:
+    """The 32-voice bank dump (4104 bytes); fewer voices are padded with INIT VOICE."""
+    return bytes(_native.dx7_bank_sysex([list(v) for v in voices], channel))
+
+
+@_ffi
+def dx7_dump_request(bank: bool, channel: int = 0) -> bytes:
+    """F0 43 2n 09 F7 (bank) or F0 43 2n 00 F7 (voice)."""
+    return bytes(_native.dx7_dump_request(bank, channel))
+
+
+@_ffi
+def dx7_param_change(param: int, value: int, channel: int = 0) -> bytes | None:
+    """The DX7 parameter-change message for dx7 parameter ``param`` (None: no address)."""
+    out = _native.dx7_param_change(param, value, channel)
+    return None if out is None else bytes(out)
+
+
+@_ffi
+def dx7_decode_param_change(message: bytes) -> tuple[int, int, int] | None:
+    """(dx7 parameter, value byte, channel) of a parameter-change message, or None."""
+    out = _native.dx7_decode_param_change(bytes(message))
+    return None if out is None else (int(out[0]), int(out[1]), int(out[2]))
+
+
+@_ffi
+def dx7_voice_to_params(voice: list[int]) -> list[float]:
+    """Voice bytes -> the first 156 dx7 parameter values."""
+    return [float(v) for v in _native.dx7_voice_to_params(list(voice))]
+
+
+@_ffi
+def dx7_params_to_voice(params: list[float]) -> list[int]:
+    """dx7 parameter values (the first 156) -> voice bytes, clamped."""
+    return [int(v) for v in _native.dx7_params_to_voice([float(p) for p in params])]
 
 
 class PadLearn:

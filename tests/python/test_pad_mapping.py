@@ -67,7 +67,8 @@ def test_shipped_profiles() -> None:
     assert {"Launchpad Mini MK3", "APC mini", "adX Virtual Pad"} <= names
     for profile in found:
         assert profile.warnings == [], (profile.name, profile.warnings)
-        assert profile.columns * profile.rows == 64
+        # 8 x 8 grids, but for the FM-1's 27 keys (8 x 3, phase_11.5.md 4.10).
+        assert profile.columns * profile.rows == (24 if profile.name == "FM-1 keys" else 64)
     assert pads.match("LPMiniMK3 MIDI 1") is not None
     assert pads.match("loopMIDI Port 0").name == "adX Virtual Pad"  # type: ignore[union-attr]
     assert pads.match("Some keyboard") is None

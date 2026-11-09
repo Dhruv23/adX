@@ -1,0 +1,20 @@
+# The M-Vave FM-1's 27 keys as a session launcher (phase_11.5.md 4.10), at the keys'
+# default octave (notes 48-74 on channel 1). Eight tracks by three scenes on the first
+# 24 keys, the top three keys launch scenes 1-3. On V16 its key LEDs show clip state:
+# key k is lit by note k - 48 on the effect channel (2), on or off only. Older firmware
+# has no LED control; adX sends nothing there. Off by default: the keys play notes until
+# "Use keys as pads" is on in the Hardware panel, which attaches it by name (it has no
+# MATCH_DEVICE, so it never attaches on its own).
+[PAD_PROFILE]
+NAME="FM-1 keys"
+MATCH_DEVICE=""
+GRID=8x3
+NOTE_BASE=48 ROW_STRIDE=8
+CHANNEL=1
+VELOCITY_SENSITIVE=yes VELOCITY_CURVE=linear
+[FEEDBACK]
+MODE=note CHANNEL=2 NOTE_OFFSET=-48
+EMPTY=vel:0  STOPPED=vel:0  QUEUED=vel:127,blink  PLAYING=vel:127
+QUEUED_STOP=vel:127,blink  RECORDING=vel:127
+[CONTROLS]
+SCENE_LAUNCH=notes:72,73,74

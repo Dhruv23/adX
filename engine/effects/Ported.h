@@ -76,6 +76,9 @@ inline constexpr auto kEqParams = std::to_array<ParamDescriptor>({
 
 class Reverb final : public Effect {
 public:
+    /// Fm1Effects runs it as an inner stage (phase_11.5.md §4.7).
+    friend class Fm1Effects;
+
     [[nodiscard]] std::string_view typeName() const noexcept override {
         return "Reverb";
     }
@@ -112,6 +115,9 @@ private:
 
 class Distortion final : public Effect {
 public:
+    /// Fm1Effects runs it as an inner stage (phase_11.5.md §4.7).
+    friend class Fm1Effects;
+
     [[nodiscard]] std::string_view typeName() const noexcept override {
         return "Distortion";
     }
@@ -154,6 +160,9 @@ private:
 
 class Chorus final : public Effect {
 public:
+    /// Fm1Effects runs it as an inner stage (phase_11.5.md §4.7).
+    friend class Fm1Effects;
+
     [[nodiscard]] std::string_view typeName() const noexcept override {
         return "Chorus";
     }

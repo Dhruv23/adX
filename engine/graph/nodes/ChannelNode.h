@@ -98,6 +98,10 @@ public:
     [[nodiscard]] VoicePool& pool() noexcept {
         return m_pool;
     }
+    /// Voices sounding now: the pool's, or a whole-block instrument's own (dx7).
+    [[nodiscard]] virtual std::uint32_t soundingVoices() noexcept {
+        return m_pool.soundingCount();
+    }
 
     /// Main thread, before this node is first published: it replaces `old` (the
     /// channel's instrument changed). Its first block releases every voice `old` is

@@ -33,8 +33,10 @@ PadLook PadFeedback::shown(std::uint32_t column, std::uint32_t row) const noexce
             std::memory_order_acquire));
 }
 
-std::vector<std::uint8_t> PadFeedback::message(const PadProfile& profile, std::uint8_t note,
+std::vector<std::uint8_t> PadFeedback::message(const PadProfile& profile, std::uint8_t padNote,
                                                const PadColor& color, bool lit) {
+    const auto note = static_cast<std::uint8_t>(
+        std::clamp(static_cast<int>(padNote) + profile.feedbackOffset, 0, 127));
     switch (profile.feedback) {
     case FeedbackMode::Note:
         return {static_cast<std::uint8_t>(0x90U | ((profile.feedbackChannel - 1U) & 0x0FU)),

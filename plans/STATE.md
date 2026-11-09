@@ -119,8 +119,8 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 10 — Analysis, visualization, polish | L | **Done** 2026-11-05 (CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`) |
 | 10.5 — Agent-run testing | L | **Done** 2026-11-05 (CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`) |
 | 11 — Live performance | L | **Done** 2026-11-08 (CI green, run 42530467288; full check green, run 42530469039 on tag `phase-11-r2`) |
-| 11.5 — M-Vave FM-1 | XL | In progress 2026-11-08 |
-| 11.6 — Editor polish | S | **Done** 2026-11-08 (CI: see the Phase 11.6 entry) |
+| 11.5 — M-Vave FM-1 | XL | **Done** 2026-11-09 (hardware deferred: every hardware half `[~]`; CI: see the Phase 11.5 entry) |
+| 11.6 — Editor polish | S | **Done** 2026-11-08 (CI green, run 42549504391; full check green, run 42554232881 on tag `phase-11.6`) |
 | 12 — Sound-design foundation | XL | Not started |
 | 13 — Core Drums & Machines | M | Not started |
 | 14 — Hyperpop | L | Not started |
@@ -1470,23 +1470,57 @@ carried into Phase 12 with a reason, like any other handoff.
 
 ---
 
-## [ ] Phase 11.5 — M-Vave FM-1: full hardware support and native DX7 voices · XL
+## [x] Phase 11.5 — M-Vave FM-1: full hardware support and native DX7 voices · XL
 
 | | |
 |---|---|
 | **Plan** | [phase_11.5.md](phase_11.5.md) |
 | **Entry** | Phase 9 §6 complete (hard: MIDI I/O, clock, learn, plugin host, external audio input). Phase 11 is soft: only the keys-as-launcher and the LED feedback use it |
 | **Done when** | [phase_11.5.md](phase_11.5.md) §6. The dx7 port is bit-identical to upstream msfa, every voice parameter is editable, and import, live edit, external parts, sequencer capture, FX match, keys/LEDs and firmware install pass by their emulated halves. The real device (import, the sound-alike capture plus listening verdict, parts, sequencer, LEDs, USB audio, one real flash cycle) is in the final review |
-| **Status** | In progress 2026-11-08 |
-| **Completed** | — |
+| **Status** | Done 2026-11-09 (hardware deferred). Every [phase_11.5.md](phase_11.5.md) §6 box observed by its emulated half (phase_11.5.md §12); the device itself is in the final review |
+| **Completed** | 2026-11-09 - CI recorded in the commit that follows this one |
 
 > Added 2026-11-05; rewritten 2026-11-08 at the user's request ("fully support
 > everything the FM-1 supports from its hardware"; patches must arrive as
 > editable native synths). Does not block and is not blocked by Phases 12–19.
 
+No inherited issues: Phase 11's open issues (P11-9..P11-15) are carried into Phase 12,
+whose entry this phase does not change.
+
+Built 2026-11-08/09: the `dx7` instrument, a port of msfa that is bit-identical to
+upstream for every fixture voice at 48 kHz and 44 118 Hz, every voice byte a parameter,
+with an editor overview; SysEx in through an RT-safe queue and out paced; the DX7 codec
+and parameter changes; the FM-1 layer in `app/adx/hardware/fm1/` (identity, `.adxdevice`
+profiles, the device, live edit, parts, effects, the OTA updater with its gates,
+recovery detection, the catalog); `Fm1Effects`; the `midiout` instrument for external
+parts; `tools/virtual_fm1.py` on teVirtualMIDI; the Hardware panel; `docs/fm1.md`.
+Twenty corrections in phase_11.5.md §11, among them the protocol facts that are
+adX's reading, not verified (FX CC order, OTA layout), and the writes that stay off until
+the final review checks them.
+
+Launcher (2026-11-09): `check_launcher: adX.cmd opened adX 0.1.0 - 26 panels, audio
+device open`; `played single_tone.adx, captured 48896 frames (peak 0.499), 0 xrun(s),
+quit cleanly`.
+
 **Open issues remaining at completion:**
 
-- _to be filled in by the agent that completes this phase_
+- **P11.5-1** · No check against Dexed itself: `dx7_matches_dexed` was not built (hosting
+  it with a chosen voice means writing its private JUCE state). The sound-alike box rests
+  on bit-identity to unmodified msfa instead (phase_11.5.md §11). Fixed when: a
+  realplugin test renders five fixture voices through hosted Dexed 1.1.0 and the port,
+  envelope correlation > 0.98, centroid within 2 %.
+- **P11.5-2** · A take recorded from a device following adX's clock sits a constant
+  ~11.7 ms late against the emulator: adX's clock-out latency plus the MIDI input's
+  one-block delay. Fixed when: takes from a clocked device are shifted by the measured
+  MIDI round trip and `fm1_capture_sequencer` holds 1 ms.
+- **P11.5-3** · The FX CC order and the OTA byte layout are adX's reading of the device
+  notes, not checked on a device (each file says so). `ota.PROTOCOL_VERIFIED` stays False
+  until then, so no real FM-1 is ever written. Fixed when: the final review's FM-1 run
+  confirms or corrects both.
+- **P11.5-4** · Not built from §3's manifest: `tools/fetch_fm1_firmware_catalog.py`
+  (no machine-readable Hub list to fetch) and the optional fm1-emu oracle (not tried).
+  The audio return's latency is measured only through a loopback stand-in. Fixed when:
+  a manifest source exists to fetch, and the final review pings a real return.
 
 ---
 
@@ -1497,8 +1531,8 @@ carried into Phase 12 with a reason, like any other handoff.
 | **Plan** | [phase_11.6.md](phase_11.6.md) |
 | **Entry** | None functional: Phases 5 and 6 are Done |
 | **Done when** | [phase_11.6.md](phase_11.6.md) §6 |
-| **Status** | Done 2026-11-08. Every §6 box observed locally (phase_11.6.md §10); CI recorded below |
-| **Completed** | 2026-11-08 |
+| **Status** | Done 2026-11-08. Every §6 box observed locally (phase_11.6.md §10); CI green, run 42549504391; full check green, run 42554232881 on tag `phase-11.6` |
+| **Completed** | 2026-11-08 - CI green, run 42549504391; full check green, run 42554232881 on tag `phase-11.6` |
 
 Built 2026-11-08: `TempoMap::barStart` (the grid's bar lines read it), the piano-roll
 Cut tool on `0`, every piano-roll tool key in the action registry, 31 scales with a
@@ -1671,6 +1705,7 @@ already showed and what the hardware run must add):
 | P8-1 | phase_8.md §6 `record_latency_alignment` | `[~]` passed 2026-10-30: VB-Audio Virtual Cable, offset 0 at 64/256/1024 after 5 s of settling (phase_8.md §10) | a physical loopback (interface out 1 → in 1, or a 3.5 mm headphone-to-mic cable), direct monitoring off: `py -3.12 tools/measure_latency.py` |
 | P9-4 | phase_9.md §6 ASIO | `[~]` passed 2026-11-05: FlexASIO 1.10b (shared mode) over VB-Cable, `tools/measure_latency.py --asio`, take offset 0 at 64/256/1024 and the readout equal to the driver's (phase_9.md §10) | a real interface's own ASIO driver, against a physical loopback |
 | P9-1 | phase_9.md §6 `midi_roundtrip_latency` | `[~]` passed 2026-11-05: loopMIDI in, WASAPI exclusive out, 5.91 ms median at block 64 and 6.99 at 128 (`tools/measure_midi_latency.py --exclusive`); shared mode is ~68-74 ms | a hardware MIDI keyboard to an audible note, under 10 ms |
+| P11.5 | phase_11.5.md §6, every `[~]` box | passed 2026-11-09 against `tools/virtual_fm1.py` (phase_11.5.md §12) | with a real FM-1 (V15 and V16 if both are at hand): a bank pulled by dump request or Bank Export, every voice opened and played; five voices captured over USB audio against FM-1-rate renders (envelope correlation > 0.95), then the user's listening verdict; live edit on the device; a two-part pattern with the audio return aligned within 1 ms after ping; a 64-step pattern recorded, velocity behaviour noted; each effect compared by ear (judgement); keys and LEDs; USB MIDI and audio enumeration and Bluetooth; the FX CC order and the OTA layout checked (P11.5-3); then - only with the owner's go-ahead in their words, after §4.11's recovery limits are read - one flash of a community firmware and back to official |
 | P11 | phase_11.md §6 the 20-minute set; the `docs/performance.md` walkthrough | passed 2026-11-08: `scenario_scripted_set_20min` (stand-in and WannaCry, real audio device, 0 xruns, LEDs match) and `scenario_performance_walkthrough`, through `tools/virtual_pad.py` on loopMIDI | the same set and walkthrough on a physical pad controller with LED feedback |
 
 **Then the review of every Done phase:** each phase's §6/§7 checked again on the finished

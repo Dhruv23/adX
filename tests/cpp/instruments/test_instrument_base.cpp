@@ -53,6 +53,9 @@ float peak(const InstrumentRun& run, std::size_t from, std::size_t to) {
 TEST_CASE("instrument_voice_lifecycle", "[instruments]") {
     for (const std::string& type : allInstrumentTypes()) {
         INFO(type);
+        if (type == "midiout") {
+            continue; // sends MIDI and makes no sound of its own (test_midiout.cpp)
+        }
         // One note: it sounds, it releases on note-off, and its voice is freed once the
         // release has run, after which the output is exactly zero. An instrument that
         // declares latency (the Voice's preroll) sounds that much later.

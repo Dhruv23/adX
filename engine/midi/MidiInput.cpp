@@ -48,6 +48,9 @@ std::uint64_t MidiInput::scheduleAt(std::uint64_t blockFrame, std::int64_t block
 }
 
 void MidiInput::onMessage(std::int64_t wallNanos, std::span<const std::uint8_t> bytes) noexcept {
+    if (m_sysex != nullptr && m_sysex->feed(wallNanos, bytes) > 0) {
+        return; // SysEx, or a piece of it: the main thread's, never a channel's
+    }
     if (bytes.empty() || bytes.size() > 3 || (bytes[0] & 0x80U) == 0) {
         return;
     }

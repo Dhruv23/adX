@@ -6,6 +6,7 @@ target_sources(adx_engine_static PRIVATE
     Dynamics.cpp
     Effect.cpp
     Factory.cpp
+    fm1/Fm1Effects.cpp
     GrossBeat.cpp
     Modulation.cpp
     Multiband.cpp

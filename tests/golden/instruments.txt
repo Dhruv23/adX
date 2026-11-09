@@ -4,8 +4,10 @@
 # Regenerate with ADX_UPDATE_GOLDEN=1, and only on purpose.
 instrument/additive de77ea7baa7133c3c50ab299cec0415d
 instrument/drumsynth 59b03538510256859554712137b53a8d
+instrument/dx7 9ee2f2da6f1c41bbefa95b053a159735
 instrument/fm 95846befccb1cf7304f7e9a3c174d8a1
 instrument/granular e19229e7901fb74c74df1572fe0e01b7
+instrument/midiout faef1865d7d6da7a2fe46268af31818d
 instrument/pool 4c9028340fe310e3d1d75d7984f46769
 instrument/sampler 56b732f014083cf37b99c13585d11449
 instrument/slicer cb444e04a5455f5e8d884fab2feb6e3d

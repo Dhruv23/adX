@@ -26,6 +26,7 @@ from adx.delivery import Delivery
 from adx.edit_ops import EditOps
 from adx.engine_bridge import PPQ, Engine, Project
 from adx.frame_clock import FrameClock
+from adx.hardware.fm1.manager import Fm1Manager
 from adx.live_midi import LiveMidi
 from adx.menus import register_actions
 from adx.pads import PadControllers
@@ -39,6 +40,7 @@ from adx.panels.clip_editor.panel import ClipEditorPanel
 from adx.panels.effect.panel import EffectPanel
 from adx.panels.generate.genre_suite import GeneratePanel
 from adx.panels.geometry_view import GeometryView
+from adx.panels.hardware.fm1_panel import HardwarePanel
 from adx.panels.history.panel import HistoryPanel
 from adx.panels.inspector.panel import InspectorPanel
 from adx.panels.instrument.panel import InstrumentPanel
@@ -122,6 +124,7 @@ class MainWindow(QMainWindow):
         self._needs_default_sizes = True
         self.keymap = Keymap(self.settings)
         self.registry = ActionRegistry(self.keymap, self)
+        self.delivery.record.midi_take.connect(self.fm1.check_take)
         register_actions(self, self.registry)
         self.transport.add_edit_actions(
             self.registry.action("edit.undo"), self.registry.action("edit.redo")
@@ -143,7 +146,6 @@ class MainWindow(QMainWindow):
         )
         self.statusBar().showMessage("Ready")
         frame_clock.errors.error.connect(lambda where, message: self.status(f"{where}: {message}"))
-        self.live_midi = LiveMidi(engine, self.session, self.selection, self.status)
         self.pads = PadControllers(engine, self.settings_dir())
         self.session_view.controllers = self.pads
         #: The rate a held nudge returns to (phase_11.md 4.8).
@@ -168,6 +170,7 @@ class MainWindow(QMainWindow):
             )
         self.restore_layout()
         self.clock.start()
+        self.fm1.start()
 
     # --- construction ---------------------------------------------------------------
 
@@ -195,6 +198,22 @@ class MainWindow(QMainWindow):
         self.plugins = PluginBrowserPanel(s, sel, self)
         self.midi = MidiPanel(s, self.plugin_runtime, self)
         self.session_view = SessionPanel(s, self)
+        self.live_midi = LiveMidi(self.engine, s, sel, self.status)
+        # Phase 11.5: the M-Vave FM-1.
+        self.fm1 = Fm1Manager(self.engine, self.live_midi, s, self.status, self)
+        from adx.panels.instrument.dx7 import editor as dx7_editor
+
+        dx7_editor.LIVE_EDIT_HOOK[:] = [
+            lambda channel, on: self.fm1.set_live_edit(channel if on else None)
+        ]
+        self.hardware = HardwarePanel(
+            self.fm1,
+            self,
+            match=self.match_fm1_effects,
+            set_clock=self.fm1_follows,
+            set_pads=self.fm1_keys_as_pads,
+            audition=self.audition_channel,
+        )
         self.analysis_panel = AnalysisPanel(s, self)
         self.analyzer_host = AnalyzerHost(self.engine, parent=self)
         self.analyzers = make_panels(self.analyzer_host, self)
@@ -222,6 +241,7 @@ class MainWindow(QMainWindow):
             self.session_view,
             self.analysis_panel,
             self.generate,
+            self.hardware,
             *self.analyzers,
         ]
 
@@ -600,6 +620,46 @@ class MainWindow(QMainWindow):
         location = QStandardPaths.StandardLocation.AppDataLocation
         return Path(QStandardPaths.writableLocation(location))
 
+    # --- the FM-1 (phase_11.5.md) ------------------------------------------------------
+
+    def fm1_follows(self, on: bool) -> None:
+        """The FM-1's arp and sequencer follow adX: clock, start and stop to its port."""
+        if self.fm1.port_out:
+            try:
+                self.engine.set_midi_sync(self.fm1.port_out, on, False)
+            except RuntimeError as error:
+                self.status(f"FM-1: {error}")
+
+    def fm1_keys_as_pads(self, on: bool) -> None:
+        """The FM-1's keys launch clips (fm1_keys.adxpad); off, they play notes again."""
+        from adx import pads
+
+        port = self.fm1.port_in
+        if not port:
+            return
+        if on:
+            keys = pads.Profile.read(pads.SHIPPED / "fm1_keys.adxpad")
+            if keys is not None and self.pads.attach(port, keys) is not None:
+                if self.project is not None:
+                    self.pads.set_cells(self.project.session_info())
+                self.status("FM-1 keys launch clips")
+        else:
+            self.pads.detach(port)
+
+    def audition_channel(self, name: str) -> None:
+        """Play middle C once through the channel named ``name``."""
+        if self.project is None or not name:
+            return
+        found = [int(c["id"]) for c in self.project.channels_info() if c["name"] == name]
+        if found:
+            self.engine.audition(found[0], 60, 100, 0.6)
+
+    def match_fm1_effects(self, fx: dict[str, int]) -> bool:
+        """An FM-1 effects chain with ``fx``'s settings on the selected channel's insert."""
+        from adx.hardware.fm1 import effects
+
+        return effects.match_in_adx(self.session, self.selection, fx, self.status)
+
     def attach_pads(self) -> None:
         """Every open input a pad profile matches becomes a clip launcher."""
         for name in self.engine.midi_opened:
@@ -709,6 +769,7 @@ class MainWindow(QMainWindow):
         self.tabifyDockWidget(self.history, self.plugins)
         self.tabifyDockWidget(self.plugins, self.midi)
         self.tabifyDockWidget(self.midi, self.generate)
+        self.tabifyDockWidget(self.generate, self.hardware)
         self.splitDockWidget(self.playlist, self.instrument, Qt.Orientation.Horizontal)
         self.tabifyDockWidget(self.playlist, self.channel_rack)
         self.tabifyDockWidget(self.channel_rack, self.piano_roll)
@@ -838,6 +899,7 @@ class MainWindow(QMainWindow):
             return
         self.clock.stop()
         self._session_timer.stop()
+        self.fm1.stop()
         self.save_layout()
         app = QApplication.instance()
         if app is not None:

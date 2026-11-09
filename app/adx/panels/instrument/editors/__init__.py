@@ -37,6 +37,15 @@ EDITORS: dict[str, Factory] = {
 }
 
 
+def _dx7(session: Session, channel: int) -> QWidget:
+    from adx.panels.instrument.dx7.editor import dx7_editor
+
+    return dx7_editor(session, channel)
+
+
+EDITORS["dx7"] = _dx7
+
+
 def editor_for(session: Session, channel: int, instrument: str) -> QWidget:
     """The editor for a channel's instrument: hand-built where one exists, generic
     otherwise."""

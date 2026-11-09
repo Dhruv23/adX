@@ -115,7 +115,7 @@ InstrumentRun runInstrument(graph::ChannelNode& node, std::vector<graph::BlockEv
             const rt::ScopedRtSection section;
             node.process(context);
         }
-        run.sounding.push_back(node.pool().soundingCount());
+        run.sounding.push_back(node.soundingVoices());
     }
     run.violations =
         log.count(rt::ViolationKind::Allocation) + log.count(rt::ViolationKind::Deallocation);

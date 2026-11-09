@@ -60,6 +60,9 @@ inline constexpr auto kDelayParams = std::to_array<project::ParamDescriptor>({
 
 class Delay final : public Effect {
 public:
+    /// Fm1Effects runs it as an inner stage (phase_11.5.md §4.7).
+    friend class Fm1Effects;
+
     static constexpr double kMaxSeconds = 5.0;
 
     [[nodiscard]] std::string_view typeName() const noexcept override {

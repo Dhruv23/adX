@@ -48,19 +48,67 @@ void defineEngineMidi(py::class_<EngineHandle>& engine) {
             "The system's MIDI input ports, by name.")
         .def(
             "open_midi",
-            [](EngineHandle& self, const std::string& name) {
+            [](EngineHandle& self, const std::string& name, bool sysex) {
                 adx::midi::MidiDevices& devices = devicesOf(self);
                 std::string error;
                 bool ok = false;
                 {
                     const py::gil_scoped_release released;
-                    ok = devices.open(name, error);
+                    ok = devices.open(name, error, sysex);
                 }
                 if (!ok) {
                     throw std::runtime_error(error);
                 }
             },
-            py::arg("name"), "Open a MIDI input; its notes play the MIDI target channel.")
+            py::arg("name"), py::arg("sysex") = false,
+            "Open a MIDI input; its notes play the MIDI target channel. With sysex, its "
+            "SysEx is kept for drain_sysex.")
+        // GIL: trivial - copies the few messages queued since the last frame
+        .def(
+            "drain_sysex",
+            [](EngineHandle& self) {
+                py::list out;
+                if (!self.midi) {
+                    return out;
+                }
+                for (auto& [name, bytes] : self.midi->drainSysex()) {
+                    out.append(
+                        py::make_tuple(name, py::bytes(reinterpret_cast<const char*>(bytes.data()),
+                                                       bytes.size())));
+                }
+                return out;
+            },
+            "Every whole SysEx message received since the last call: (input, bytes).")
+        // GIL: trivial - atomic loads
+        .def_property_readonly(
+            "sysex_dropped",
+            [](EngineHandle& self) { return self.midi ? self.midi->sysexDropped() : 0; })
+        .def(
+            "send_sysex",
+            [](EngineHandle& self, const std::string& name, const std::vector<std::uint8_t>& bytes,
+               int gapMillis) {
+                adx::midi::MidiDevices& devices = devicesOf(self);
+                std::string error;
+                if (!devices.sendSysex(name, bytes, gapMillis, error)) {
+                    throw std::runtime_error(error);
+                }
+            }, // GIL: trivial - queues one message for the sender thread
+            py::arg("name"), py::arg("message"), py::arg("gap_ms") = 0,
+            "Queue one SysEx message (F0..F7) for an open output, gap_ms after the last.")
+        // GIL: trivial - a locked search
+        .def(
+            "midi_output_slot",
+            [](EngineHandle& self, const std::string& name) {
+                return self.midi ? self.midi->outputSlot(name) : -1;
+            },
+            py::arg("name"), "The slot a midiout channel's `port` names for an open output.")
+        // GIL: trivial - one locked size()
+        .def(
+            "sysex_pending",
+            [](EngineHandle& self, const std::string& name) {
+                return self.midi ? self.midi->sysexPending(name) : std::size_t{0};
+            },
+            py::arg("name"))
         .def(
             "close_midi",
             [](EngineHandle& self, const std::string& name) {

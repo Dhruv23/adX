@@ -450,6 +450,48 @@ if(ADX_ENABLE_ONNX)
     set(ADX_ONNX_MODEL "${basicpitch_model_SOURCE_DIR}/nmp.onnx")
 endif()
 
+# --- Phase 11.5: the dx7 instrument's engine (phase_11.5.md §4.1, FINAL_PLAN §8) -------
+#
+# msfa, Google's music-synthesizer-for-android: the engine the M-Vave FM-1 runs and
+# Dexed is built on. adX ports its core into engine/instruments/dx7/msfa/ (Apache
+# headers kept, changes marked), so the shipped binary contains msfa's code and this
+# line puts its notice in THIRD-PARTY. The pinned upstream tree itself is compiled only
+# into the tests, unmodified, as dx7_engine_matches_msfa's oracle. Pinned to a commit:
+# upstream has no release tags.
+# adx-license: msfa | msfa (music-synthesizer-for-android) | Apache-2.0 | the dx7 instrument (ported); its test oracle
+FetchContent_Declare(msfa
+    GIT_REPOSITORY https://github.com/google/music-synthesizer-for-android.git
+    GIT_TAG f67d41d313b7dc85f6fb99e79e515cc9d208cfff
+    SOURCE_SUBDIR adx-do-not-configure
+)
+if(ADX_BUILD_TESTS)
+    FetchContent_MakeAvailable(msfa)
+    set(adx_msfa_src "${msfa_SOURCE_DIR}/app/src/main/jni")
+    add_library(adx_msfa_upstream STATIC
+        "${adx_msfa_src}/dx7note.cc"
+        "${adx_msfa_src}/env.cc"
+        "${adx_msfa_src}/exp2.cc"
+        "${adx_msfa_src}/fm_core.cc"
+        "${adx_msfa_src}/fm_op_kernel.cc"
+        "${adx_msfa_src}/freqlut.cc"
+        "${adx_msfa_src}/lfo.cc"
+        "${adx_msfa_src}/patch.cc"
+        "${adx_msfa_src}/pitchenv.cc"
+        "${adx_msfa_src}/sin.cc"
+    )
+    target_include_directories(adx_msfa_upstream SYSTEM PUBLIC "${adx_msfa_src}")
+    target_compile_definitions(adx_msfa_upstream PRIVATE _USE_MATH_DEFINES)
+    if(MSVC)
+        # msfa_compat.h gives synth.h its memory barrier (or it #warns) before any
+        # upstream file is read; nothing in the upstream sources is edited.
+        target_compile_options(adx_msfa_upstream PRIVATE /W0
+            "/FI${CMAKE_SOURCE_DIR}/cmake/msfa_compat.h")
+    else()
+        target_compile_options(adx_msfa_upstream PRIVATE -w
+            -include "${CMAKE_SOURCE_DIR}/cmake/msfa_compat.h")
+    endif()
+endif()
+
 # Every dependency names its licence (phase_10.md 4.8): an "# adx-license:" line right
 # above each FetchContent_Declare, from which tools/gen_third_party.py writes
 # installer/THIRD-PARTY.md. One without fails the configure, here.

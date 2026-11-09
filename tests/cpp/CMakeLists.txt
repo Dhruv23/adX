@@ -50,6 +50,13 @@ adx_add_cpp_test(adx_tests
         geometry/test_phase6_geometry.cpp
         geometry/test_analyzers.cpp
         geometry/test_bar_start.cpp
+        midi/test_sysex.cpp
+        dx7/MsfaOracle.cpp
+        dx7/test_engine_vs_msfa.cpp
+        dx7/test_codec.cpp
+        dx7/test_dx7_instrument.cpp
+        effects/test_fm1_effects.cpp
+        instruments/test_midiout.cpp
         format/test_lexer.cpp
         format/test_diagnostics.cpp
         format/test_roundtrip.cpp
@@ -132,6 +139,9 @@ adx_add_cpp_test(adx_tests
 # Both are found relative to the source tree rather than the build tree, because the
 # test binary is run from wherever ctest happens to put it.
 target_compile_definitions(adx_tests PRIVATE ADX_REPO_ROOT="${CMAKE_SOURCE_DIR}")
+
+# Phase 11.5: unmodified upstream msfa, the dx7 port's bit-exactness oracle.
+target_link_libraries(adx_tests PRIVATE adx_msfa_upstream)
 
 # Phase 9: the sandbox child and the fixture plugins the plugin tests drive
 # (phase_9.md §4.8). Built before the tests, found by absolute path.

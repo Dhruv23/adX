@@ -131,6 +131,9 @@ private:
 
 class Phaser final : public Effect {
 public:
+    /// Fm1Effects runs it as an inner stage (phase_11.5.md §4.7).
+    friend class Fm1Effects;
+
     static constexpr std::size_t kMaxStages = 12;
 
     [[nodiscard]] std::string_view typeName() const noexcept override {

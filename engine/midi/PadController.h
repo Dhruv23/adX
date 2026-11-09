@@ -83,6 +83,9 @@ struct PadProfile {
 
     FeedbackMode feedback{FeedbackMode::None};
     std::uint8_t feedbackChannel{1};
+    /// Added to a pad's note for its light: the FM-1 lights key k with note k - 48
+    /// (phase_11.5.md §4.10). Zero for controllers that light the note they send.
+    int feedbackOffset{0};
     std::vector<std::uint8_t> sysexPrefix;
     std::vector<std::uint8_t> sysexSuffix;
     std::array<PadColor, kPadLooks> colors{};

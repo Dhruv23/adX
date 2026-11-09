@@ -10,6 +10,8 @@
 #include "engine/midi/MidiBackend.h"
 #include "engine/midi/MidiInput.h"
 #include "engine/midi/MidiOutput.h"
+#include "engine/midi/sysex/SysexAssembler.h"
+#include "engine/midi/sysex/SysexQueue.h"
 #include "engine/render/RenderEngine.h"
 
 namespace adx::midi {
@@ -51,6 +53,9 @@ struct MidiDevices::Open {
     std::size_t slot{0};
     std::unique_ptr<MidiInput> input;
     std::unique_ptr<RtMidiIn> port;
+    /// Present when the input keeps SysEx: filled on the device thread, drained here.
+    std::unique_ptr<SysexQueue> sysex;
+    std::unique_ptr<SysexAssembler> assembler;
 };
 
 struct MidiDevices::OpenOut {
@@ -60,6 +65,9 @@ struct MidiDevices::OpenOut {
     std::unique_ptr<RtMidiOut> port;
     /// Sender thread only: popped, not yet due.
     std::vector<OutMessage> waiting;
+    /// Under m_outLock: SysEx to send, in order, each with the gap to leave after it.
+    std::deque<std::pair<std::vector<std::uint8_t>, int>> sysex;
+    std::int64_t sysexNext{0};
 };
 
 MidiDevices::MidiDevices(render::RenderEngine& engine) : m_engine(engine) {}
@@ -94,7 +102,7 @@ std::vector<std::string> MidiDevices::inputs() {
     return names;
 }
 
-bool MidiDevices::open(const std::string& name, std::string& error) {
+bool MidiDevices::open(const std::string& name, std::string& error, bool sysex) {
     if (std::ranges::any_of(m_open, [&](const auto& open) { return open->name == name; })) {
         error = "already open: " + name;
         return false;
@@ -114,6 +122,11 @@ bool MidiDevices::open(const std::string& name, std::string& error) {
     open->input = std::make_unique<MidiInput>(
         m_engine.core().midiClock(), m_engine.options().sampleRate, m_engine.options().blockFrames,
         static_cast<std::uint8_t>(slot));
+    if (sysex) {
+        open->sysex = std::make_unique<SysexQueue>();
+        open->assembler = std::make_unique<SysexAssembler>(*open->sysex);
+        open->input->attachSysex(open->assembler.get());
+    }
     const bool ok = guarded(error, [&] {
         open->port = std::make_unique<RtMidiIn>();
         unsigned int index = open->port->getPortCount();
@@ -128,7 +141,7 @@ bool MidiDevices::open(const std::string& name, std::string& error) {
         }
         // SysEx, timing and active sensing are ignored at the source; clock is let
         // through for following (MidiClock.h).
-        open->port->ignoreTypes(true, false, true);
+        open->port->ignoreTypes(!sysex, false, true);
         open->port->setCallback(&onMessage, open->input.get());
         open->port->openPort(index, "adX");
     });
@@ -149,6 +162,7 @@ void MidiDevices::close(const std::string& name) {
     }
     std::string ignored;
     static_cast<void>(guarded(ignored, [&] { (*found)->port->closePort(); }));
+    (*found)->input->attachSysex(nullptr); // the port is closed: no callback is running
     m_engine.core().setMidiInput((*found)->slot, nullptr);
     clearDeviceName((*found)->slot);
     m_retired.push_back(std::move((*found)->input));
@@ -162,6 +176,33 @@ std::vector<std::string> MidiDevices::opened() const {
         names.push_back(open->name);
     }
     return names;
+}
+
+std::vector<std::pair<std::string, std::vector<std::uint8_t>>> MidiDevices::drainSysex() {
+    std::vector<std::pair<std::string, std::vector<std::uint8_t>>> out;
+    SysexMessage message;
+    for (const auto& open : m_open) {
+        if (!open->sysex) {
+            continue;
+        }
+        while (open->sysex->pop(message)) {
+            const auto view = message.view();
+            out.emplace_back(open->name, std::vector<std::uint8_t>(view.begin(), view.end()));
+        }
+    }
+    return out;
+}
+
+std::uint64_t MidiDevices::sysexDropped() const {
+    std::uint64_t total = 0;
+    for (const auto& open : m_open) {
+        if (open->sysex) {
+            const SysexStats& stats = open->assembler->stats();
+            total +=
+                open->sysex->droppedCount() + stats.oversize + stats.interrupted + stats.timedOut;
+        }
+    }
+    return total;
 }
 
 std::uint64_t MidiDevices::lost() const {
@@ -272,6 +313,38 @@ bool MidiDevices::send(const std::string& name, std::span<const std::uint8_t> by
     return guarded(error, [&] { (*found)->port->sendMessage(bytes.data(), bytes.size()); });
 }
 
+bool MidiDevices::sendSysex(const std::string& name, std::span<const std::uint8_t> bytes,
+                            int gapMillis, std::string& error) {
+    if (bytes.size() < 2 || bytes.front() != 0xF0 || bytes.back() != 0xF7) {
+        error = "a SysEx message runs from F0 to F7";
+        return false;
+    }
+    const std::scoped_lock lock(m_outLock);
+    const auto found =
+        std::ranges::find_if(m_outs, [&](const auto& out) { return out->name == name; });
+    if (found == m_outs.end()) {
+        error = "not open: " + name;
+        return false;
+    }
+    (*found)->sysex.emplace_back(std::vector<std::uint8_t>(bytes.begin(), bytes.end()),
+                                 std::max(0, gapMillis));
+    return true;
+}
+
+int MidiDevices::outputSlot(const std::string& name) const {
+    const std::scoped_lock lock(m_outLock);
+    const auto found =
+        std::ranges::find_if(m_outs, [&](const auto& out) { return out->name == name; });
+    return found == m_outs.end() ? -1 : static_cast<int>((*found)->slot);
+}
+
+std::size_t MidiDevices::sysexPending(const std::string& name) const {
+    const std::scoped_lock lock(m_outLock);
+    const auto found =
+        std::ranges::find_if(m_outs, [&](const auto& out) { return out->name == name; });
+    return found == m_outs.end() ? 0 : (*found)->sysex.size();
+}
+
 bool MidiDevices::setSync(const std::string& name, bool clock, bool mtc) {
     const std::scoped_lock lock(m_outLock);
     const auto found =
@@ -327,6 +400,14 @@ void MidiDevices::sendLoop() {
                     m_sent.fetch_add(1, std::memory_order_acq_rel);
                 }
                 out->waiting.resize(kept);
+                if (!out->sysex.empty() && now >= out->sysexNext) {
+                    const auto& [bytes, gap] = out->sysex.front();
+                    std::string ignored;
+                    static_cast<void>(guarded(
+                        ignored, [&] { out->port->sendMessage(bytes.data(), bytes.size()); }));
+                    out->sysexNext = now + (static_cast<std::int64_t>(gap) * 1'000'000);
+                    out->sysex.pop_front();
+                }
             }
         }
         // A millisecond: MIDI clock at 300 bpm is a pulse every 8 ms.

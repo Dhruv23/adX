@@ -559,6 +559,13 @@ void EngineCore::processStep(void* user, float* out, const float* in, std::uint3
     // Where this block is in wall time, for the MIDI inputs (MidiInput.h). steady_clock
     // is a register read on Windows (CallbackCore.cpp).
     core->m_streamFrames = time.streamFrames;
+    // midiout channels stamp their notes from this; only an engine with outputs
+    // publishes it, so an offline render running beside the live engine cannot.
+    if (std::ranges::any_of(core->m_midiOutputs, [](const auto& slot) {
+            return slot.load(std::memory_order_relaxed) != nullptr;
+        })) {
+        midi::liveOutputs().blockFrame.store(time.streamFrames, std::memory_order_release);
+    }
     core->m_midiClock.publish(time.streamFrames,
                               std::chrono::duration_cast<std::chrono::nanoseconds>(
                                   std::chrono::steady_clock::now().time_since_epoch())

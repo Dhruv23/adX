@@ -65,12 +65,22 @@ TEST_CASE("pad_profile_parse", "[pads]") {
         CHECK(parse.ok);
         CHECK(parse.warnings.empty());
         CHECK_FALSE(parse.profile.name.empty());
-        CHECK(parse.profile.columns * parse.profile.rows == 64);
+        // 8 x 8 grids, but for the FM-1's 27 keys (8 x 3, phase_11.5.md 4.10).
+        const bool fm1 = entry.path().filename() == "fm1_keys.adxpad";
+        CHECK(parse.profile.columns * parse.profile.rows == (fm1 ? 24U : 64U));
         const adx::midi::PadParse again =
             adx::midi::parsePadProfile(adx::midi::writePadProfile(parse.profile));
         CHECK(again.profile == parse.profile);
     }
-    CHECK(found >= 3);
+    CHECK(found >= 4);
+
+    // The FM-1 lights key k with note k - 48 on its effect channel.
+    const adx::midi::PadParse keys =
+        adx::midi::parsePadProfile(read(profiles() / "fm1_keys.adxpad"));
+    CHECK(keys.profile.feedbackOffset == -48);
+    CHECK(adx::midi::parsePadProfile(adx::midi::writePadProfile(keys.profile))
+              .profile.feedbackOffset == -48);
+    CHECK(keys.profile.noteAt(0, 0) == 48);
 
     // The Launchpad: top-left 81, a row down 71; scene 1 is CC 89.
     const adx::midi::PadParse lp =

@@ -16,6 +16,7 @@
 #include <span>
 
 #include "engine/midi/MidiEvent.h"
+#include "engine/midi/sysex/SysexAssembler.h"
 #include "engine/rt/SpscRing.h"
 
 namespace adx::midi {
@@ -53,8 +54,9 @@ public:
         : m_clock(clock), m_sampleRate(sampleRate), m_blockFrames(blockFrames), m_device(device) {}
 
     /// DEVICE THREAD. One complete message (RtMidi delivers them whole) that arrived at
-    /// `wallNanos` on the steady clock. SysEx, active sensing and anything malformed is
-    /// dropped here; a full ring counts the message as lost.
+    /// `wallNanos` on the steady clock. SysEx goes to the attached assembler, if any
+    /// (phase_11.5.md §4.4), and never into the ring; without one it is dropped, as are
+    /// active sensing and anything malformed. A full ring counts the message as lost.
     void onMessage(std::int64_t wallNanos, std::span<const std::uint8_t> bytes) noexcept;
 
     /// DEVICE THREAD. An event that already knows when it plays (its timestampSamples):
@@ -79,7 +81,14 @@ public:
         return m_lost.load(std::memory_order_acquire);
     }
 
+    /// Main thread, before the port opens: SysEx from now on goes to `assembler`
+    /// (nullptr: dropped). The assembler must outlive the input.
+    void attachSysex(SysexAssembler* assembler) noexcept {
+        m_sysex = assembler;
+    }
+
 private:
+    SysexAssembler* m_sysex{nullptr};
     const AudioClock& m_clock;
     std::uint32_t m_sampleRate;
     std::uint32_t m_blockFrames;

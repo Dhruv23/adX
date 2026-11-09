@@ -29,6 +29,9 @@ effect/EQ/low 15d5de46370b3b6953eff1ce0c1e2b02
 effect/Flanger/default 23926ff5af0739a9dbcb382b86aeab7a
 effect/Flanger/high 580f39950a311b4c922ce8fbf3438d0b
 effect/Flanger/low cb9a61b3e855b0ab843818cb4ace41a6
+effect/Fm1Effects/default 4b42b437718206fa04c966e054d5ca3a
+effect/Fm1Effects/high 86b1be10e0daec6111b5cc4bc1b109bf
+effect/Fm1Effects/low 269fd9feaed8092f70198b7b950756b5
 effect/FormantFilter/default 7eaba90a30ef7a21c437a7e8b0e267f7
 effect/FormantFilter/high 78154a9a3a5720fdc6918ddda4158e9e
 effect/FormantFilter/low bcd098e1e95ca9508d93f6020eb3466e

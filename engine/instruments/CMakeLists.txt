@@ -4,9 +4,17 @@ target_sources(adx_engine_static PRIVATE
     additive/AdditiveParams.cpp
     drumsynth/DrumSynth.cpp
     drumsynth/HardstyleKick.cpp
+    dx7/Dx7Engine.cpp
+    dx7/Dx7Instrument.cpp
+    dx7/Dx7Params.cpp
+    dx7/msfa/Dx7Note.cpp
+    dx7/msfa/Env.cpp
+    dx7/msfa/FmCore.cpp
+    dx7/msfa/Tables.cpp
     fm/FmInstrument.cpp
     fm/FmParams.cpp
     granular/GranularInstrument.cpp
+    midiout/MidiOutInstrument.cpp
     pool/SamplePoolChannel.cpp
     sampler/SamplerInstrument.cpp
     sampler/SamplerSetup.cpp

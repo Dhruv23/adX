@@ -71,7 +71,8 @@ TEST_CASE("golden_all_instruments", "[render][golden]") {
         const adx::tests::InstrumentRun run =
             playPhrase(type.name, adx::tests::instrumentParams(type.name));
         CHECK(run.violations == 0);
-        CHECK(audible(run.left));
+        // midiout sends MIDI and makes no sound of its own: its hash pins the silence.
+        CHECK((audible(run.left) || std::string_view(type.name) == "midiout"));
         actual["instrument/" + std::string(type.name)] = hashOf(run.left, run.right);
     }
 

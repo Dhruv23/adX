@@ -21,6 +21,7 @@
 #include "engine/audio/AudioBackend.h"
 #include "engine/graph/Audition.h"
 #include "engine/graph/Scheduler.h"
+#include "engine/midi/LiveOutputs.h"
 #include "engine/midi/MidiClock.h"
 #include "engine/midi/MidiInput.h"
 #include "engine/midi/MidiLearn.h"
@@ -165,6 +166,8 @@ public:
     void setMidiOutput(std::size_t slot, midi::MidiOutput* output) noexcept {
         if (slot < kMaxMidiOutputs) {
             m_midiOutputs.at(slot).store(output, std::memory_order_release);
+            // And for midiout channels (LiveOutputs.h).
+            midi::liveOutputs().outputs.at(slot).store(output, std::memory_order_release);
         }
     }
     /// Main thread: log what MIDI inputs play while the arrangement rolls (a take).

@@ -11,11 +11,13 @@
 
 #include <atomic>
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <span>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace adx::render {
@@ -43,8 +45,15 @@ public:
     [[nodiscard]] static std::vector<std::string> inputs();
 
     /// Opens the input named `name`. False with `error` set when there is no such port,
-    /// it is already open, every engine slot is taken, or the driver refused.
-    bool open(const std::string& name, std::string& error);
+    /// it is already open, every engine slot is taken, or the driver refused. With
+    /// `sysex`, its SysEx is kept for drainSysex (phase_11.5.md §4.4) instead of being
+    /// ignored at the source.
+    bool open(const std::string& name, std::string& error, bool sysex = false);
+    /// Main thread: every whole SysEx message received since the last call, oldest
+    /// first per input, with the input's name. Never reaches a channel.
+    [[nodiscard]] std::vector<std::pair<std::string, std::vector<std::uint8_t>>> drainSysex();
+    /// SysEx dropped (a full queue, over-size, interrupted or timed out), across inputs.
+    [[nodiscard]] std::uint64_t sysexDropped() const;
     /// Closes it; a no-op for one that is not open.
     void close(const std::string& name);
     /// The names of the open inputs.
@@ -63,6 +72,15 @@ public:
     /// Sends `bytes` (one complete message) to an open output now, not on the audio
     /// clock: a controller's LEDs, a script. False with `error` set otherwise.
     bool send(const std::string& name, std::span<const std::uint8_t> bytes, std::string& error);
+    /// Queues one whole SysEx message (F0 ... F7) for an open output. The sender thread
+    /// sends queued messages in order, at least `gapMillis` apart, so a slow transport
+    /// (BLE, a TRS adapter) is not overrun. False with `error` set otherwise.
+    bool sendSysex(const std::string& name, std::span<const std::uint8_t> bytes, int gapMillis,
+                   std::string& error);
+    /// The engine slot an open output plays from (a midiout channel's `port`), or -1.
+    [[nodiscard]] int outputSlot(const std::string& name) const;
+    /// SysEx messages still queued for an output.
+    [[nodiscard]] std::size_t sysexPending(const std::string& name) const;
     /// Whether an open output is sent MIDI clock and time code. False for one not open.
     bool setSync(const std::string& name, bool clock, bool mtc);
     /// Clock and time-code messages sent, and lost to a full ring, across outputs.

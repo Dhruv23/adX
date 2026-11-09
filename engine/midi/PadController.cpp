@@ -316,6 +316,9 @@ void feedbackKey(PadProfile& p, const std::string& key, const std::string& value
     } else if (key == "CHANNEL") {
         ok = toInt(value, number) && number >= 1 && number <= 16;
         p.feedbackChannel = ok ? static_cast<std::uint8_t>(number) : p.feedbackChannel;
+    } else if (key == "NOTE_OFFSET") {
+        ok = toInt(value, number) && number >= -127 && number <= 127;
+        p.feedbackOffset = ok ? number : p.feedbackOffset;
     } else if (key == "SYSEX_PREFIX") {
         p.sysexPrefix = hexBytes(value, ok);
     } else if (key == "SYSEX_SUFFIX") {
@@ -483,6 +486,9 @@ std::string writePadProfile(const PadProfile& p) {
     line("MODE", toString(p.feedback));
     if (p.feedback != FeedbackMode::None) {
         line("CHANNEL", std::to_string(p.feedbackChannel));
+        if (p.feedbackOffset != 0) {
+            line("NOTE_OFFSET", std::to_string(p.feedbackOffset));
+        }
         line("SYSEX_PREFIX", hexText(p.sysexPrefix));
         line("SYSEX_SUFFIX", hexText(p.sysexSuffix));
         for (std::size_t i = 0; i < kPadLooks; ++i) {

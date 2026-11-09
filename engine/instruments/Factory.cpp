@@ -6,8 +6,10 @@
 #include "engine/graph/nodes/TestToneNode.h"
 #include "engine/instruments/additive/AdditiveInstrument.h"
 #include "engine/instruments/drumsynth/DrumSynth.h"
+#include "engine/instruments/dx7/Dx7Instrument.h"
 #include "engine/instruments/fm/FmInstrument.h"
 #include "engine/instruments/granular/GranularInstrument.h"
+#include "engine/instruments/midiout/MidiOutInstrument.h"
 #include "engine/instruments/pool/SamplePoolChannel.h"
 #include "engine/instruments/sampler/SamplerInstrument.h"
 #include "engine/instruments/sampler/SamplerSetup.h"
@@ -50,6 +52,12 @@ std::shared_ptr<graph::ChannelNode> makeInstrument(std::string_view type, std::u
     }
     if (type == "fm") {
         return std::make_shared<FmInstrument>(channelId, maxPolyphony, stealMode);
+    }
+    if (type == "dx7") {
+        return std::make_shared<dx7::Dx7Instrument>(channelId, maxPolyphony, stealMode);
+    }
+    if (type == "midiout") {
+        return std::make_shared<MidiOutInstrument>(channelId, maxPolyphony, stealMode);
     }
     if (type == "wavetable") {
         return std::make_shared<WavetableInstrument>(channelId, maxPolyphony, stealMode);

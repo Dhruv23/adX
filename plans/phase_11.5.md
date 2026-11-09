@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Not started |
+| **Status** | Done 2026-11-09 (hardware deferred): every box observed by its emulated half; hardware halves and judgements in the final review |
 | **Governs** | `engine/instruments/dx7/`, `engine/midi/dx7/`, `engine/midi/sysex/`, `engine/hardware/fm1/`, the FM-1 effects rack, the `dx7` editor panel, the Hardware panel, the firmware catalog client |
 | **FINAL_PLAN refs** | §5.13, §7 Phase 11.5, §8 (msfa row, firmware-catalog row), §9 (hardware-half and judgement conventions) |
 | **Entry criteria** | [phase_9.md](phase_9.md) §6 complete — **hard dependency**: `MidiInput`, `MidiOutput`, `MidiRouter`, `MidiLearn`, `MidiClock`, the device-profile convention and the plugin host (for the Dexed comparison) all come from there. [phase_11.md](phase_11.md) §6 — **soft dependency**: the FM-1's 27 keys as a launcher and its key LEDs as pad feedback reuse `PadController`/`PadFeedback`; everything else stands without Phase 11 |
@@ -681,52 +681,52 @@ No factory ROM or commercial bank is committed.
 
 ## 6. Definition of done
 
-- [ ] `dx7` is a built-in instrument: `dx7_engine_matches_msfa` (bit-identical to
+- [x] `dx7` is a built-in instrument: `dx7_engine_matches_msfa` (bit-identical to
       upstream for all 32 algorithms and every fixture), `dx7_params_cover_voice`,
       `dx7_no_alloc` and `dx7_offline_equals_live` pass; `bench_dx7.py` shows
       ≥ 64 voices on one core.
-- [ ] Every DX7 voice parameter is editable in the dx7 editor, automatable and
+- [x] Every DX7 voice parameter is editable in the dx7 editor, automatable and
       MIDI-learnable (`test_dx7_editor.py`), and saves and reloads in the project
       and as an `.adxpreset`.
-- [ ] SysEx reaches the main thread through the RT-safe queue and never the audio
+- [x] SysEx reaches the main thread through the RT-safe queue and never the audio
       graph (`midi_input_keeps_sysex`, `sysex_queue_no_alloc`).
-- [ ] Patches made on the FM-1 come into adX as editable dx7 channels. **Emulated
+- [~] Patches made on the FM-1 come into adX as editable dx7 channels. **Emulated
       half** (makes it `[~]`): `scenario fm1_import_bank` from a Bank Export and
       from a `.syx`. **Hardware half:** a bank made on the real device, pulled by
       dump request or Bank Export, every voice opened and played, deferred to the
       final review. (hardware half)
-- [ ] An imported voice sounds like the device. **Emulated half:** `dx7_matches_dexed`,
+- [~] An imported voice sounds like the device. **Emulated half:** `dx7_matches_dexed`,
       and `fm1_engine_matches_emulator` if fm1-emu's licence permits. **Hardware
       half:** five voices captured from the real FM-1 over USB audio against the
       dx7 render in FM-1-rate mode, envelope correlation > 0.95, then a listening
       verdict recorded in STATE.md. (hardware half) (judgement)
-- [ ] Editing in adX drives the device live and voices go back to it
+- [~] Editing in adX drives the device live and voices go back to it
       (`scenario fm1_live_edit`, export roundtrip). **Hardware half:** the same on
       the real device. (hardware half)
-- [ ] The FM-1 plays as an 8-part external instrument with program, bend range,
+- [~] The FM-1 plays as an 8-part external instrument with program, bend range,
       part CCs, named FX and audio return with measured latency
       (`scenario fm1_external_part`). **Hardware half:** a two-part pattern on the
       real V16 device, the audio return aligned within 1 ms after ping. (hardware half)
-- [ ] The FM-1's sequencer and arp lock to adX clock and record as takes
+- [~] The FM-1's sequencer and arp lock to adX clock and record as takes
       (`scenario fm1_capture_sequencer`). **Hardware half:** a real 64-step pattern
       recorded, bar-aligned, velocity behaviour noted. (hardware half)
-- [ ] `Fm1Effects` reproduces the device FX by name and Match in adX copies the
+- [~] `Fm1Effects` reproduces the device FX by name and Match in adX copies the
       state (`test_fm1_fx.py`). **Hardware half:** each effect type compared by ear
       against the device. (hardware half) (judgement)
-- [ ] The keys work as a Phase 11 launcher and the V16 key LEDs show clip state
+- [~] The keys work as a Phase 11 launcher and the V16 key LEDs show clip state
       (emulated through `virtual_fm1.py`). **Hardware half:** on the real device.
       (hardware half)
-- [ ] The FM-1 enumerates as USB MIDI and USB audio (input; playback if probed) in
+- [~] The FM-1 enumerates as USB MIDI and USB audio (input; playback if probed) in
       Preferences, and Bluetooth MIDI connects or its failure is documented.
       (hardware half) — no software stand-in exists for a real composite device.
-- [ ] The firmware catalog loads and caches, and every write is hash-verified and
+- [~] The firmware catalog loads and caches, and every write is hash-verified and
       typed-confirmed (`flasher_gates`). The full install and the interrupted
       install complete against the emulator (`scenario fm1_firmware_install_emulated`).
       **Hardware half — the highest-stakes box:** one real flash of a known
       community firmware and back to official, at the final review, with §4.11's
       recovery limits stated first; the go-ahead and the result are the device
       owner's own call, recorded in their words. (hardware half) (judgement)
-- [ ] `docs/fm1.md` written and the msfa notice in the generated THIRD-PARTY file; FINAL_PLAN §8 and §10
+- [x] `docs/fm1.md` written and the msfa notice in the generated THIRD-PARTY file; FINAL_PLAN §8 and §10
       rows current.
 
 ---
@@ -806,3 +806,123 @@ step 9.
 | CC map changes in a new firmware | a new `.adxdevice` file, not code (§4.9) |
 | Bluetooth MIDI unreliable on Windows | best effort, documented; USB is the supported path |
 | fm1-emu's licence forbids use as an oracle | test not built; Dexed comparison + hardware capture remain |
+
+---
+
+## 11. Corrections found building it (2026-11-08/09)
+
+- **`dx7_matches_dexed` was not built; the sound-alike box's emulated half is
+  `dx7_engine_matches_msfa` instead.** Hosting Dexed with a chosen voice means writing
+  Dexed's private JUCE state blob, whose layout is Dexed's and unpublished. And Dexed's
+  own additions (its filter, its "Modern" engine changes) are exactly what §5 says keep
+  it from being bit-identical. The port is bit-identical to unmodified msfa, the core
+  Dexed and the FM-1 both run, for every fixture voice at both rates. That is a stronger
+  claim than a 0.98 envelope correlation against Dexed. fm1-emu was not tried either.
+  The hardware half (five voices captured from the device, then a listening verdict) is
+  unchanged. The Dexed check is still worth having as a second opinion: STATE.md P11.5-1.
+- **Upstream msfa (2017) lacks part of a DX7 voice.** It has no amplitude modulation
+  (AMS/AMD), no operator on/off, a fixed 3-semitone bend, ignores transpose, and leaves
+  mod wheel, breath, foot and aftertouch as TODOs. The port adds them, each marked
+  `adX:` and each zero at its neutral setting. `dx7_engine_matches_msfa` therefore
+  compares the port and upstream at upstream's settings: AMD 0, bend range 3, all
+  operators on, and the transpose applied to the note handed to upstream. The additions
+  have their own tests (`dx7_additions_to_msfa`). Mono with legato, portamento and the
+  polyphony limit are the voice manager's, not msfa's (Dx7Engine).
+- **No library transcendentals in the port** (`tools/lint.py dsp-math`). msfa builds its
+  tables with libm. The three scalars it uses (`exp2(1/1024)`, the rounded cos and sin
+  of 2π/1024) and the 100 fine-tuning offsets of `osc_freq` are written out as the exact
+  values libm gives. The oracle still compares every sample with upstream's own tables,
+  so a wrong literal fails it.
+- **The tables are per instance.** msfa's frequency, LFO and pitch-EG tables are globals
+  for one sample rate. The port keeps them in a `RateTables` value per engine, so the
+  engine-rate and FM-1-rate engines coexist.
+- **Timing rules** (Dx7Instrument.h). An event applies at the first 64-sample block that
+  starts at or after it. The grid restarts at the note-on that wakes an idle instrument,
+  and the LFO restarts at upstream's initial phase there. That keeps the output the same
+  at any buffer size (`dx7_block_size_independent` at 37…1024 frames) and offline equal
+  to live (`dx7_offline_equals_live`). FM-1-rate mode reads the 44 118 Hz blocks through
+  a 4-point Hermite interpolator, not the polyphase Resampler, which converts whole
+  buffers on the main thread. Its events apply three internal samples later, the
+  interpolator's look-ahead.
+- **`dx7` renders the whole block** (`renderWhole`), as the plugin host does, because
+  msfa mixes all its notes in one fixed-point block. ChannelNode gained a virtual
+  `soundingVoices()` for the voice count, and dx7 caps its own polyphony parameter at the
+  channel's `POLYPHONY`.
+- **Every parameter is a voice byte.** The ten name bytes are parameters `name.1..10`,
+  and operator on/off is `ops.on` (VCED parameter 155). Live controllers are parameters
+  too (`ctl.wheel`, `ctl.breath`, `ctl.foot`, `ctl.aftertouch`, `ctl.bend`,
+  `ctl.sustain`), because a channel node receives notes only; automation, MIDI learn and
+  the FM-1's part CCs reach them that way. The table is literals (Dx7ParamTable.h) so
+  the type catalog can hold it at compile time.
+- **SysEx out is whole messages, spaced.** RtMidi's WinMM back end sends SysEx only
+  whole (midiOutLongMsg). A bank therefore cannot be sliced into 256-byte pieces. Instead,
+  messages queued together go out at least `gap_ms` apart (0 over USB).
+- **The FM-1 layer is Python** (`app/adx/hardware/fm1/`), not `engine/hardware/fm1/` C++.
+  Identity, profiles, the device, OTA, the flasher, the catalog and recovery detection
+  all run on the main thread over SysEx the engine already moves, and none of it touches
+  audio. Test names follow §5, in tests/python. `Dx7ToFm` is `adx.hardware.dx7.to_fm`.
+  The profiles are in `app/adx/hardware/fm1/profiles/`, beside the pad profiles.
+- **The FX CC order is unverified.** There was no published CC guide to transcribe.
+  The profiles carry adX's reading of the CC page (24 names, 70-93 on V16, 0-23 before),
+  marked UNVERIFIED in each file. `fm1_profiles` checks them against a hand-entered copy,
+  and the final review checks them against a device.
+- **The OTA byte layout is adX's reading of the write-ups** (ota.py). The emulator speaks
+  the same layout, so the emulated install proves adX's side, not the device's. For that
+  reason `ota.PROTOCOL_VERIFIED` is False, and the flasher refuses to send enter-upgrade
+  to anything but the emulator. The emulator is recognised by a mark in its identity
+  reply, not by a setting a user could flip. The final review's flash cycle turns it on.
+- **The catalog is a manifest in adX's own JSON format** (firmware.py).
+  `thefirmwarehub.com` publishes no machine-readable list that could be checked, so
+  `tools/fetch_fm1_firmware_catalog.py` was not written. A manifest URL goes in the
+  Firmware tab. An image is checked against the manifest's SHA-256 and a size and blank
+  check; the FM-1 image header format is not public.
+- **The emulator runs on teVirtualMIDI** (installed with loopMIDI), not a loopMIDI
+  loopback. A real "FM-1 Midi" port then appears, what adX sends is not echoed back to
+  it, and re-enumeration as "ota-FM-1" really happens (a port closing, another opening).
+  That exposed a real bug: a handle left open on a vanished port stops the next device on
+  that port from hearing adX. The manager now closes vanished ports first on every scan.
+- **External parts are a new instrument, `midiout`.** Nothing in the engine sent a
+  channel's notes to a MIDI output. `midiout` queues them on the output's ring, stamped
+  with the stream frame, as the clock sender does (engine/midi/LiveOutputs.h).
+  "Add part channels" makes one per part on channels 1-8 and re-points them when the
+  device reconnects. It is silent offline, as the device would be.
+- **The keys launcher is 8 × 3 plus three scene keys.** §4.10's "9 × 3 grid, scene keys
+  and stop-all" needs 31 keys; the device has 27. `fm1_keys.adxpad` has no MATCH_DEVICE,
+  so it never attaches on its own; "Use keys as pads" attaches it. Its LEDs light key k
+  with note k − 48, through a new pad-profile key, `NOTE_OFFSET`.
+- **Sequencer capture is not within 1 ms against the emulator.** Takes sit a constant
+  ~11.7 ms late: adX's clock-out latency plus the MIDI input's deliberate one-block
+  delay. The onsets spread about 1.4 ms, from the sender thread's 1 ms loop and a Python
+  device. The scenario holds the spread to 2 ms and records the offset. Compensating the
+  constant is P11.5-2; the 1 ms claim is the hardware's to check.
+- **Slides and pitch curves do not reach a dx7 voice** (PitchGlide events are ignored).
+  The DX7 has portamento and the pitch EG for that.
+- **The audio return's ping is the existing loopback Calibration.** In tests it runs on
+  a loopback engine with a known delay; on the device it needs FM-1 Audio as the input.
+- **Bench**: 64 voices take 2 % of one core at 48 kHz, about 3,200 voices per core.
+
+## 12. Evidence (observed locally, 2026-11-09)
+
+- C++ `[dx7]`: `dx7_engine_matches_msfa` is bit-identical for 96 fixture voices
+  (all 32 algorithms, every field at its extremes, 32 random) in 6 scenarios (three
+  velocities, a chord with sustain, bend, LFO off) at 48 kHz and 44 118 Hz.
+  `dx7_codec_roundtrip`, `dx7_codec_lenient`, `dx7_param_change_roundtrip`,
+  `dx7_params_cover_voice`, `dx7_no_alloc` (64 voices, patch changes, controllers),
+  `dx7_fm1_rate` (onset within 1 sample, pitch within 0.2 %), `dx7_block_size_independent`
+  and `dx7_additions_to_msfa` all pass. So do `[sysex]` (`sysex_assembler`,
+  `sysex_queue_no_alloc`, `midi_input_keeps_sysex`), `[fm1]` (Fm1Effects is the identity
+  at its defaults, each stage acts, block-size independent), `[midiout]`, `[pads]` with
+  the FM-1 keys profile, and the golden corpus with dx7, midiout and Fm1Effects blessed
+  (additions only).
+- Python: `test_dx7_editor.py` (7), `test_dx7_render.py` (`dx7_offline_equals_live`,
+  both modes), `test_fm1_device.py` (identity, profiles, snapshot, live-edit rate limit,
+  OTA against the mock, flasher gates, full and interrupted installs, bootloader
+  detection, velocity watch, ping offset), `test_fm1_panels.py` (librarian, parts, FX
+  and Match in adX, part channels, ping 777 samples through a loopback), and
+  `test_firmware_catalog.py`.
+- Scenarios through adX.cmd against `tools/virtual_fm1.py` (8, all pass):
+  `fm1_import_bank` (Bank Export → librarian → dx7 channel → sounds → edited → saved →
+  reopened → exported), `fm1_import_from_syx`, `fm1_live_edit`, `fm1_external_part`,
+  `fm1_capture_sequencer`, `fm1_keys_launch_and_light`, `fm1_firmware_install_emulated`
+  and `fm1_firmware_install_interrupted` (stops, no retry, the guide).
+- `bench/bench_dx7.py`: 64 voices, 2.0 % of one core.

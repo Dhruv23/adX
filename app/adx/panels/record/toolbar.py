@@ -29,6 +29,8 @@ class RecordToolbar(QToolBar):
 
     message = Signal(str)
     take = Signal(dict)
+    #: A MIDI take committed: (its pattern, the channel id it was recorded on).
+    midi_take = Signal(str, int)
 
     def __init__(
         self,
@@ -182,8 +184,11 @@ class RecordToolbar(QToolBar):
         origin, self.midi_origin = self.midi_origin, None
         if project is None:
             return
-        name = self._engine.commit_midi_take(project, self._midi_channel(), origin, stop)
+        channel = self._midi_channel()
+        name = self._engine.commit_midi_take(project, channel, origin, stop)
         self._session.notify()
+        if name:
+            self.midi_take.emit(name, channel)
         self.message.emit(
             f"MIDI take recorded: {name}" if name else "Record MIDI: nothing was played"
         )

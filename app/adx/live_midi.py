@@ -32,6 +32,11 @@ class LiveMidi:
         self.report = report
         #: The channel live input plays, or 0.
         self.target = 0
+        #: Inputs a hardware integration owns (the FM-1, phase_11.5.md 4.8): opened with
+        #: SysEx kept, and never closed by :meth:`apply`.
+        self.owned: set[str] = set()
+        #: Outputs the same way.
+        self.owned_outputs: set[str] = set()
         selection.changed.connect(self.follow)
         session.changed.connect(self.follow)
 
@@ -47,7 +52,7 @@ class LiveMidi:
         failed: list[str] = []
         try:
             opened = set(self.engine.midi_opened)
-            for name in opened - set(wanted):
+            for name in opened - set(wanted) - self.owned:
                 self.engine.close_midi(name)
             for name in wanted:
                 if name in opened:
@@ -62,6 +67,43 @@ class LiveMidi:
             return list(wanted)
         self.follow()
         return failed
+
+    def own(self, name: str) -> bool:
+        """Open ``name`` with its SysEx kept, for a hardware integration, closing it first
+        if it was open without; True when it is open that way now."""
+        try:
+            if name in self.engine.midi_opened and name not in self.owned:
+                self.engine.close_midi(name)
+            if name not in self.engine.midi_opened:
+                self.engine.open_midi(name, sysex=True)
+        except RuntimeError as error:
+            self.report(f"MIDI: {error}")
+            return False
+        self.owned.add(name)
+        return True
+
+    def own_output(self, name: str) -> bool:
+        """Open output ``name`` for a hardware integration; never closed by apply."""
+        try:
+            if name not in self.engine.midi_outputs_opened:
+                self.engine.open_midi_output(name)
+        except RuntimeError as error:
+            self.report(f"MIDI out: {error}")
+            return False
+        self.owned_outputs.add(name)
+        return True
+
+    def release(self, name: str) -> None:
+        """Give an owned input back (closed)."""
+        try:
+            if name in self.owned:
+                self.owned.discard(name)
+                self.engine.close_midi(name)
+            if name in self.owned_outputs:
+                self.owned_outputs.discard(name)
+                self.engine.close_midi_output(name)
+        except RuntimeError as error:
+            self.report(f"MIDI: {error}")
 
     def available_outputs(self) -> list[str]:
         """The system's MIDI outputs; empty when there is no MIDI service (or none)."""
@@ -78,7 +120,7 @@ class LiveMidi:
         failed: list[str] = []
         try:
             opened = set(self.engine.midi_outputs_opened)
-            for name in opened - set(wanted):
+            for name in opened - set(wanted) - self.owned_outputs:
                 self.engine.close_midi_output(name)
             for name in wanted:
                 if name not in opened:

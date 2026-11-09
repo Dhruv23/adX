@@ -4,6 +4,7 @@ pybind11_add_module(adx_engine MODULE
     analyzers.cpp
     audio.cpp
     capture.cpp
+    dx7.cpp
     edit.cpp
     export.cpp
     format.cpp

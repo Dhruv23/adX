@@ -28,6 +28,7 @@ files needed to relink adX against a modified shine are provided.
 | VST 3 public SDK | v3.8.0_build_66 | MIT | plugin hosting |
 | ONNX Runtime | 1.27.1 | MIT | optional melody extractor |
 | Basic Pitch model | 0.4.0 | Apache-2.0 | optional melody extractor |
+| msfa (music-synthesizer-for-android) | f67d41d313b7dc85f6fb99e79e515cc9d208cfff | Apache-2.0 | the dx7 instrument (ported); its test oracle |
 
 ## Runtime (Python)
 

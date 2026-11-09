@@ -14,10 +14,13 @@
 #include "engine/effects/Ported.h"
 #include "engine/effects/Spectral.h"
 #include "engine/effects/Vocal.h"
+#include "engine/effects/fm1/Fm1Effects.h"
 #include "engine/instruments/additive/AdditiveParams.h"
 #include "engine/instruments/drumsynth/DrumSynthParams.h"
+#include "engine/instruments/dx7/Dx7ParamTable.h"
 #include "engine/instruments/fm/FmParams.h"
 #include "engine/instruments/granular/GranularParams.h"
+#include "engine/instruments/midiout/MidiOutInstrument.h"
 #include "engine/instruments/sampler/SamplerParams.h"
 #include "engine/instruments/va/VaParams.h"
 #include "engine/instruments/voice/VoiceParams.h"
@@ -44,6 +47,10 @@ constexpr auto kInstruments = std::to_array<TypeInfo>({
      "grains of a sample or a tone: density, size, spray, jitter, spread"},
     {"fm", TypeKind::Instrument, instruments::kFmParams,
      "six operators, the DX7's 32 algorithms, feedback, ratio or fixed frequency"},
+    {"dx7", TypeKind::Instrument, dx7::kDx7Params,
+     "the FM-1's engine: a port of msfa, every DX7 voice parameter editable (FM-1 rate)"},
+    {"midiout", TypeKind::Instrument, instruments::kMidiOutParams,
+     "an external instrument: the channel's notes to a MIDI output (an FM-1 part)"},
     {"wavetable", TypeKind::Instrument, instruments::kWavetableParams,
      "mipmapped 2D tables, linear or spectral morph, .wav import, unison"},
     {"voice", TypeKind::Instrument, instruments::kVoiceParams,
@@ -67,6 +74,8 @@ constexpr auto kEffects = std::to_array<TypeInfo>({
     {"Ducker", TypeKind::Effect, effects::kDuckerParams, "sidechain ducker: v1's master pump"},
     {"EQ", TypeKind::Effect, effects::kEqParams, "v1's three-band EQ: 250 Hz, 1.2 kHz, 4 kHz"},
     {"Flanger", TypeKind::Effect, effects::kFlangerParams, "swept short delay with feedback"},
+    {"Fm1Effects", TypeKind::Effect, effects::kFm1EffectsParams,
+     "the M-Vave FM-1's chain: filter, distortion, chorus, phaser, delay, reverb"},
     {"FormantFilter", TypeKind::Effect, effects::kFormantFilterParams,
      "vowel formants, morphing between two, with an LFO"},
     {"FrequencyShifter", TypeKind::Effect, effects::kFrequencyShifterParams,

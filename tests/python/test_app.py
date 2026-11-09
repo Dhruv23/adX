@@ -63,6 +63,7 @@ def test_opens_plays_and_moves_the_playhead(window: object, repo_root: pathlib.P
         "session",
         "analysis",
         "generate",
+        "hardware",
         "spectrum",
         "spectrogram",
         "scope",

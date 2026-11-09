@@ -89,6 +89,8 @@ void defineProjectLive(pybind11::class_<ProjectHandle>& project);
 void defineEngineLive(pybind11::class_<EngineHandle>& engine);
 void defineEnginePads(pybind11::class_<EngineHandle>& engine);
 void registerPads(pybind11::module_& m);
+/// Phase 11.5: the DX7 voice and bank codec (dx7.cpp).
+void registerDx7(pybind11::module_& m);
 void registerSync(pybind11::module_& m);
 void registerMini(pybind11::module_& m);
 void registerScript(pybind11::module_& m);
