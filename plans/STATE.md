@@ -119,7 +119,7 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 10 — Analysis, visualization, polish | L | **Done** 2026-11-05 (CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`) |
 | 10.5 — Agent-run testing | L | **Done** 2026-11-05 (CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`) |
 | 11 — Live performance | L | **Done** 2026-11-08 (CI green, run 42530467288; full check green, run 42530469039 on tag `phase-11-r2`) |
-| 11.5 — M-Vave FM-1 | XL | **Done** 2026-11-09 (hardware deferred: every hardware half `[~]`; CI: see the Phase 11.5 entry) |
+| 11.5 — M-Vave FM-1 | XL | **Done** 2026-11-09 (hardware deferred: every hardware half `[~]`; CI green, run 42587701796; full check green, run 42592502730 on tag `phase-11.5-r2`) |
 | 11.6 — Editor polish | S | **Done** 2026-11-08 (CI green, run 42549504391; full check green, run 42554232881 on tag `phase-11.6`) |
 | 12 — Sound-design foundation | XL | Not started |
 | 13 — Core Drums & Machines | M | Not started |
@@ -1478,7 +1478,7 @@ carried into Phase 12 with a reason, like any other handoff.
 | **Entry** | Phase 9 §6 complete (hard: MIDI I/O, clock, learn, plugin host, external audio input). Phase 11 is soft: only the keys-as-launcher and the LED feedback use it |
 | **Done when** | [phase_11.5.md](phase_11.5.md) §6. The dx7 port is bit-identical to upstream msfa, every voice parameter is editable, and import, live edit, external parts, sequencer capture, FX match, keys/LEDs and firmware install pass by their emulated halves. The real device (import, the sound-alike capture plus listening verdict, parts, sequencer, LEDs, USB audio, one real flash cycle) is in the final review |
 | **Status** | Done 2026-11-09 (hardware deferred). Every [phase_11.5.md](phase_11.5.md) §6 box observed by its emulated half (phase_11.5.md §12); the device itself is in the final review |
-| **Completed** | 2026-11-09 - CI recorded in the commit that follows this one |
+| **Completed** | 2026-11-09 - CI green, run 42587701796; full check green, run 42592502730 on tag `phase-11.5-r2` (the first runs, 42584322302 and 42584322313 on `phase-11.5`, failed on GitHub's sccache 504, not the code) |
 
 > Added 2026-11-05; rewritten 2026-11-08 at the user's request ("fully support
 > everything the FM-1 supports from its hardware"; patches must arrive as
