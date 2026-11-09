@@ -3,12 +3,15 @@
 #include <algorithm>
 #include <array>
 
+#include "engine/effects/Clipper.h"
 #include "engine/effects/Convolution.h"
 #include "engine/effects/Delay.h"
 #include "engine/effects/Drive.h"
 #include "engine/effects/Dynamics.h"
+#include "engine/effects/Filter.h"
 #include "engine/effects/GrossBeat.h"
 #include "engine/effects/Modulation.h"
+#include "engine/effects/Motion.h"
 #include "engine/effects/Multiband.h"
 #include "engine/effects/ParametricEq.h"
 #include "engine/effects/Ported.h"
@@ -64,6 +67,8 @@ constexpr auto kInstruments = std::to_array<TypeInfo>({
 constexpr auto kEffects = std::to_array<TypeInfo>({
     {"Bitcrush", TypeKind::Effect, effects::kBitcrushParams, "sample-rate and bit-depth reduction"},
     {"Chorus", TypeKind::Effect, effects::kChorusParams, "modulated delay, quadrature stereo"},
+    {"Clipper", TypeKind::Effect, effects::kClipperParams,
+     "16x oversampled soft/hard/sine-fold/foldback/tube clipper"},
     {"Compressor", TypeKind::Effect, effects::kCompressorParams,
      "peak/RMS compressor, soft knee, lookahead, external key"},
     {"Convolution", TypeKind::Effect, effects::kConvolutionParams,
@@ -72,7 +77,11 @@ constexpr auto kEffects = std::to_array<TypeInfo>({
      "ping-pong or straight delay, tempo sync, filtered feedback"},
     {"Distortion", TypeKind::Effect, effects::kDistortionParams, "normalised tanh drive"},
     {"Ducker", TypeKind::Effect, effects::kDuckerParams, "sidechain ducker: v1's master pump"},
+    {"Ensemble", TypeKind::Effect, effects::kEnsembleParams,
+     "2-8 modulated delay voices: Juno I/II/I+II, BBD, dimension"},
     {"EQ", TypeKind::Effect, effects::kEqParams, "v1's three-band EQ: 250 Hz, 1.2 kHz, 4 kHz"},
+    {"Filter", TypeKind::Effect, effects::kFilterParams,
+     "ladder/SVF/comb/formant filter with LFO and envelope follower"},
     {"Flanger", TypeKind::Effect, effects::kFlangerParams, "swept short delay with feedback"},
     {"Fm1Effects", TypeKind::Effect, effects::kFm1EffectsParams,
      "the M-Vave FM-1's chain: filter, distortion, chorus, phaser, delay, reverb"},
@@ -94,20 +103,27 @@ constexpr auto kEffects = std::to_array<TypeInfo>({
     {"Phaser", TypeKind::Effect, effects::kPhaserParams, "2-12 swept allpasses with feedback"},
     {"PitchShifter", TypeKind::Effect, effects::kPitchShifterParams,
      "phase-vocoder pitch shift, +-24 semitones"},
+    {"Resonator", TypeKind::Effect, effects::kResonatorParams,
+     "up to four tuned, damped feedback combs"},
     {"Reverb", TypeKind::Effect, effects::kReverbParams, "Freeverb: 8 combs, 4 allpasses"},
     {"RingMod", TypeKind::Effect, effects::kRingModParams,
      "ring or amplitude modulation by a sine or the sidechain"},
+    {"Rotary", TypeKind::Effect, effects::kRotaryParams,
+     "rotary speaker: horn and drum, slow/fast with ramp"},
     {"Saturation", TypeKind::Effect, effects::kSaturationParams,
      "4x oversampled tube, tape or transformer colour"},
     {"SpectralFreeze", TypeKind::Effect, effects::kSpectralFreezeParams,
      "holds the spectrum and replays it with random phase"},
     {"StereoImager", TypeKind::Effect, effects::kStereoImagerParams,
      "M/S width, with its own width below a crossover"},
+    {"Tape", TypeKind::Effect, effects::kTapeParams, "wow, flutter, saturation, age and hiss"},
     {"TransientShaper", TypeKind::Effect, effects::kTransientParams,
      "attack and sustain from two envelope followers"},
     {"Tremolo", TypeKind::Effect, effects::kTremoloParams, "LFO amplitude, six shapes, stereo"},
     {"Vocoder", TypeKind::Effect, effects::kVocoderParams,
      "16-32 band channel vocoder: sidechain or built-in carrier, sibilance path"},
+    {"VolumeShaper", TypeKind::Effect, effects::kVolumeShaperParams,
+     "tempo-synced gain curve or 16-step gate"},
 });
 // NOLINTEND(modernize-use-designated-initializers)
 

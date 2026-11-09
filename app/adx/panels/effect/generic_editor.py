@@ -141,4 +141,4 @@ def generic_for_slot(session: Session, insert: int, slot: int, effect: str) -> G
         if effect in ("clap", "vst3")
         else effect_descriptors(effect)
     )
-    return GenericEditor(descriptors, slot_target(session, insert, slot))
+    return GenericEditor(descriptors, slot_target(session, insert, slot), type_name=effect)

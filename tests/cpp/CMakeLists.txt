@@ -15,6 +15,7 @@ adx_add_cpp_test(adx_tests
         effects/EffectHarness.cpp
         effects/test_effect_base.cpp
         effects/test_tranche_c.cpp
+        effects/test_tranche_d.cpp
         instruments/InstrumentHarness.cpp
         instruments/test_instrument_base.cpp
         instruments/test_instrument_cost.cpp
@@ -57,6 +58,7 @@ adx_add_cpp_test(adx_tests
         dx7/test_dx7_instrument.cpp
         effects/test_fm1_effects.cpp
         instruments/test_midiout.cpp
+        instruments/test_drum_models.cpp
         format/test_lexer.cpp
         format/test_diagnostics.cpp
         format/test_roundtrip.cpp

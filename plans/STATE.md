@@ -1556,13 +1556,27 @@ No inherited issues: 11.6 has no predecessor in this ledger (it was added beside
 | **Plan** | [phase_12.md](phase_12.md) |
 | **Entry** | Phase 11 §6 complete; the post-Phase-11 golden set recorded as the baseline |
 | **Done when** | [phase_12.md](phase_12.md) §6, including its human gate |
-| **Status** | Not started |
+| **Status** | In progress: easy tranche-B pieces first (see Progress) |
 | **Completed** | — |
 
 > Tranches A (format/model), B (DSP), C (tooling). Phase 13 may start once
 > phase_12.md §8's handoff items are done.
 
 **Inherits:** P11-9 to P11-13 and P11-15 (listed under Phase 11 above); P10.5-2 and P10.5-3.
+
+**Progress (2026-11-09):**
+
+- §4.5 DrumSynth models done: Cowbell, Cymbal, Rim, Clave, Shaker, Conga appended
+  after Kit, plus `character` (808/909/707); GM kit keys mapped. `drum_new_models`
+  passes and the existing golden hashes are unchanged.
+- §4.6 effects done: Clipper, Filter, Resonator, VolumeShaper, Tape, Ensemble, Rotary,
+  each with golden hashes at three settings (additions only) and a numerical test
+  (`clipper_transfer`, `volume_shaper_sync`, `filter_types_shape_the_spectrum`,
+  `filter_lfo_moves_the_cutoff`, `resonator_rings_at_its_note`,
+  `tape_declares_its_delay_as_latency`, `ensemble_width_zero_is_mono`,
+  `rotary_fast_modulates_faster_than_slow`). `effect_no_alloc_in_process` covers them
+  through the catalog. Corrections in phase_12.md §11.
+- Still to do in §4.6: Shaper, Multiband upward (OTT), Hall, PitchCorrect.
 
 **Open issues for Phase 13:**
 

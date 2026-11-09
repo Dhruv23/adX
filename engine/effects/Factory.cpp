@@ -3,13 +3,16 @@
 
 #include <algorithm>
 
+#include "engine/effects/Clipper.h"
 #include "engine/effects/ConvolutionSetup.h"
 #include "engine/effects/Delay.h"
 #include "engine/effects/Drive.h"
 #include "engine/effects/Dynamics.h"
 #include "engine/effects/Effect.h"
+#include "engine/effects/Filter.h"
 #include "engine/effects/GrossBeat.h"
 #include "engine/effects/Modulation.h"
+#include "engine/effects/Motion.h"
 #include "engine/effects/Multiband.h"
 #include "engine/effects/ParametricEq.h"
 #include "engine/effects/Ported.h"
@@ -39,6 +42,27 @@ namespace {
 } // namespace
 
 std::shared_ptr<graph::SlotNode> makeEffect(std::string_view type) {
+    if (type == "Clipper") {
+        return std::make_shared<Clipper>();
+    }
+    if (type == "Filter") {
+        return std::make_shared<Filter>();
+    }
+    if (type == "Resonator") {
+        return std::make_shared<Resonator>();
+    }
+    if (type == "VolumeShaper") {
+        return std::make_shared<VolumeShaper>();
+    }
+    if (type == "Tape") {
+        return std::make_shared<Tape>();
+    }
+    if (type == "Ensemble") {
+        return std::make_shared<Ensemble>();
+    }
+    if (type == "Rotary") {
+        return std::make_shared<Rotary>();
+    }
     if (type == "Fm1Effects") {
         return std::make_shared<Fm1Effects>();
     }

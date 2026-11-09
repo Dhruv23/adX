@@ -1,4 +1,5 @@
 target_sources(adx_engine_static PRIVATE
+    Clipper.cpp
     Convolution.cpp
     ConvolutionSetup.cpp
     Delay.cpp
@@ -6,9 +7,11 @@ target_sources(adx_engine_static PRIVATE
     Dynamics.cpp
     Effect.cpp
     Factory.cpp
+    Filter.cpp
     fm1/Fm1Effects.cpp
     GrossBeat.cpp
     Modulation.cpp
+    Motion.cpp
     Multiband.cpp
     ParametricEq.cpp
     Ported.cpp

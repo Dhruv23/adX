@@ -51,6 +51,12 @@ constexpr float kSilence = 1e-4F;
         return 180.0F;
     case DrumModel::Tom:
         return 110.0F;
+    case DrumModel::Rim:
+        return 1700.0F;
+    case DrumModel::Clave:
+        return 2500.0F;
+    case DrumModel::Conga:
+        return 200.0F;
     default:
         return 1.0F; // hat and clap scale their partials or filters by the ratio
     }
@@ -80,6 +86,31 @@ DrumModel kitModel(std::uint8_t key) noexcept {
     case 48:
     case 50:
         return DrumModel::Tom;
+    // The 808's percussion, on General MIDI's keys (phase_12.md §4.5).
+    case 56:
+        return DrumModel::Cowbell;
+    case 49:
+    case 51:
+    case 52:
+    case 53:
+    case 55:
+    case 57:
+    case 59:
+        return DrumModel::Cymbal;
+    case 75:
+    case 76:
+    case 77:
+        return DrumModel::Clave;
+    case 69:
+    case 70:
+    case 82:
+        return DrumModel::Shaker;
+    case 60:
+    case 61:
+    case 62:
+    case 63:
+    case 64:
+        return DrumModel::Conga;
     default:
         // Elsewhere on the keyboard the five models repeat, so every key sounds.
         return static_cast<DrumModel>(key % 5);
@@ -103,7 +134,8 @@ void DrumSynth::startVoice(graph::Voice& voice, const graph::BlockEvent& /*event
     // In a kit only toms are tuned by their key, as a kit's toms are.
     float keyTrack = render.param(idx(P::KeyTrack));
     if (kit) {
-        keyTrack = s.model == DrumModel::Tom ? 1.0F : 0.0F;
+        // Toms and congas are tuned by their key, as a kit's are.
+        keyTrack = (s.model == DrumModel::Tom || s.model == DrumModel::Conga) ? 1.0F : 0.0F;
     }
     const float semitones =
         render.param(idx(P::Tune)) + (keyTrack * (static_cast<float>(voice.pitch) - 60.0F));
@@ -121,6 +153,10 @@ void DrumSynth::startVoice(graph::Voice& voice, const graph::BlockEvent& /*event
     s.drive = 1.0F + drive;
     s.driveNorm = drive > 0.0F ? dsp::driveNorm(s.drive) : 1.0F;
     s.velocity = static_cast<float>(voice.velocity) / 127.0F;
+    s.character =
+        std::clamp(static_cast<int>(dsp::floorExact(render.param(idx(P::Character)) + 0.5F)), 0, 2);
+    s.fast = 1.0F;
+    s.fastDecay = 0.0F;
 
     s.amp = 1.0F;
     s.ampDecay = decayPerSample(decay, rate);
@@ -146,6 +182,52 @@ void DrumSynth::startVoice(graph::Voice& voice, const graph::BlockEvent& /*event
 
     switch (s.model) {
     case DrumModel::Kick:
+        if (s.character == 1) { // 909: a faster drop and a harder click
+            s.sweepDecay = timeConstant(pitchTime * 0.6F, rate);
+            s.clickLevel = std::min(1.0F, click * 1.5F);
+        } else if (s.character == 2) { // 707: shorter
+            s.ampDecay = decayPerSample(decay * 0.7F, rate);
+            s.toneDecay = s.ampDecay;
+        }
+        break;
+    case DrumModel::Cowbell:
+    case DrumModel::Cymbal:
+        for (std::size_t m = 0; m < s.metal.size(); ++m) {
+            const float phase = static_cast<float>(m) * 0.381966F;
+            s.metal[m].reset(phase - dsp::floorExact(phase));
+        }
+        if (s.model == DrumModel::Cowbell) {
+            s.fastDecay = timeConstant(0.015F, rate);
+            s.filterCoefficients = dsp::svfCoefficients(
+                std::min((2000.0 + (1200.0 * tone)) * ratio, rateD * 0.45), 1.4, rateD);
+        } else {
+            s.fastDecay = decayPerSample(std::max(0.05F, decay * 0.25F), rate);
+            s.filterCoefficients =
+                dsp::svfCoefficients(std::min(3400.0 * ratio, rateD * 0.45), 1.0, rateD);
+            s.highPassCoefficients =
+                dsp::svfCoefficients(std::min(7000.0 * ratio, rateD * 0.45), 0.7, rateD);
+        }
+        break;
+    case DrumModel::Rim:
+    case DrumModel::Clave: {
+        const float longest = s.model == DrumModel::Rim ? 0.04F : 0.06F;
+        const float shortest = s.model == DrumModel::Rim ? 0.01F : 0.02F;
+        s.ampDecay = decayPerSample(std::clamp(decay * 0.1F, shortest, longest), rate);
+        s.toneDecay = s.ampDecay;
+        s.clickDecay = timeConstant(0.001F, rate);
+        s.clickLevel = s.model == DrumModel::Rim ? std::max(click, 0.3F) : click * 0.3F;
+        break;
+    }
+    case DrumModel::Shaker:
+        s.fastDecay = timeConstant(0.005F, rate); // the rise: 1 - fast
+        s.filterCoefficients =
+            dsp::svfCoefficients(std::min(3000.0 + (9000.0 * tone), rateD * 0.45), 0.7, rateD);
+        break;
+    case DrumModel::Conga:
+        s.pitchDrop = std::min(s.pitchDrop, 6.0F);
+        s.sweepDecay = timeConstant(std::min(pitchTime, 0.01F), rate);
+        s.filterCoefficients =
+            dsp::svfCoefficients(std::min(s.frequency * 3.0, rateD * 0.45), 2.5, rateD);
         break;
     case DrumModel::Snare:
         // The tones die in a third of the noise's time, as a real snare's shell does.
@@ -263,6 +345,54 @@ bool DrumSynth::renderVoice(graph::Voice& voice, std::span<float> left, std::spa
             out = raw * 2.5F * (s.toneAmp + tail);
             break;
         }
+        case DrumModel::Cowbell: {
+            float bell = 0.0F;
+            for (std::size_t m = 4; m < 6; ++m) {
+                const float hz = std::min(kMetal[m] * s.frequency * bend, rate * 0.45F);
+                bell += s.metal[m].nextBandLimited(dsp::OscShape::Square, hz * inverseRate);
+            }
+            bell = s.filter.process(bell * 0.5F, s.filterCoefficients, dsp::SvfMode::BandPass);
+            out = bell * ((0.6F * s.fast) + (0.4F * s.amp)) * 2.0F;
+            break;
+        }
+        case DrumModel::Cymbal: {
+            float metal = 0.0F;
+            for (std::size_t m = 0; m < s.metal.size(); ++m) {
+                const float hz = std::min(kMetal[m] * s.frequency * bend, rate * 0.45F);
+                metal += s.metal[m].nextBandLimited(dsp::OscShape::Square, hz * inverseRate);
+            }
+            metal *= 0.25F;
+            const float body =
+                s.filter.process(metal, s.filterCoefficients, dsp::SvfMode::BandPass) * s.amp;
+            const float high = s.highPass.process(metal + (s.noise.next() * 0.2F * s.noiseLevel),
+                                                  s.highPassCoefficients, dsp::SvfMode::HighPass) *
+                               s.fast;
+            out = (body + high) * 1.5F;
+            break;
+        }
+        case DrumModel::Rim:
+        case DrumModel::Clave: {
+            s.phase += s.frequency * bend * inverseRate;
+            s.phase -= dsp::floorExact(s.phase);
+            out = (dsp::sinTurnsF(s.phase) * s.amp) + (transient * 2.0F);
+            break;
+        }
+        case DrumModel::Shaker: {
+            const float grains =
+                s.filter.process(s.noise.next(), s.filterCoefficients, dsp::SvfMode::HighPass);
+            out = grains * (1.0F - s.fast) * s.amp * 1.5F;
+            break;
+        }
+        case DrumModel::Conga: {
+            const float hz = s.frequency * bend * dsp::exp2F(s.pitchDrop * s.sweep / 12.0F);
+            s.phase += hz * inverseRate;
+            s.phase -= dsp::floorExact(s.phase);
+            const float skin =
+                s.filter.process(s.noise.next(), s.filterCoefficients, dsp::SvfMode::BandPass);
+            out = ((dsp::sinTurnsF(s.phase) + (skin * s.noiseLevel * 0.2F)) * s.amp) +
+                  (transient * 0.3F);
+            break;
+        }
         case DrumModel::Kit:
             break;
         }
@@ -280,6 +410,7 @@ bool DrumSynth::renderVoice(graph::Voice& voice, std::span<float> left, std::spa
         s.toneAmp *= s.toneDecay;
         s.sweep *= s.sweepDecay;
         s.click *= s.clickDecay;
+        s.fast *= s.fastDecay;
         ++s.age;
         // The clap's bursts must all have fired before its level can count as gone.
         const bool bursting = s.model == DrumModel::Clap &&

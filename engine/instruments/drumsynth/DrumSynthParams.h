@@ -25,12 +25,29 @@ enum class DrumParam : std::uint32_t {
     Drive,
     Sub,
     Level,
+    /// 0 808, 1 909, 2 707 (phase_12.md §4.5). Appended: existing values keep their place.
+    Character,
     Count,
 };
 
-/// 0..4 one model for every key; Kit maps keys to models as General MIDI does.
-enum class DrumModel : std::uint8_t { Kick, Snare, Hat, Clap, Tom, Kit };
-inline constexpr std::uint8_t kDrumModelCount = 6;
+/// 0..4 one model for every key; Kit maps keys to models as General MIDI does. The
+/// 808's percussion (phase_12.md §4.5) is appended after Kit, so a saved `model` keeps
+/// its meaning.
+enum class DrumModel : std::uint8_t {
+    Kick,
+    Snare,
+    Hat,
+    Clap,
+    Tom,
+    Kit,
+    Cowbell,
+    Cymbal,
+    Rim,
+    Clave,
+    Shaker,
+    Conga,
+};
+inline constexpr std::uint8_t kDrumModelCount = 12;
 
 namespace detail {
 constexpr project::ParamDescriptor drum(std::string_view name, float lo, float hi, float def,
@@ -72,6 +89,9 @@ inline constexpr auto kDrumSynthParams = std::to_array<project::ParamDescriptor>
     detail::drum("sub", 0, 1, 0, project::Unit::Normalized),
     detail::drum("level", -48, 12, -6, project::Unit::Decibels, project::ScaleKind::Linear,
                  project::RateClass::Sample),
+    // The voicing tables: 0 the 808 (every earlier sound), 1 a 909-ish kick (faster drop,
+    // harder click) and snare (noisier), 2 a 707-ish (shorter, brighter).
+    detail::drum("character", 0, 2, 0, project::Unit::Count, project::ScaleKind::Stepped),
 });
 
 static_assert(kDrumSynthParams.size() == static_cast<std::size_t>(DrumParam::Count));

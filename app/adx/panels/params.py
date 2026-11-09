@@ -51,10 +51,49 @@ ENUMS: dict[str, list[str]] = {
     "wave": ["Sine", "Triangle", "Saw", "Square", "Pulse", "Noise"],
     "detector": ["Peak", "RMS"],
     "mode": ["Soft", "Tube", "Hard"],
-    "model": ["Kick", "Snare", "Hat", "Clap", "Tom", "GM kit"],
+    "model": [
+        "Kick",
+        "Snare",
+        "Hat",
+        "Clap",
+        "Tom",
+        "GM kit",
+        "Cowbell",
+        "Cymbal",
+        "Rim",
+        "Clave",
+        "Shaker",
+        "Conga",
+    ],
+    "character": ["808", "909", "707"],
     "shape": ["Sine", "Triangle", "Saw", "Square", "Ramp", "Random"],
     "interpolation": ["Linear", "Cubic", "Sinc"],
     "carrier": ["Sidechain", "Saw", "Pulse", "Noise"],
+}
+
+_SYNC = ["Free", "1/32", "1/16T", "1/16", "1/8T", "1/8", "1/4T", "1/4", "1/2", "1 bar"]
+
+#: Names for one type's choices where its leaf name means something else elsewhere
+#: ("mode" is the Clipper's curve but the Ensemble's voicing). Looked up first.
+TYPE_ENUMS: dict[str, list[str]] = {
+    "Clipper.mode": ["Soft", "Hard", "Sine fold", "Foldback", "Asym tube"],
+    "Filter.type": [
+        "Ladder",
+        "Low pass",
+        "Band pass",
+        "High pass",
+        "Notch",
+        "Comb +",
+        "Comb -",
+        "Formant",
+    ],
+    "Filter.sync": _SYNC,
+    "Filter.shape": ["Sine", "Triangle", "Saw down", "Square"],
+    "VolumeShaper.length": ["1/16", "1/8", "1/4", "1/2", "1 bar"],
+    "VolumeShaper.shape": ["Pump", "Ramp up", "Ramp down", "Sine"],
+    "Tape.speed": ["15 ips", "7.5 ips"],
+    "Ensemble.mode": ["Juno I", "Juno II", "Juno I+II", "BBD", "Dimension"],
+    "Rotary.speed": ["Slow", "Fast"],
 }
 
 
@@ -158,8 +197,8 @@ class ParamTarget:
     automated_paths: Callable[[], dict[str, str]] = _none
 
 
-def make_control(descriptor: dict[str, Any], value: float) -> QWidget:
-    """The widget for one descriptor, showing ``value``."""
+def make_control(descriptor: dict[str, Any], value: float, type_name: str = "") -> QWidget:
+    """The widget for one descriptor of type ``type_name``, showing ``value``."""
     name = str(descriptor["name"])
     leaf = name.rsplit(".", 1)[-1]
     unit = str(descriptor["unit"])
@@ -168,7 +207,11 @@ def make_control(descriptor: dict[str, Any], value: float) -> QWidget:
     kind = widget_kind(descriptor)
     formatter: Callable[[float], str] = partial(format_value, unit=unit)
     if kind == "combo":
-        names = ["Off", "On"] if unit == "bool" else ENUMS.get(leaf)
+        names = (
+            ["Off", "On"]
+            if unit == "bool"
+            else TYPE_ENUMS.get(f"{type_name}.{leaf}", ENUMS.get(leaf))
+        )
         return ParamCombo(stepped_options(low, high, names), value)
     if kind == "fader":
         return ValueFader(low, high, value, default, label=leaf, formatter=formatter)
@@ -201,6 +244,7 @@ class GenericEditor(QScrollArea):
         target: ParamTarget,
         parent: QWidget | None = None,
         columns: int = 6,
+        type_name: str = "",
     ) -> None:
         super().__init__(parent)
         self.setWidgetResizable(True)
@@ -220,7 +264,7 @@ class GenericEditor(QScrollArea):
                 counts[group] = 0
                 outer.addWidget(box)
             value = values.get(name, float(descriptor["default"]))
-            control = make_control(descriptor, value)
+            control = make_control(descriptor, value, type_name)
             control.setObjectName(f"param:{name}")
             self._wire(name, control, descriptor)
             index = counts[group]

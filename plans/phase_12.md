@@ -803,3 +803,35 @@ Research for this phase and the packs, consulted 2026-10-25:
 - Salamander Grand Piano — [sfz repository](https://github.com/sfzinstruments/SalamanderGrandPiano) (CC BY 3.0)
 - SoundFont 2.04 specification (E-mu/Creative, 2005); MMA *Downloadable Sounds Level 1* and *Level 2* specifications
 - TinySoundFont — [github.com/schellingb/TinySoundFont](https://github.com/schellingb/TinySoundFont) (MIT, reference renders only); FluidR3_GM (MIT)
+
+---
+
+## 11. Corrections
+
+Where the build differs from the plan above, and why. Recorded as the work lands.
+
+1. **Effects grouped by family, not one file each (§2).** Clipper is
+   `engine/effects/Clipper.h/.cpp`; Filter and Resonator share
+   `engine/effects/Filter.h/.cpp`; VolumeShaper, Tape, Ensemble and Rotary share
+   `engine/effects/Motion.h/.cpp`. That's the existing convention (`Modulation.cpp`
+   holds Chorus, Flanger, Phaser and Tremolo). The type names and parameters are as
+   §4.6 says.
+2. **Clipper is always 16x (§4.6 `oversample`).** Two nested `Oversampler4x`
+   stages; there's no 2x or 8x stage, and an `oversample` choice would change the
+   effect's latency at run time, which the slot's latency compensation can't follow.
+   The latency is fixed at `kClipperLatency` (50 frames). `clipper_transfer` checks
+   soft-clip aliasing below −90 dBc on a 10 kHz tone at +12 dB drive. Hard clip is
+   checked at −60 dBc, because its corner has harmonics far past 16x's Nyquist. The
+   plan's −90 dBFS holds for the smooth curves.
+3. **VolumeShaper's curve is a `shape` choice for now (§4.6 `curve`).** Pump, ramp
+   up, ramp down and sine, plus the 16-step gate (`steps`, a bitmask). A `core::Curve`
+   parameter needs the curve-valued parameter path that `Shaper` will add, and
+   VolumeShaper will take it then. The phase comes from exact fractional beats
+   through the tempo map (GrossBeat's `beatsAt`), so `volume_shaper_sync` holds a
+   repeat within 1e-5 at 90, 100, 120 and 150 BPM.
+4. **The Resonator has no `mix` parameter of its own.** Every slot already has
+   `mix` (Phase 4's slot parameters).
+5. **Modulated effects run while bypassed.** Ensemble, Filter, Resonator and Rotary
+   build their output from recent input, so `effect_bypass_is_click_free` would hear
+   stale history on un-bypass. They override `runsWhileBypassed()`, as Chorus and
+   Flanger do.

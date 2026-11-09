@@ -9,6 +9,16 @@
 //   clap   three noise bursts 11 ms apart and a longer "reverb" tail, band-passed
 //   tom    the kick's sweep, shallower and higher, with a little noise on the skin
 //
+// and the 808's percussion (phase_12.md §4.5):
+//
+//   cowbell  oscillators 5 and 6 of the hat's bank (540, 800 Hz), band-passed at 2.6 kHz,
+//            a 15 ms first stage then `decay`
+//   cymbal   all six, split: a short 7 kHz high band and a long 3.4 kHz body
+//   rim      a ping at 1.7 kHz (a damped sine, the bridged-T's ring) and a 1 ms click
+//   clave    the same ping at 2.5 kHz, 20-60 ms
+//   shaker   high-passed noise, a 5 ms rise then `decay`; `tone` is the cutoff
+//   conga    the tom with a quick pitch blip and a narrower skin; in a kit, three tunings
+//
 // A hit is one-shot: note-off does nothing, and the voice ends when its level has
 // fallen 80 dB. Parameters latch at the hit (DrumSynthParams.h). Every sound is a
 // function of the voice's identity and its parameters - noise is seeded from the
@@ -58,6 +68,11 @@ struct DrumVoice {
     float drive;
     float driveNorm;
     float velocity;
+    /// A second, faster envelope stage (the cowbell's first 15 ms, the cymbal's high
+    /// band, the shaker's rise).
+    float fast;
+    float fastDecay;
+    int character;
     std::uint32_t age;
 };
 
