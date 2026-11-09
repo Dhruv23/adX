@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -279,4 +280,40 @@ TEST_CASE("sample_pool_resolves_paths", "[format][decode]") {
     CHECK(pool.resolve(resources, "drums/kick.wav") == library / "drums/kick.wav");
     // And by file name when the folder structure differs.
     CHECK(pool.resolve(resources, "old/folder/snare.wav") == library / "snare.wav");
+}
+
+TEST_CASE("generated_assets_decode", "[format][decode]") {
+    // phase_12.md 4.10: the committed wavetables and IRs from tools/packs/gen_*.py are
+    // what presets point at, so the engine's own decoder must read every one.
+    const fs::path root = adx::tests::repoRoot() / "docs" / "examples" / "generated";
+    std::size_t tables = 0;
+    std::size_t irs = 0;
+    for (const auto& entry : fs::recursive_directory_iterator(root)) {
+        if (entry.path().extension() != ".wav") {
+            continue;
+        }
+        INFO(entry.path().string());
+        adx::format::SampleBuffer buffer;
+        std::string error;
+        REQUIRE(adx::format::decodeFile(entry.path(), buffer, error));
+        CHECK(buffer.frames > 0);
+        float peak = 0.0F;
+        const adx::format::SampleView view = buffer.view();
+        for (const float v : std::span<const float>{view.left, view.frames}) {
+            peak = std::max(peak, std::abs(v));
+        }
+        CHECK(peak > 0.5F);
+        CHECK(peak <= 1.0F);
+        if (entry.path().parent_path().filename() == "wavetables") {
+            CHECK(buffer.sourceChannels == 1);
+            CHECK(buffer.frames % 2048 == 0);
+            ++tables;
+        } else {
+            CHECK(buffer.sampleRate == 48000);
+            CHECK(buffer.sourceChannels == 2);
+            ++irs;
+        }
+    }
+    CHECK(tables == 10);
+    CHECK(irs == 14);
 }

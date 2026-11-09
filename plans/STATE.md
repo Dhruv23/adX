@@ -1577,6 +1577,9 @@ No inherited issues: 11.6 has no predecessor in this ledger (it was added beside
   `rotary_fast_modulates_faster_than_slow`). `effect_no_alloc_in_process` covers them
   through the catalog. Corrections in phase_12.md §11.
 - Still to do in §4.6: Shaper, Multiband upward (OTT), Hall, PitchCorrect.
+- §4.10 generators done: `tools/packs/gen_wavetables.py` (10 tables) and
+  `tools/packs/gen_irs.py` (14 IRs), output committed in `docs/examples/generated/`,
+  checked by `test_pack_tools.py` and `generated_assets_decode`.
 
 **Open issues for Phase 13:**
 

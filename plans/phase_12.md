@@ -835,3 +835,14 @@ Where the build differs from the plan above, and why. Recorded as the work lands
    build their output from recent input, so `effect_bypass_is_click_free` would hear
    stale history on un-bypass. They override `runsWhileBypassed()`, as Chorus and
    Flanger do.
+6. **Generated assets live in `docs/examples/generated/` (§4.10).** That's
+   `wavetables/` and `irs/`. The installer already ships `docs/examples`, so an
+   installed copy has them as well as a fresh clone. Both are 24-bit PCM, about half
+   the size of float32 at roughly -144 dBFS of quantisation: 3.2 MB of tables and
+   4.9 MB of IRs. The Alpha Juno PWM saw is two tables, `juno-pwm-saw-mult` (saw times
+   an inverted pulse, one hole then two) and `juno-pwm-saw-detune` (two saws moved
+   against each other), so the hoover gate can pick. `test_pack_tools.py` regenerates
+   every file and compares it with the committed one. It also checks that the frames
+   are whole and band-limited, that drawbar registrations land on their harmonics, and
+   that the room and plate decay times are right. `generated_assets_decode` reads every
+   file through the engine's decoder.
