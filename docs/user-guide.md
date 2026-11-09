@@ -64,6 +64,16 @@ drag moves what is selected. The snap grid is in the second row of the
 toolbar, along with Quantize, Humanize and the scale highlight. Notes drawn past the end
 of the pattern lengthen it to the next bar.
 
+Cut (0) trims a row: click a note and every note on that pitch from the start of that
+bar on is deleted, and a note crossing the bar line is shortened to end on it. Slice (4)
+splits and keeps both halves; Cut keeps nothing after the bar.
+
+The scale box has 31 scales. Pick **Custom…** at the bottom to make your own: toggle
+the steps above the root, name it, and save; it is listed above Custom… from then on.
+**Lock**, next to the scale box, moves every note in the pattern onto the scale when you
+turn it on and whenever the scale or root changes, as one undo step. With Lock off a
+scale only colours the rows and snaps notes as you draw them.
+
 The **Inspector** shows exact values for whatever is selected: type a velocity there and
 it applies to every selected note.
 
@@ -132,4 +142,7 @@ block, so a render on another machine matches yours.
 
 ## 9. Keys
 
-The default keymap is in [keyboard.md](keyboard.md).
+The default keymap is in [keyboard.md](keyboard.md). To change a key, open
+**Preferences > Shortcuts**: search for the action, click its shortcut field, press the
+new key. A clash with another action in the same place is marked; Reset puts one key
+back and Reset all puts back every key.

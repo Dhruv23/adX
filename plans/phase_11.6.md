@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Not started |
+| **Status** | Done 2026-11-08 (evidence in §10; CI runs recorded in plans/STATE.md) |
 | **Governs** | `engine/core/TempoMath.h/.cpp`, `engine/geometry/PianoRollGeometry.cpp`, `app/adx/panels/piano_roll/{scales.py,tools.py,panel.py}`, `app/adx/menus.py`, `app/adx/shortcuts.py`, `app/adx/panels/preferences/`, `tools/gen_keyboard.py` |
 | **FINAL_PLAN refs** | §5.1 (amended), §5.14 (new), §7 Phase 11.6 |
 | **Entry criteria** | None functional — [phase_5.md](phase_5.md) (piano roll, scale highlighting) and [phase_6.md](phase_6.md) (`ActionRegistry`, `Keymap`, the Preferences dialog) are both **Done** already; this phase is follow-on polish against gaps found reviewing that work after the fact, not something either phase was waiting on |
@@ -355,22 +355,22 @@ all" calls `keymap.reset()`.
 
 ## 6. Definition of done
 
-- [ ] `TempoMap::barStart` matches every `kGridBar` line in a meter-change fixture;
+- [x] `TempoMap::barStart` matches every `kGridBar` line in a meter-change fixture;
       `PianoRollGeometry.cpp`'s inline bar math is gone, not duplicated.
-- [ ] The Cut tool ships as the piano roll's tenth tool, with its own key (`0`),
+- [x] The Cut tool ships as the piano roll's eleventh tool (§9), with its own key (`0`),
       doing exactly the three cut-tool tests above and nothing to a different pitch
       row.
-- [ ] Every piano-roll tool switch is a registered, remappable, conflict-checked
+- [x] Every piano-roll tool switch is a registered, remappable, conflict-checked
       `ActionSpec`; `test_piano_roll_tool_shortcuts_are_registered` is green.
-- [ ] `docs/keyboard.md` regenerates clean under `--check`, with a correct "Piano
+- [x] `docs/keyboard.md` regenerates clean under `--check`, with a correct "Piano
       roll tools" section and no leftover hand-written 1-9 sentence.
-- [ ] 30 named scales total (14 existing + 16 added), a working custom-scale editor
+- [x] 31 named scales total (14 existing + 17 added; §9), a working custom-scale editor
       that survives a restart, and a Lock toggle that re-snaps existing notes in one
       undo step and does nothing when off.
-- [ ] A Shortcuts page in Preferences lists every registered action, rebinds and
+- [x] A Shortcuts page in Preferences lists every registered action, rebinds and
       persists through `ActionRegistry.remap`, flags conflicts via
       `Keymap.conflicts()`, and resets per-row or all at once.
-- [ ] FINAL_PLAN.md §10 gains a row for Phase 11.6; §5.1 is amended for the cut tool
+- [x] FINAL_PLAN.md §10 gains a row for Phase 11.6; §5.1 is amended for the cut tool
       and custom scales; §5.14 is added for the shortcuts page.
 
 ---
@@ -401,4 +401,50 @@ all" calls `keymap.reset()`.
 
 ## 9. Corrections
 
-*(filled in during/after implementation, per this project's phase-plan convention — none yet, phase not started)*
+Found building it, 2026-11-08:
+
+- **Cut is the eleventh tool, not the tenth.** The roll already had ten: the nine of
+  `TOOLS` plus the Chord tool (`chords.ChordTool`), which had no key because the old
+  index scheme stopped at 9. Cut still gets `0`; Chord still has none. The 1-9 keys
+  did not move.
+- **The pitch-curve tool's name is `bend`**, so its action is `piano_roll.tool.bend`
+  and `PIANO_ROLL_TOOL_KEYS` uses that key.
+- **§4.1 lists 17 presets, not 16**, so there are 31 scales, not 30. All 17 were kept;
+  `test_preset_list` checks that no two presets share a mask, so none is a duplicate
+  under another name. "Gypsy (Romani)" is 0 2 3 6 7 8 10, the one common reading that
+  is not already Hungarian minor or Phrygian dominant.
+- **The lock action is `piano_roll.snap_notes_to_scale`**, scope `piano_roll`, not
+  `edit.snap_selection_to_scale`: it acts on every note in the pattern, and §4.1
+  invited the rename. It is enabled only while a scale is chosen.
+- **`barStart` is on `TempoMap` (TempoMap.h/.cpp)**, the class's real home; TempoMath.h
+  holds the two free functions both callers share (`barTicks`, `barStartIn`), so the
+  grid pass calls `barStartIn` per line without a meter lookup each time. Its test is
+  `tests/cpp/geometry/test_bar_start.cpp` (no test_tempo_math.cpp existed).
+- **The Shortcuts page applies a rebind at once.** `Keymap.set` persists on every call,
+  so the page is a direct view over it; Cancel does not undo a rebind. The page says so.
+- **"Custom…" edits the scale in use** when that is a custom scale (so it can be
+  renamed or deleted), and makes a new one otherwise. Choosing a saved custom scale
+  just uses it; the plan had that open the editor, which would make using one
+  impossible without a dialog every time.
+- **Piano-roll tool keys now work while the piano roll has focus**, as the playlist's
+  do (`WidgetWithChildrenShortcut`); before, as bare QActions, they fired anywhere in
+  the dock's window.
+- `docs/keyboard.md`: only the 1-9 half of the hand-written sentence went; Delete and
+  Ctrl+A stay, and the line now points to Preferences > Shortcuts.
+- `register_actions` passed the 150-line limit (`lint.py rules`) with the new specs, so
+  they are in `_piano_roll_specs` and `_attach_piano_roll`.
+
+## 10. Evidence
+
+Observed locally 2026-11-08:
+
+- C++: `adx_tests "[tempomap],[geometry]"`: 47 cases, 46,693 assertions, all pass,
+  including `bar_start_within_a_meter`, `test_bar_start_matches_grid_lines` and the
+  unchanged `geometry_scale_highlight_rows` and grid tests.
+- Python: the whole suite (`pytest -m "not gpu and not serial" -n auto`) green after the
+  function-length fix; new tests `test_cut_tool_*` (four), the `cut` gesture in
+  `test_piano_roll_tools_emit_one_command`/`_undo_restores`, `test_scales.py` (24),
+  `test_piano_roll_tool_shortcuts_are_registered`, `test_panel_preferences.py` (three).
+- `tools/gen_keyboard.py --check` green with distinct "Playlist tools" and "Piano roll
+  tools" sections; ruff, ruff format, mypy --strict, clang-format, `lint.py rules`,
+  `lint.py headers` clean.

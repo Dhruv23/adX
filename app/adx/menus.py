@@ -2,8 +2,8 @@
 
 The menu bar is built from this list; the keymap holds each one's shortcut; the
 enablement predicates are evaluated when a menu opens and whenever the selection or the
-project changes. Panel-scoped actions (the playlist's tools) carry their panel's id and
-work only while it has focus.
+project changes. Panel-scoped actions (the playlist's and the piano roll's tools) carry
+their panel's id and work only while it has focus.
 """
 
 from __future__ import annotations
@@ -25,6 +25,21 @@ PANEL_KEYS = {
     "piano_roll": "F7",
     "browser": "F8",
     "mixer": "F9",
+}
+
+#: The piano roll's tool keys, stated once (phase_11.6.md 4.3): the first nine keep the
+#: 1-9 they always had, Cut takes 0, and the chord tool has none.
+PIANO_ROLL_TOOL_KEYS = {
+    "draw": "1",
+    "paint": "2",
+    "select": "3",
+    "slice": "4",
+    "glue": "5",
+    "strum": "6",
+    "mute": "7",
+    "slide": "8",
+    "bend": "9",
+    "cut": "0",
 }
 
 
@@ -170,10 +185,50 @@ def register_actions(window: MainWindow, registry: ActionRegistry) -> None:
                 scope="playlist",
             )
         )
+    specs += _piano_roll_specs(w)
     for spec in specs:
         registry.register(spec)
     for action in registry.scoped("playlist"):
         w.playlist.addAction(action)
+    _attach_piano_roll(w, registry)
+
+
+def _piano_roll_specs(w: MainWindow) -> list[ActionSpec]:
+    """The piano roll's tool keys (phase_11.6.md 4.3) and its scale-lock action."""
+    specs: list[ActionSpec] = []
+    for name, roll_tool in w.piano_roll.tools.items():
+        specs.append(
+            ActionSpec(
+                f"piano_roll.tool.{name}",
+                f"{roll_tool.label} tool",
+                partial(w.piano_roll.set_tool, name),
+                "",
+                PIANO_ROLL_TOOL_KEYS.get(name, ""),
+                checkable=True,
+                scope="piano_roll",
+            )
+        )
+    specs.append(
+        ActionSpec(
+            "piano_roll.snap_notes_to_scale",
+            "Snap notes to scale",
+            w.piano_roll.snap_notes_to_scale,
+            "",
+            "",
+            w.piano_roll.has_scale,
+            scope="piano_roll",
+            tooltip="Move every note in the pattern onto the chosen scale (one undo step)",
+        )
+    )
+    return specs
+
+
+def _attach_piano_roll(w: MainWindow, registry: ActionRegistry) -> None:
+    """The roll's toolbar buttons become the registry's actions."""
+    w.piano_roll.adopt_tool_actions(
+        {name: registry.action(f"piano_roll.tool.{name}") for name in w.piano_roll.tools}
+    )
+    w.piano_roll.snap_action = registry.action("piano_roll.snap_notes_to_scale")
 
 
 def _edit_specs(w: MainWindow, has_project: Callable[[], bool]) -> list[ActionSpec]:

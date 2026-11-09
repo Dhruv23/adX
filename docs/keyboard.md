@@ -2,8 +2,8 @@
 
 The default keymap: every menu action that has a shortcut. Generated from the
 action registry by `tools/gen_keyboard.py`; a test fails when it falls behind.
-Inside a panel its own keys apply too: the piano roll's tools are 1-9, Delete
-removes what is selected, and Ctrl+A selects everything in view.
+Every key can be changed in Preferences > Shortcuts. Inside a panel, Delete
+removes what is selected and Ctrl+A selects everything in view.
 
 ## File
 
@@ -80,3 +80,18 @@ removes what is selected, and Ctrl+A selects everything in view.
 | `X` | Stretch tool |
 | `T` | Mute tool |
 | `G` | Group tool |
+
+## Piano roll tools
+
+| Keys | Action |
+|---|---|
+| `1` | Draw tool |
+| `2` | Paint tool |
+| `3` | Select tool |
+| `4` | Slice tool |
+| `5` | Glue tool |
+| `6` | Strum tool |
+| `7` | Mute tool |
+| `8` | Slide tool |
+| `9` | Pitch curve tool |
+| `0` | Cut tool |

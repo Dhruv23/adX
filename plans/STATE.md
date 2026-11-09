@@ -119,6 +119,8 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 10 — Analysis, visualization, polish | L | **Done** 2026-11-05 (CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`) |
 | 10.5 — Agent-run testing | L | **Done** 2026-11-05 (CI green, run 41991668112; full check green, run 42017826073 on tag `phase-10.5-r4`) |
 | 11 — Live performance | L | **Done** 2026-11-08 (CI green, run 42530467288; full check green, run 42530469039 on tag `phase-11-r2`) |
+| 11.5 — M-Vave FM-1 | XL | In progress 2026-11-08 |
+| 11.6 — Editor polish | S | **Done** 2026-11-08 (CI: see the Phase 11.6 entry) |
 | 12 — Sound-design foundation | XL | Not started |
 | 13 — Core Drums & Machines | M | Not started |
 | 14 — Hyperpop | L | Not started |
@@ -1475,7 +1477,7 @@ carried into Phase 12 with a reason, like any other handoff.
 | **Plan** | [phase_11.5.md](phase_11.5.md) |
 | **Entry** | Phase 9 §6 complete (hard: MIDI I/O, clock, learn, plugin host, external audio input). Phase 11 is soft: only the keys-as-launcher and the LED feedback use it |
 | **Done when** | [phase_11.5.md](phase_11.5.md) §6. The dx7 port is bit-identical to upstream msfa, every voice parameter is editable, and import, live edit, external parts, sequencer capture, FX match, keys/LEDs and firmware install pass by their emulated halves. The real device (import, the sound-alike capture plus listening verdict, parts, sequencer, LEDs, USB audio, one real flash cycle) is in the final review |
-| **Status** | Not started |
+| **Status** | In progress 2026-11-08 |
 | **Completed** | — |
 
 > Added 2026-11-05; rewritten 2026-11-08 at the user's request ("fully support
@@ -1485,6 +1487,31 @@ carried into Phase 12 with a reason, like any other handoff.
 **Open issues remaining at completion:**
 
 - _to be filled in by the agent that completes this phase_
+
+---
+
+## [x] Phase 11.6 — Editor polish: scale parity, a piano-roll cut tool, a shortcuts page · S
+
+| | |
+|---|---|
+| **Plan** | [phase_11.6.md](phase_11.6.md) |
+| **Entry** | None functional: Phases 5 and 6 are Done |
+| **Done when** | [phase_11.6.md](phase_11.6.md) §6 |
+| **Status** | Done 2026-11-08. Every §6 box observed locally (phase_11.6.md §10); CI recorded below |
+| **Completed** | 2026-11-08 |
+
+Built 2026-11-08: `TempoMap::barStart` (the grid's bar lines read it), the piano-roll
+Cut tool on `0`, every piano-roll tool key in the action registry, 31 scales with a
+custom-scale editor and Lock, and Preferences > Shortcuts. Ten corrections to the plan
+in phase_11.6.md §9 (Cut is the eleventh tool; 17 presets were listed, not 16).
+
+No inherited issues: 11.6 has no predecessor in this ledger (it was added beside 11.5).
+
+**Open issues remaining at completion:**
+
+- **P11.6-1** · Other panels may still set keys outside the registry, as the piano
+  roll did (phase_11.6.md §7, last row). Not audited. Fixed when: a test walks every
+  panel's QActions and finds none with a shortcut that is not a registry action.
 
 ---
 

@@ -39,7 +39,9 @@ def render() -> str:
         action = window.registry.action(spec.id)
         keys = action.shortcut().toString()
         if keys:
-            menu = spec.menu.replace("&", "") or "Playlist tools"  # the playlist's toolbar, no menu
+            # A panel's tool keys have no menu: they go under the panel ("Piano roll tools").
+            panel = spec.scope.replace("_", " ").capitalize()
+            menu = spec.menu.replace("&", "") or f"{panel} tools"
             rows.setdefault(menu, []).append((keys, action.text().replace("&", "")))
     window.close()
     del app
@@ -48,8 +50,8 @@ def render() -> str:
         "",
         "The default keymap: every menu action that has a shortcut. Generated from the",
         "action registry by `tools/gen_keyboard.py`; a test fails when it falls behind.",
-        "Inside a panel its own keys apply too: the piano roll's tools are 1-9, Delete",
-        "removes what is selected, and Ctrl+A selects everything in view.",
+        "Every key can be changed in Preferences > Shortcuts. Inside a panel, Delete",
+        "removes what is selected and Ctrl+A selects everything in view.",
         "",
     ]
     for menu, entries in rows.items():

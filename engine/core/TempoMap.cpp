@@ -110,6 +110,10 @@ MeterEvent TempoMap::meterAt(Ticks at) const noexcept {
     return m_meter[meterIndexAt(at)];
 }
 
+Ticks TempoMap::barStart(Ticks at) const noexcept {
+    return Ticks{barStartIn(m_meter[meterIndexAt(at)], at.value)};
+}
+
 double TempoMap::secondsAt(Ticks at) const noexcept {
     return view().secondsAt(at);
 }

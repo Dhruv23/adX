@@ -264,6 +264,12 @@ void defineNoteAccess(py::class_<ProjectHandle>& project) {
             }, // GIL: trivial
             py::arg("ticks") = 0)
         .def(
+            "bar_start",
+            [](const ProjectHandle& handle, std::int64_t ticks) {
+                return handle.project.tempo.barStart(core::Ticks{ticks}).value;
+            }, // GIL: trivial
+            py::arg("ticks") = 0)
+        .def(
             "bpm_at",
             [](const ProjectHandle& handle, std::int64_t ticks) {
                 return handle.project.tempo.bpmAt(core::Ticks{ticks});

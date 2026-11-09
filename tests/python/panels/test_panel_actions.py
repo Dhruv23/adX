@@ -54,3 +54,32 @@ def test_shortcut_remap_persists(studio: MainWindow) -> None:
     studio.registry.remap("edit.duplicate", "Ctrl+Shift+D")
     assert studio.registry.action("edit.duplicate").shortcut().toString() == "Ctrl+Shift+D"
     assert studio.keymap.shortcut("edit.duplicate") == "Ctrl+Shift+D"
+
+
+def test_piano_roll_tool_shortcuts_are_registered(studio: MainWindow) -> None:
+    """phase_11.6.md 4.3: every piano-roll tool key is a registry action, not a key the
+    panel sets on its own, so it can be remapped and is conflict-checked."""
+    from PySide6.QtGui import QKeySequence
+
+    from adx.menus import PIANO_ROLL_TOOL_KEYS
+
+    registry, roll = studio.registry, studio.piano_roll
+    ids = {spec.id for spec in registry.specs()}
+    for name in roll.tools:
+        action_id = f"piano_roll.tool.{name}"
+        assert action_id in ids
+        assert registry.spec(action_id).scope == "piano_roll"
+        expected = PIANO_ROLL_TOOL_KEYS.get(name, "")
+        assert studio.keymap.default(action_id) == expected
+        assert registry.action(action_id).shortcut() == QKeySequence(expected)
+        # The toolbar button is the registry's action.
+        assert roll.tool_actions[name] is registry.action(action_id)
+    assert PIANO_ROLL_TOOL_KEYS["cut"] == "0"
+    # Triggering the action switches the tool and checks its button.
+    assert registry.trigger("piano_roll.tool.cut")
+    assert roll.tool.name == "cut"
+    assert roll.tool_actions["cut"].isChecked()
+    assert not roll.tool_actions["draw"].isChecked()
+    # A clash inside the piano roll is reported.
+    registry.remap("piano_roll.tool.cut", "1")
+    assert set(studio.keymap.conflicts()["1"]) == {"piano_roll.tool.cut", "piano_roll.tool.draw"}

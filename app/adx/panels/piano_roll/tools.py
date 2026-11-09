@@ -363,6 +363,34 @@ class SliceTool(Tool):
         model.edit("Slice notes", update=left, add=right)
 
 
+@dataclass(slots=True)
+class CutTool(Tool):
+    """Click a bar in a note's row: every note in that row from the bar on is removed,
+    and one crossing the bar line is shortened to end there. Unlike Slice, nothing
+    after the bar is kept."""
+
+    name: str = "cut"
+    label: str = "Cut"
+
+    def release(self, model: RollModel, p: Pointer) -> None:
+        hit, _part = model.hit_note(p.x, p.y)
+        if not hit:
+            return
+        bar = model.bar_start(model.view.tick_at(p.x))
+        notes = model.notes()
+        row = notes[notes["pitch"] == notes[notes["id"] == hit]["pitch"][0]]
+        starts = row["start"].astype(np.int64)
+        ends = starts + row["length"].astype(np.int64)
+        remove = row[starts >= bar]["id"]
+        straddling = row[(starts < bar) & (ends > bar)].copy()
+        straddling["length"] = bar - straddling["start"].astype(np.int64)
+        if not len(remove) and not len(straddling):
+            return
+        if len(remove):
+            model.select(remove, "remove")
+        model.edit("Cut notes", update=straddling if len(straddling) else None, remove=remove)
+
+
 def glue_rows(rows: NoteArray, tolerance: int) -> tuple[NoteArray, np.ndarray]:
     """Merge touching notes on each pitch. Returns (lengthened rows, ids to remove)."""
     order = np.lexsort((rows["start"], rows["pitch"]))
@@ -722,7 +750,8 @@ class LaneEditor:
         self.active = False
 
 
-#: The seven tools phase_5.md 5's table drives, then the two extension tools.
+#: The seven tools phase_5.md 5's table drives, the two extension tools, then Cut
+#: (phase_11.6.md 4.2).
 TOOLS: tuple[type[Tool], ...] = (
     DrawTool,
     PaintTool,
@@ -733,4 +762,5 @@ TOOLS: tuple[type[Tool], ...] = (
     MuteTool,
     SlideTool,
     PitchCurveTool,
+    CutTool,
 )

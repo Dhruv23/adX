@@ -125,6 +125,10 @@ def g_bend(m: RollModel) -> None:
     drag(m, tools.PitchCurveTool(), at(m, 0.05 * BEAT, 60), *pencil)
 
 
+def g_cut(m: RollModel) -> None:
+    drag(m, tools.CutTool(), at(m, 0.5 * BEAT, 60))
+
+
 def g_chord(m: RollModel) -> None:
     drag(m, chords.ChordTool(), at(m, 3 * BEAT, 62))
 
@@ -147,6 +151,7 @@ GESTURES: list[tuple[str, Callable[[RollModel], None]]] = [
     ("mute", g_mute),
     ("slide", g_slide),
     ("pitch curve", g_bend),
+    ("cut", g_cut),
     ("chord", g_chord),
     ("lane", g_lane),
 ]
@@ -397,3 +402,86 @@ def test_drawing_past_the_end_lengthens_the_pattern() -> None:
     assert model.project.pattern_length("Roll") == 4 * bar
     assert model.project.undo_depth() == depth - 1
     assert int(model.notes()["start"].max()) < 4 * bar
+
+
+CUT_SCENE = """[PROJECT]
+ADX_VERSION=2
+
+[CHANNEL Lead]
+OUTPUT=insert.1
+
+[PATTERN Roll]
+LENGTH=4:0:0
+NOTES Lead
+  C4 0:0:0 0:2:0 100
+  C4 1:2:0 1:0:0 100
+  C4 2:2:0 0:1:0 100
+  C4 3:0:0 0:1:0 100
+  D4 3:0:0 0:1:0 100
+
+[PLAYLIST]
+TRACK 1
+  PATTERN Roll 0:0:0
+
+[MIXER]
+INSERT 1 name="Master"
+"""
+
+
+def cut_model() -> RollModel:
+    project, diagnostics = Project.loads(CUT_SCENE)
+    assert not [d for d in diagnostics if d["severity"] == "error"]
+    view = ViewState(
+        width=1000.0,
+        height=600.0,
+        lane_height=100.0,
+        tick_start=0.0,
+        pitch_top=84.0,
+        pixels_per_tick=0.01,
+        pixels_per_semitone=10.0,
+    )
+    return RollModel(project=project, pattern="Roll", channel="Lead", view=view)
+
+
+def row(model: RollModel, pitch: int) -> list[tuple[int, int]]:
+    notes = model.notes()
+    mine = notes[notes["pitch"] == pitch]
+    return sorted((int(s), int(n)) for s, n in zip(mine["start"], mine["length"], strict=True))
+
+
+def test_cut_tool_removes_notes_after_bar() -> None:
+    """Clicking the third C4 (in bar 3) removes it and the fourth; the first stays."""
+    m = cut_model()
+    bar = 4 * BEAT
+    drag(m, tools.CutTool(), at(m, 2 * bar + 2.5 * BEAT, 60))
+    assert m.commands == 1
+    assert m.project.history()[-1].startswith("Cut notes")
+    kept = row(m, 60)
+    assert (0, 2 * BEAT) in kept
+    assert all(start < 2 * bar for start, _length in kept)
+    assert m.project.undo()
+    assert len(row(m, 60)) == 4
+
+
+def test_cut_tool_truncates_straddling_note() -> None:
+    """The C4 from bar 2 beat 3 runs a whole bar; it ends exactly at bar 3, unsplit."""
+    m = cut_model()
+    bar = 4 * BEAT
+    count = len(m.notes())
+    drag(m, tools.CutTool(), at(m, 2 * bar + 2.5 * BEAT, 60))
+    assert row(m, 60) == [(0, 2 * BEAT), (bar + 2 * BEAT, 2 * BEAT)]
+    assert len(m.notes()) == count - 2  # nothing added: Cut is not Slice
+
+
+def test_cut_tool_scoped_to_clicked_row() -> None:
+    """The D4 after the same bar is untouched: the cut is per row."""
+    m = cut_model()
+    bar = 4 * BEAT
+    drag(m, tools.CutTool(), at(m, 2 * bar + 2.5 * BEAT, 60))
+    assert row(m, 62) == [(3 * bar, BEAT)]
+
+
+def test_cut_tool_on_empty_space_is_no_command() -> None:
+    m = cut_model()
+    drag(m, tools.CutTool(), at(m, 2.5 * BEAT, 70))
+    assert m.commands == 0

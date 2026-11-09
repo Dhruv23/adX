@@ -19,7 +19,7 @@ from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QEvent, QObject, QSettings, Qt, QUrl, Signal, Slot
-from PySide6.QtGui import QAction, QActionGroup, QColor, QKeyEvent, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QColor, QKeyEvent
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtWidgets import (
     QComboBox,
@@ -106,7 +106,7 @@ class RollInput(QObject):
 
 
 class PianoRollPanel(DockPanel):
-    """One channel's notes in one pattern, edited with nine tools and six lanes."""
+    """One channel's notes in one pattern, edited with eleven tools and six lanes."""
 
     panel_id = "piano_roll"
     title = "Piano roll"
@@ -216,14 +216,17 @@ class PianoRollPanel(DockPanel):
         bar.addWidget(self.pattern_box)
         bar.addWidget(self.channel_box)
         bar.addSeparator()
-        group = QActionGroup(self)
+        # Placeholder buttons until the main window's registry hands over its
+        # piano_roll.tool.* actions (adopt_tool_actions): the keys live there, where they
+        # can be remapped and conflict-checked (phase_11.6.md 4.3).
+        self._tool_bar = bar
+        self._tool_group = QActionGroup(self)
         self.tool_actions: dict[str, QAction] = {}
-        for index, (name, tool) in enumerate(self.tools.items()):
+        for name, tool in self.tools.items():
             action = QAction(tool.label, self, checkable=True)
-            action.setShortcut(QKeySequence(str(index + 1)) if index < 9 else QKeySequence())
-            action.setToolTip(f"{tool.label} ({index + 1})" if index < 9 else tool.label)
+            action.setToolTip(tool.label)
             action.triggered.connect(lambda _checked=False, n=name: self.set_tool(n))
-            group.addAction(action)
+            self._tool_group.addAction(action)
             bar.addAction(action)
             self.tool_actions[name] = action
         self.tool_actions["draw"].setChecked(True)
@@ -245,11 +248,23 @@ class PianoRollPanel(DockPanel):
         self.root_box = QComboBox()
         self.root_box.addItems(list(scales.NOTE_NAMES))
         self.scale_box = QComboBox()
-        self.scale_box.addItems(["No scale", *scales.SCALES])
+        self.scale_box.setObjectName("piano_roll.scale")
+        self.custom_scales = scales.CustomScales()
+        self._last_scale = scales.NO_SCALE
+        self._fill_scales()
         self.root_box.currentIndexChanged.connect(self._scale_chosen)
         self.scale_box.currentIndexChanged.connect(self._scale_chosen)
         bar.addWidget(self.root_box)
         bar.addWidget(self.scale_box)
+        self.lock_action = QAction("Lock", self, checkable=True)
+        self.lock_action.setObjectName("piano_roll.scale_lock")
+        self.lock_action.setToolTip(
+            "Scale lock: keep every note in the pattern on the scale when it changes"
+        )
+        self.lock_action.toggled.connect(self._lock_toggled)
+        bar.addAction(self.lock_action)
+        #: The registry's "Snap notes to scale" action, once menus.py registers it.
+        self.snap_action: QAction | None = None
         self.chord_box = QComboBox()
         self.chord_box.addItems([*chords.DIATONIC, *chords.CHORDS])
         self.chord_box.setToolTip("Chord tool shape")
@@ -362,6 +377,11 @@ class PianoRollPanel(DockPanel):
             )
         else:
             self._grid_chosen(self.grid_box.currentIndex())
+            # Opening a clip shows the scale; it is not a scale change, so Lock edits nothing.
+            self.model.scale_root, self.model.scale_mask = (
+                self.root_box.currentIndex(),
+                self.scale_mask(),
+            )
             self._scale_chosen()
             self.model.lane = min(self.lane_box.currentIndex(), len(LANES) - 1)
         self.model.on_commit = self._committed
@@ -762,6 +782,29 @@ class PianoRollPanel(DockPanel):
 
     # --- toolbar --------------------------------------------------------------------
 
+    def adopt_tool_actions(self, actions: dict[str, QAction]) -> None:
+        """Swap the toolbar's tool buttons for the registry's actions (same order), so a
+        button, its key and the Shortcuts page are one QAction."""
+        group = QActionGroup(self)
+        for name, action in actions.items():
+            old = self.tool_actions.get(name)
+            action.setCheckable(True)
+            key = action.shortcut().toString()
+            label = self.tools[name].label
+            action.setToolTip(f"{label} ({key})" if key else label)
+            action.setChecked(self.tools[name] is self.tool)
+            group.addAction(action)
+            if old is not None:
+                self._tool_bar.insertAction(old, action)
+                self._tool_bar.removeAction(old)
+                self._tool_group.removeAction(old)
+                old.deleteLater()
+            else:
+                self._tool_bar.addAction(action)
+            self.addAction(action)
+            self.tool_actions[name] = action
+        self._tool_group = group
+
     def set_tool(self, name: str) -> None:
         """Switch tools; a gesture in flight is dropped."""
         self.tool.reset()
@@ -787,13 +830,86 @@ class PianoRollPanel(DockPanel):
         self.rebuild(force=True)
         self._refresh_overlays()
 
+    def _fill_scales(self, current: str | None = None) -> None:
+        """No scale, the presets, the user's own scales, then "Custom…"."""
+        current = self.scale_box.currentText() if current is None else current
+        self.scale_box.blockSignals(True)
+        self.scale_box.clear()
+        self.scale_box.addItems([scales.NO_SCALE, *scales.SCALES])
+        names = self.custom_scales.names()
+        if names:
+            self.scale_box.insertSeparator(self.scale_box.count())
+            self.scale_box.addItems(names)
+        self.scale_box.addItem(scales.CUSTOM_ENTRY)
+        index = self.scale_box.findText(current)
+        self.scale_box.setCurrentIndex(max(0, index))
+        self.scale_box.blockSignals(False)
+
+    def set_custom_scales(self, store: scales.CustomScales) -> None:
+        """Use the user's saved scales (the main window's settings)."""
+        self.custom_scales = store
+        self._fill_scales()
+
+    def scale_mask(self) -> int:
+        """The mask of the chosen scale, preset or custom (0: none)."""
+        name = self.scale_box.currentText()
+        return scales.mask_of(name) or self.custom_scales.mask(name)
+
+    def has_scale(self) -> bool:
+        return self.model is not None and self.scale_mask() != 0
+
+    def edit_custom_scale(self, name: str = "") -> str:
+        """Open the custom-scale editor; returns the scale to show afterwards."""
+        from adx.panels.piano_roll.custom_scale_dialog import CustomScaleDialog
+
+        dialog = CustomScaleDialog(self.custom_scales, name, self.root_box.currentIndex(), self)
+        dialog.exec()
+        if dialog.outcome == "saved":
+            return dialog.saved_name
+        if dialog.outcome == "deleted":
+            return scales.NO_SCALE
+        return self._last_scale
+
     def _scale_chosen(self, _index: int = 0) -> None:
+        if self.scale_box.currentText() == scales.CUSTOM_ENTRY:
+            # On a custom scale, Custom… edits (or deletes) it; otherwise it makes one.
+            last = self._last_scale
+            self._fill_scales(
+                self.edit_custom_scale(last if last in self.custom_scales.names() else "")
+            )
+        self._last_scale = self.scale_box.currentText()
         root = self.root_box.currentIndex()
-        mask = scales.mask_of(self.scale_box.currentText())
+        mask = self.scale_mask()
         self.keyboard.set_scale(root, mask)
+        changed = False
         if self.model is not None:
+            changed = (self.model.scale_root, self.model.scale_mask) != (root, mask)
             self.model.scale_root, self.model.scale_mask = root, mask
+        if changed and self.lock_action.isChecked():
+            self.snap_notes_to_scale()
         self.rebuild(force=True)
+
+    def _lock_toggled(self, on: bool) -> None:
+        if on:
+            self.snap_notes_to_scale()
+
+    def snap_notes_to_scale(self) -> bool:
+        """Move every note in the pattern onto the scale: one undo step, or no command
+        when they all fit already (phase_11.6.md 4.1)."""
+        if self.model is None or not self.model.scale_mask:
+            return False
+        notes = self.model.notes()
+        if not len(notes):
+            return False
+        snapped = scales.snap_pitches(notes["pitch"], self.model.scale_root, self.model.scale_mask)
+        moved = snapped != notes["pitch"].astype(np.int64)
+        if not moved.any():
+            return False
+        rows = notes[moved].copy()
+        rows["pitch"] = snapped[moved].astype(rows["pitch"].dtype)
+        self.model.edit("Snap notes to scale", update=rows)
+        self.rebuild(force=True)
+        return True
 
     def _chord_chosen(self, shape: str) -> None:
         tool = self.tools["chord"]
@@ -885,6 +1001,7 @@ class PianoRollPanel(DockPanel):
         settings.setValue("lane", self.lane_box.currentIndex())
         settings.setValue("scale_root", self.root_box.currentIndex())
         settings.setValue("scale", self.scale_box.currentText())
+        settings.setValue("scale_lock", self.lock_action.isChecked())
         settings.setValue("chord", self.chord_box.currentText())
 
     def read_state(self, settings: QSettings) -> None:
@@ -896,5 +1013,10 @@ class PianoRollPanel(DockPanel):
         )
         self.lane_box.setCurrentIndex(int(str(settings.value("lane", 0))))
         self.root_box.setCurrentIndex(int(str(settings.value("scale_root", 0))))
-        self.scale_box.setCurrentText(str(settings.value("scale", "No scale")))
+        scale = str(settings.value("scale", scales.NO_SCALE))
+        if scale != scales.CUSTOM_ENTRY and self.scale_box.findText(scale) >= 0:
+            self.scale_box.setCurrentText(scale)
+        self.lock_action.blockSignals(True)
+        self.lock_action.setChecked(str(settings.value("scale_lock", "false")).lower() == "true")
+        self.lock_action.blockSignals(False)
         self.chord_box.setCurrentText(str(settings.value("chord", "Triad")))

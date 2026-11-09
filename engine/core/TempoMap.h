@@ -55,6 +55,9 @@ public:
     [[nodiscard]] double bpmAt(Ticks at) const noexcept;
     [[nodiscard]] MeterEvent meterAt(Ticks at) const noexcept;
 
+    /// The start of the bar containing `at` (barStartIn over the meter in force).
+    [[nodiscard]] Ticks barStart(Ticks at) const noexcept;
+
     /// Wall-clock seconds elapsed from tick 0 to `at`. Negative ticks extrapolate
     /// backwards through the first segment's tempo, which is what a count-in needs.
     [[nodiscard]] double secondsAt(Ticks at) const noexcept;

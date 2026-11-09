@@ -231,6 +231,10 @@ class RollModel:
         """To the scale, if there is one."""
         return scales.snap_pitch(pitch, self.scale_root, self.scale_mask)
 
+    def bar_start(self, tick: float) -> int:
+        """The start of the bar containing ``tick``, where the grid draws its bar line."""
+        return self.project.bar_start(max(0, int(tick)))
+
     def step(self) -> int:
         """The smallest length an edit makes: the grid, or one sixty-fourth."""
         return self.grid if self.snap and self.grid > 0 else PPQ // 16

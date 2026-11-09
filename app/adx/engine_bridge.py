@@ -385,6 +385,11 @@ class Project:
         return int(numerator), int(denominator)
 
     @_ffi
+    def bar_start(self, ticks: int = 0) -> int:
+        """The start of the bar containing ``ticks`` (the piano roll's bar lines)."""
+        return int(self.native.bar_start(ticks))
+
+    @_ffi
     def bpm_at(self, ticks: int = 0) -> float:
         """The tempo at ``ticks``."""
         return float(self.native.bpm_at(ticks))

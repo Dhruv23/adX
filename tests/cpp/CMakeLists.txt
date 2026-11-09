@@ -49,6 +49,7 @@ adx_add_cpp_test(adx_tests
         geometry/bench_piano_roll.cpp
         geometry/test_phase6_geometry.cpp
         geometry/test_analyzers.cpp
+        geometry/test_bar_start.cpp
         format/test_lexer.cpp
         format/test_diagnostics.cpp
         format/test_roundtrip.cpp

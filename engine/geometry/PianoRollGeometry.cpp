@@ -271,7 +271,7 @@ void PianoRollGeometry::buildGrid(const project::Project& project, const Viewpor
             const std::int64_t segEnd =
                 m + 1 < meters.size() ? meters[m + 1].at.value : std::max(end, segStart) + 1;
             const std::int64_t beat = core::ticksPerBeat(meter.denominator);
-            const std::int64_t bar = beat * std::max<std::int64_t>(1, meter.numerator);
+            const std::int64_t bar = core::barTicks(meter);
             std::int64_t step = options.gridDivision > 0 ? options.gridDivision : beat;
             for (const std::int64_t candidate : {step, beat, bar}) {
                 step = candidate;
@@ -292,11 +292,10 @@ void PianoRollGeometry::buildGrid(const project::Project& project, const Viewpor
                     ++lines;
                     continue;
                 }
-                const std::int64_t local = tick - segStart;
                 ColorRole role = ColorRole::kGridSub;
-                if (local % bar == 0) {
+                if (core::barStartIn(meter, tick) == tick) {
                     role = ColorRole::kGridBar;
-                } else if (local % beat == 0) {
+                } else if ((tick - segStart) % beat == 0) {
                     role = ColorRole::kGridBeat;
                 }
                 w = line(w, worldX(tick), yTop, worldX(tick), yBottom, role);

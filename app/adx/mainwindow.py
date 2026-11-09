@@ -46,6 +46,7 @@ from adx.panels.midi.learn import MidiPanel
 from adx.panels.mixer.panel import MixerPanel
 from adx.panels.params import set_learn_hook
 from adx.panels.piano_roll.panel import PianoRollPanel
+from adx.panels.piano_roll.scales import CustomScales
 from adx.panels.playlist.panel import PlaylistPanel
 from adx.panels.plugins.browser import PluginBrowserPanel
 from adx.panels.session.panel import SessionPanel
@@ -181,6 +182,7 @@ class MainWindow(QMainWindow):
         self.browser = BrowserPanel(str(Path.cwd()), self, session=s)
         self.channel_rack = ChannelRackPanel(s, sel, self)
         self.piano_roll = PianoRollPanel(self)
+        self.piano_roll.set_custom_scales(CustomScales(self.settings))
         self.playlist = PlaylistPanel(s, sel, self)
         self.mixer = MixerPanel(s, sel, self)
         self.instrument = InstrumentPanel(s, sel, self)
@@ -642,7 +644,12 @@ class MainWindow(QMainWindow):
         inputs = self.live_midi.available() if not self.engine.null_backend else []
         outputs = self.live_midi.available_outputs() if not self.engine.null_backend else []
         dialog = PreferencesDialog(
-            self.prefs, latency, self, midi_inputs=inputs, midi_outputs=outputs
+            self.prefs,
+            latency,
+            self,
+            midi_inputs=inputs,
+            midi_outputs=outputs,
+            registry=self.registry,
         )
         if dialog.exec() and dialog.result_preferences is not None:
             self.apply_preferences(dialog.result_preferences)

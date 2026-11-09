@@ -42,6 +42,22 @@ struct MeterEvent {
     [[nodiscard]] friend bool operator==(const MeterEvent&, const MeterEvent&) noexcept = default;
 };
 
+/// One bar of a meter, in ticks. A zero numerator counts as one beat.
+[[nodiscard]] constexpr std::int64_t barTicks(const MeterEvent& meter) noexcept {
+    return ticksPerBeat(meter.denominator) *
+           (meter.numerator > 0 ? static_cast<std::int64_t>(meter.numerator) : 1);
+}
+
+/// The start of the bar containing `at`, counting bars from the meter change `meter`.
+/// Bars restart at every meter change, so a change part-way through a bar starts a
+/// fresh bar there. The piano roll's bar lines and its Cut tool both read this.
+[[nodiscard]] constexpr std::int64_t barStartIn(const MeterEvent& meter, std::int64_t at) noexcept {
+    const std::int64_t bar = barTicks(meter);
+    const std::int64_t offset = at - meter.at.value;
+    const std::int64_t bars = offset >= 0 ? offset / bar : -(((-offset) + bar - 1) / bar);
+    return meter.at.value + (bars * bar);
+}
+
 /// Tempo bounds. Not taste - arithmetic: below kMinBpm a segment's length overflows
 /// anything useful, and above kMaxBpm a tick is shorter than a sample at 48 kHz, at
 /// which point toTicks(toSamples(t)) stops being an identity.
