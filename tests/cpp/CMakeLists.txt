@@ -16,6 +16,7 @@ adx_add_cpp_test(adx_tests
         effects/test_effect_base.cpp
         effects/test_tranche_c.cpp
         effects/test_tranche_d.cpp
+        effects/test_tranche_e.cpp
         instruments/InstrumentHarness.cpp
         instruments/test_instrument_base.cpp
         instruments/test_instrument_cost.cpp

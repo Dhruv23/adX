@@ -10,11 +10,14 @@
 #include "engine/effects/Dynamics.h"
 #include "engine/effects/Filter.h"
 #include "engine/effects/GrossBeat.h"
+#include "engine/effects/Hall.h"
 #include "engine/effects/Modulation.h"
 #include "engine/effects/Motion.h"
 #include "engine/effects/Multiband.h"
 #include "engine/effects/ParametricEq.h"
+#include "engine/effects/PitchCorrect.h"
 #include "engine/effects/Ported.h"
+#include "engine/effects/Shaper.h"
 #include "engine/effects/Spectral.h"
 #include "engine/effects/Vocal.h"
 #include "engine/effects/fm1/Fm1Effects.h"
@@ -93,14 +96,20 @@ constexpr auto kEffects = std::to_array<TypeInfo>({
      "gate / downward expander with hysteresis, hold and lookahead"},
     {"GrossBeat", TypeKind::Effect, effects::kGrossBeatParams,
      "time and volume patterns over a beat grid: half speed, stutter, tape stop, gate"},
+    {"Hall", TypeKind::Effect, effects::kHallParams,
+     "8-line FDN reverb, 0.1-60 s, predelay, damping, modulation, shimmer, freeze"},
     {"Limiter", TypeKind::Effect, effects::kLimiterParams, "true-peak lookahead brickwall"},
     {"MultibandComp", TypeKind::Effect, effects::kMultibandParams,
      "3-6 Linkwitz-Riley bands, each compressed"},
+    {"OTT", TypeKind::Effect, effects::kOttParams,
+     "three-band upward and downward compression: the OTT sound"},
     {"Overdrive", TypeKind::Effect, effects::kOverdriveParams,
      "4x oversampled pedal: tightness, soft/tube/hard clip, tone"},
     {"ParametricEq", TypeKind::Effect, effects::kParametricEqParams,
      "eight fully parametric bands, spectrum tap"},
     {"Phaser", TypeKind::Effect, effects::kPhaserParams, "2-12 swept allpasses with feedback"},
+    {"PitchCorrect", TypeKind::Effect, effects::kPitchCorrectParams,
+     "YIN-detected pitch snapped to a key and scale: hard-tune to slow glide"},
     {"PitchShifter", TypeKind::Effect, effects::kPitchShifterParams,
      "phase-vocoder pitch shift, +-24 semitones"},
     {"Resonator", TypeKind::Effect, effects::kResonatorParams,
@@ -112,6 +121,8 @@ constexpr auto kEffects = std::to_array<TypeInfo>({
      "rotary speaker: horn and drum, slow/fast with ramp"},
     {"Saturation", TypeKind::Effect, effects::kSaturationParams,
      "4x oversampled tube, tape or transformer colour"},
+    {"Shaper", TypeKind::Effect, effects::kShaperParams,
+     "seven-knot drawn transfer curve, 4x oversampled"},
     {"SpectralFreeze", TypeKind::Effect, effects::kSpectralFreezeParams,
      "holds the spectrum and replays it with random phase"},
     {"StereoImager", TypeKind::Effect, effects::kStereoImagerParams,

@@ -31,6 +31,7 @@ PYBIND11_MODULE(adx_engine, m) {
     adx::bindings::registerCatalog(m);
     adx::bindings::registerEditCommands(m);
     adx::bindings::registerPresets(m);
+    adx::bindings::registerRacks(m);
     adx::bindings::registerPanelGeometry(m);
     registerAnalyzerBindings(m);
     adx::bindings::registerSync(m);

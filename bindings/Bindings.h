@@ -80,6 +80,9 @@ void registerCatalog(pybind11::module_& m);
 void registerEditCommands(pybind11::module_& m);
 /// Phase 6: the preset library (session.cpp).
 void registerPresets(pybind11::module_& m);
+/// Racks, macros, SFZ import and the library store (racks.cpp).
+void defineRacks(pybind11::class_<ProjectHandle>& project);
+void registerRacks(pybind11::module_& m);
 /// Phase 6: the playlist, step grid, automation, meter and EQ builders (panels.cpp).
 void registerPanelGeometry(pybind11::module_& m);
 /// Phase 6: audition, metronome and EQ spectrum on Engine (panels.cpp).

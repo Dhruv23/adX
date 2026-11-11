@@ -226,6 +226,7 @@ void registerProjectBindings(py::module_& m) {
     adx::bindings::defineStructureAccess(project);
     adx::bindings::defineProjectLive(project);
     adx::bindings::defineSession(project);
+    adx::bindings::defineRacks(project);
     defineMidiSettings(project);
 }
 

@@ -2,6 +2,7 @@
 #include "engine/preset/SfzImport.h"
 
 #include <algorithm>
+#include <cmath>
 #include <map>
 
 namespace adx::preset {
@@ -42,10 +43,11 @@ Preset presetFromSfz(format::sfz::Import& import, const SfzPresetOptions& option
     const auto envelope = [&](const char* opcode, const char* param, float Region::* field) {
         const Common common = mostCommon(import.regions, field);
         if (common.value >= 0.0F) {
-            preset.params.push_back(project::ParamValue{.name = param,
-                                                        .value = static_cast<double>(common.value),
-                                                        .hasCurve = false,
-                                                        .curve = {}});
+            preset.params.push_back(project::ParamValue{
+                .name = param,
+                .value = std::round(static_cast<double>(common.value) * 1e6) / 1e6,
+                .hasCurve = false,
+                .curve = {}});
         }
         if (common.others > 0) {
             import.notes.push_back(

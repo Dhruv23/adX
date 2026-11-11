@@ -1,5 +1,8 @@
 target_sources(adx_engine_static PRIVATE
     Clipper.cpp
+    Hall.cpp
+    PitchCorrect.cpp
+    Shaper.cpp
     Convolution.cpp
     ConvolutionSetup.cpp
     Delay.cpp

@@ -11,11 +11,14 @@
 #include "engine/effects/Effect.h"
 #include "engine/effects/Filter.h"
 #include "engine/effects/GrossBeat.h"
+#include "engine/effects/Hall.h"
 #include "engine/effects/Modulation.h"
 #include "engine/effects/Motion.h"
 #include "engine/effects/Multiband.h"
 #include "engine/effects/ParametricEq.h"
+#include "engine/effects/PitchCorrect.h"
 #include "engine/effects/Ported.h"
+#include "engine/effects/Shaper.h"
 #include "engine/effects/Spectral.h"
 #include "engine/effects/Vocal.h"
 #include "engine/effects/fm1/Fm1Effects.h"
@@ -44,6 +47,18 @@ namespace {
 std::shared_ptr<graph::SlotNode> makeEffect(std::string_view type) {
     if (type == "Clipper") {
         return std::make_shared<Clipper>();
+    }
+    if (type == "Shaper") {
+        return std::make_shared<Shaper>();
+    }
+    if (type == "OTT") {
+        return std::make_shared<Ott>();
+    }
+    if (type == "Hall") {
+        return std::make_shared<Hall>();
+    }
+    if (type == "PitchCorrect") {
+        return std::make_shared<PitchCorrect>();
     }
     if (type == "Filter") {
         return std::make_shared<Filter>();

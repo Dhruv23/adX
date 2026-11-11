@@ -94,6 +94,18 @@ TYPE_ENUMS: dict[str, list[str]] = {
     "Tape.speed": ["15 ips", "7.5 ips"],
     "Ensemble.mode": ["Juno I", "Juno II", "Juno I+II", "BBD", "Dimension"],
     "Rotary.speed": ["Slow", "Fast"],
+    "Hall.shimmerInterval": ["+12", "+7", "+19"],
+    "PitchCorrect.key": ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"],
+    "PitchCorrect.scale": [
+        "Chromatic",
+        "Major",
+        "Minor",
+        "Harmonic minor",
+        "Major pentatonic",
+        "Minor pentatonic",
+        "Blues",
+        "Dorian",
+    ],
 }
 
 

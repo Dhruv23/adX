@@ -19,6 +19,7 @@ pybind11_add_module(adx_engine MODULE
     plugin.cpp
     panels.cpp
     project.cpp
+    racks.cpp
     record.cpp
     render.cpp
     script.cpp

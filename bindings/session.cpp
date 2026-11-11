@@ -22,6 +22,7 @@
 #include "bindings/PendingCommand.h"
 #include "bindings/ProjectHandle.h"
 #include "engine/clip/ClipEdit.h"
+#include "engine/format/audio/LibraryPaths.h"
 #include "engine/preset/Preset.h"
 #include "engine/preset/PresetLibrary.h"
 #include "engine/project/TypeCatalog.h"
@@ -110,8 +111,12 @@ void applyInstrumentPreset(ProjectHandle& handle, core::ChannelId channel,
         if (file.is_relative()) {
             file = base / file;
         }
+        // A library sample keeps its lib:// name: the project never holds the store's
+        // location.
         auto* sample = run(handle, std::make_unique<project::AddSample>(
-                                       poolPath(handle.project, file.lexically_normal())));
+                                       adx::format::isLibraryPath(zone.path)
+                                           ? zone.path
+                                           : poolPath(handle.project, file.lexically_normal())));
         project::SampleZone placed = zone.zone;
         placed.sample = sample->created();
         spec.zones.push_back(placed);
