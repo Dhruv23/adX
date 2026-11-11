@@ -1,0 +1,65 @@
+# Decoded hashes of every export format of every golden fixture
+# (tests/cpp/render/test_golden_formats.cpp): 48 kHz, 256-frame
+# blocks, the first ten seconds, TPDF dither below 32-bit. MP3 and
+# OGG are compared spectrally instead. Regenerate with
+# ADX_UPDATE_GOLDEN=1, and only on purpose.
+docs/examples/c418_demo.adx:flac16 8f96b33ea03349f4a9deecc348d4ca80
+docs/examples/c418_demo.adx:flac24 6d163d28c5259d3d817effcfc1c31f3e
+docs/examples/c418_demo.adx:wav16 8f96b33ea03349f4a9deecc348d4ca80
+docs/examples/c418_demo.adx:wav24 6d163d28c5259d3d817effcfc1c31f3e
+docs/examples/c418_demo.adx:wav32f 95d984df7d918d2c7c2d4701de338c6d
+docs/examples/example.adx:flac16 d31d4dddd869e0efb1f53e89928d5cdd
+docs/examples/example.adx:flac24 a75ad5df199401d12bc78640e19d022a
+docs/examples/example.adx:wav16 d31d4dddd869e0efb1f53e89928d5cdd
+docs/examples/example.adx:wav24 a75ad5df199401d12bc78640e19d022a
+docs/examples/example.adx:wav32f 6602fb5b224e7a1a5044a72317c42c95
+docs/examples/stakillaz_demo.adx:flac16 96293a3972461e15811392b4e8b14128
+docs/examples/stakillaz_demo.adx:flac24 ea8ae7ba258e253ab2ecad7e444e762b
+docs/examples/stakillaz_demo.adx:wav16 96293a3972461e15811392b4e8b14128
+docs/examples/stakillaz_demo.adx:wav24 ea8ae7ba258e253ab2ecad7e444e762b
+docs/examples/stakillaz_demo.adx:wav32f 2f8863bbc4c648b09418f937a19cffbb
+docs/examples/suffocation.adx:flac16 0ca253a4ee1429fa3c872c5437a862bf
+docs/examples/suffocation.adx:flac24 596e0e4498cbcb31301c4e8120a097b4
+docs/examples/suffocation.adx:wav16 0ca253a4ee1429fa3c872c5437a862bf
+docs/examples/suffocation.adx:wav24 596e0e4498cbcb31301c4e8120a097b4
+docs/examples/suffocation.adx:wav32f 1b72b7a2ef99f373bbb7450fda7a474c
+tests/golden/chord_steal.adx:flac16 349b6e0a43bb9edf1b34d6e2376e3d3b
+tests/golden/chord_steal.adx:flac24 8cc3bc9d25dcef10aa3de844f1b124c3
+tests/golden/chord_steal.adx:wav16 349b6e0a43bb9edf1b34d6e2376e3d3b
+tests/golden/chord_steal.adx:wav24 8cc3bc9d25dcef10aa3de844f1b124c3
+tests/golden/chord_steal.adx:wav32f 3f6c03a9146c83e2834328450f0a9108
+tests/golden/genre_c418_seed1.adx:flac16 b5f274f18c1ec8ad5625ab6cb8221128
+tests/golden/genre_c418_seed1.adx:flac24 c4e226dc811421a778d694948be26d4c
+tests/golden/genre_c418_seed1.adx:wav16 b5f274f18c1ec8ad5625ab6cb8221128
+tests/golden/genre_c418_seed1.adx:wav24 c4e226dc811421a778d694948be26d4c
+tests/golden/genre_c418_seed1.adx:wav32f 6fc30840a1a5268ddbcc3641d1e9fb3b
+tests/golden/genre_stakillaz_seed1.adx:flac16 c2e74b44dd5da47c838728bc949a71fb
+tests/golden/genre_stakillaz_seed1.adx:flac24 81c2396987b5da1fe950471d8bed76a5
+tests/golden/genre_stakillaz_seed1.adx:wav16 c2e74b44dd5da47c838728bc949a71fb
+tests/golden/genre_stakillaz_seed1.adx:wav24 81c2396987b5da1fe950471d8bed76a5
+tests/golden/genre_stakillaz_seed1.adx:wav32f 97584c0f460b1fe125c1ea4bcdd0a6e5
+tests/golden/placements_automation.adx:flac16 8fc1698e34b5f39f2c2947009ea59705
+tests/golden/placements_automation.adx:flac24 7b5b8f0d48518ae1e6d18dec739c47b3
+tests/golden/placements_automation.adx:wav16 8fc1698e34b5f39f2c2947009ea59705
+tests/golden/placements_automation.adx:wav24 7b5b8f0d48518ae1e6d18dec739c47b3
+tests/golden/placements_automation.adx:wav32f 09f31fe1423b4797e3dafe3753c77049
+tests/golden/routing_sends.adx:flac16 77c9ca1da43fd4b4139f9f054b6a7342
+tests/golden/routing_sends.adx:flac24 e515dcf0eec9828bf21a9959d8a24a26
+tests/golden/routing_sends.adx:wav16 77c9ca1da43fd4b4139f9f054b6a7342
+tests/golden/routing_sends.adx:wav24 e515dcf0eec9828bf21a9959d8a24a26
+tests/golden/routing_sends.adx:wav32f 80c09ddc8f7cdfc47c13233762825626
+tests/golden/sidechain_duck.adx:flac16 32e9f671588e775a9012b6de9209f320
+tests/golden/sidechain_duck.adx:flac24 e6e3f458870d82775b8ffa93edb36498
+tests/golden/sidechain_duck.adx:wav16 32e9f671588e775a9012b6de9209f320
+tests/golden/sidechain_duck.adx:wav24 e6e3f458870d82775b8ffa93edb36498
+tests/golden/sidechain_duck.adx:wav32f 53836ceae4e2cb6342c624ae21be9973
+tests/golden/single_tone.adx:flac16 e1cc5c5a7da85a4cd7ce935df9ff6f3c
+tests/golden/single_tone.adx:flac24 8ee182f108c9f6ec26866447fd45be2a
+tests/golden/single_tone.adx:wav16 e1cc5c5a7da85a4cd7ce935df9ff6f3c
+tests/golden/single_tone.adx:wav24 8ee182f108c9f6ec26866447fd45be2a
+tests/golden/single_tone.adx:wav32f ea408551981e787b5323c0dd65389cf9
+tests/golden/tempo_ramp.adx:flac16 1f47ae411bd3cda74787b26b1f8bfd4a
+tests/golden/tempo_ramp.adx:flac24 e03f15216e9d048a6aa1578e49d352cf
+tests/golden/tempo_ramp.adx:wav16 1f47ae411bd3cda74787b26b1f8bfd4a
+tests/golden/tempo_ramp.adx:wav24 e03f15216e9d048a6aa1578e49d352cf
+tests/golden/tempo_ramp.adx:wav32f f4937fecfc46251d93fc72b4bec0ebb1

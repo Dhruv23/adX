@@ -142,6 +142,11 @@ enum class CommandId : std::uint16_t {
 
     // Phase 11: the session.
     kSetSession,
+
+    // Phase 12: macros and rack layers.
+    kSetMacros,
+    kSetChannelNoteFilter,
+    kInsertRack,
 };
 
 class Command {

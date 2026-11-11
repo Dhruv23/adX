@@ -26,6 +26,7 @@ adx_add_cpp_test(adx_tests
         instruments/VoicebankFixture.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/../local/teto/test_teto.cpp
         preset/test_presets.cpp
+        rack/test_rack.cpp
         rt/test_alloc_guard.cpp
         rt/test_spsc_ring.cpp
         rt/test_overwrite_ring.cpp
@@ -92,6 +93,7 @@ adx_add_cpp_test(adx_tests
         render/RenderFixtures.cpp
         render/test_bit_identity.cpp
         render/test_golden_units.cpp
+        render/test_golden_gate.cpp
         render/test_corpus_render.cpp
         render/test_spectral_match.cpp
         render/test_parallel_render.cpp

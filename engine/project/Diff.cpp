@@ -115,6 +115,9 @@ void diffChannels(const Project& before, const Project& after, std::vector<Chang
         if (!(old.arp == now->arp)) {
             fields.emplace_back("arp");
         }
+        if (!(old.noteFilter == now->noteFilter)) {
+            fields.emplace_back("keys/velocity");
+        }
         if (old.instrument.zones != now->instrument.zones) {
             fields.emplace_back("zones");
         }
@@ -258,6 +261,32 @@ void diffPlaylist(const Project& before, const Project& after, std::vector<Chang
     }
 }
 
+void diffMacros(const Project& before, const Project& after, std::vector<Change>& out) {
+    for (const Macro& old : before.macros) {
+        const Macro* now = after.findMacroByName(old.name);
+        if (now == nullptr) {
+            push(out, ChangeKind::Removed, "macro " + old.name);
+            continue;
+        }
+        bool same = old.value == now->value && old.targets.size() == now->targets.size();
+        for (std::size_t i = 0; same && i < old.targets.size(); ++i) {
+            // Matched by path text: the ids behind a resolved target are not content.
+            same = old.targets[i].path == now->targets[i].path &&
+                   old.targets[i].minimum == now->targets[i].minimum &&
+                   old.targets[i].maximum == now->targets[i].maximum &&
+                   old.targets[i].curve == now->targets[i].curve;
+        }
+        if (!same) {
+            push(out, ChangeKind::Changed, "macro " + old.name);
+        }
+    }
+    for (const Macro& now : after.macros) {
+        if (before.findMacroByName(now.name) == nullptr) {
+            push(out, ChangeKind::Added, "macro " + now.name);
+        }
+    }
+}
+
 void diffControllers(const Project& before, const Project& after, std::vector<Change>& out) {
     for (const Controller& old : before.controllers) {
         const Controller* now = after.findControllerByName(old.name);
@@ -374,6 +403,7 @@ std::vector<Change> diff(const Project& before, const Project& after) {
     diffPlaylist(before, after, out);
     diffMixer(before, after, out);
     diffControllers(before, after, out);
+    diffMacros(before, after, out);
     diffMarkers(before, after, out);
     return out;
 }

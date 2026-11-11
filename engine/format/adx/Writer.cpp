@@ -245,6 +245,15 @@ void writeChannel(Emitter& emitter, const Project& project, const project::Chann
         emitter.line(formatZone(project, zone));
     }
 
+    if (channel.noteFilter.keyLow != 0 || channel.noteFilter.keyHigh < 127) {
+        emitter.line(keyValue("KEYS", std::to_string(channel.noteFilter.keyLow) + ".." +
+                                          std::to_string(channel.noteFilter.keyHigh)));
+    }
+    if (channel.noteFilter.velocityLow != 0 || channel.noteFilter.velocityHigh < 127) {
+        emitter.line(keyValue("VELOCITY", std::to_string(channel.noteFilter.velocityLow) + ".." +
+                                              std::to_string(channel.noteFilter.velocityHigh)));
+    }
+
     if (channel.arp.mode != project::ArpMode::Off) {
         std::string text = "ARP mode=";
         text += project::toString(channel.arp.mode);
@@ -539,6 +548,26 @@ void writePlaylist(Emitter& emitter, const Project& project) {
         writeTracks(emitter, project, arrangement.tracks);
         emitResidue(emitter, project, "ARRANGEMENT", arrangement.name);
     }
+}
+
+/// One [MACRO] section (docs/adx-format-v2.md, MACRO).
+void writeMacro(Emitter& emitter, const Project& project, const project::Macro& macro) {
+    emitter.section("[MACRO " + macro.name + "]");
+    emitter.line(keyValue("VALUE", formatFloat(macro.value)));
+    for (const project::MacroTarget& target : macro.targets) {
+        std::string path = project::ParamRegistry::pathOf(target.target, project);
+        if (path.empty()) {
+            path = target.path;
+        }
+        std::string text = "TARGET " + path + " range=" + formatFloat(target.minimum) + ".." +
+                           formatFloat(target.maximum);
+        if (!(target.curve == core::Curve{})) {
+            text += " curve=";
+            text += formatCurve(target.curve);
+        }
+        emitter.line(text);
+    }
+    emitResidue(emitter, project, "MACRO", macro.name);
 }
 
 void writeController(Emitter& emitter, const Project& project,
@@ -857,6 +886,9 @@ std::string write(const Project& project, const WriteOptions& options) {
     writeMixer(emitter, project);
     for (const project::Controller& controller : project.controllers) {
         writeController(emitter, project, controller);
+    }
+    for (const project::Macro& macro : project.macros) {
+        writeMacro(emitter, project, macro);
     }
     writeMidi(emitter, project);
     writeMarkers(emitter, project);

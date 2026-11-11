@@ -51,6 +51,54 @@ float ChannelNode::portamentoSeconds(std::span<const float> /*params*/) const no
     return 0.0F;
 }
 
+std::uint8_t ChannelNode::voiceMode(std::span<const float> /*params*/) const noexcept {
+    return 0;
+}
+
+bool ChannelNode::glideAlways(std::span<const float> /*params*/) const noexcept {
+    return false;
+}
+
+void ChannelNode::retriggerVoice(Voice& /*voice*/, const BlockEvent& /*event*/,
+                                 const VoiceRender& /*render*/) noexcept {}
+
+bool ChannelNode::takeOver(VoiceKey key, const BlockEvent& event, const VoiceRender& render,
+                           bool retrigger) noexcept {
+    Voice* held = nullptr;
+    for (Voice& voice : m_pool.voices()) {
+        if (voice.phase == VoicePhase::Active &&
+            (held == nullptr || voice.startedAt >= held->startedAt)) {
+            held = &voice;
+        }
+    }
+    if (held == nullptr) {
+        return false;
+    }
+    // Where the voice sounds now, so the new note starts from exactly there.
+    const float from = (100.0F * static_cast<float>(held->pitch)) + held->pitchOffset;
+    held->key = key;
+    held->pitch = event.pitch;
+    held->timeSource = event.timeSource;
+    held->endTick = event.endTick;
+    held->glideRemaining = 0;
+    held->pitchOffset = from - (100.0F * static_cast<float>(event.pitch));
+    const float portamento = portamentoSeconds(render.params);
+    if (portamento > 0.0F && held->pitchOffset != 0.0F) {
+        startGlide(*held, 0.0F,
+                   static_cast<std::uint32_t>(
+                       std::lround(static_cast<double>(portamento) * render.sampleRate)));
+    } else {
+        held->pitchOffset = 0.0F;
+    }
+    if (retrigger) {
+        held->velocity = event.velocity;
+        retriggerVoice(*held, event, render);
+    }
+    m_lastPitch = event.pitch;
+    m_hasLastPitch = true;
+    return true;
+}
+
 std::size_t ChannelNode::voiceIndex(const Voice& voice) const noexcept {
     const std::span<const Voice> all = m_voiceStorage.view();
     return static_cast<std::size_t>(&voice - all.data());
@@ -66,6 +114,10 @@ void ChannelNode::apply(const BlockEvent& event, const VoiceRender& render) noex
         bool legato = false;
         for (const Voice& voice : m_pool.voices()) {
             legato = legato || voice.phase == VoicePhase::Active;
+        }
+        const std::uint8_t mode = voiceMode(render.params);
+        if (mode != 0 && legato && takeOver(key, event, render, mode == 1)) {
+            return;
         }
         Voice* voice = m_pool.allocate(key, m_stealMode);
         if (voice == nullptr) {
@@ -83,7 +135,8 @@ void ChannelNode::apply(const BlockEvent& event, const VoiceRender& render) noex
         voice->glideRemaining = 0;
 
         const float portamento = portamentoSeconds(render.params);
-        if (portamento > 0.0F && legato && m_hasLastPitch && m_lastPitch != event.pitch) {
+        if (portamento > 0.0F && (legato || glideAlways(render.params)) && m_hasLastPitch &&
+            m_lastPitch != event.pitch) {
             // From the previous note's pitch to this one's: a slide in the voice's own
             // offset, so a later explicit slide simply takes over from wherever it is.
             voice->pitchOffset =
@@ -246,6 +299,7 @@ void ChannelNode::renderBlock(ProcessContext& context) noexcept {
                           ? context.automation.subspan(kChannelParamCount)
                           : std::span<const float* const>{},
         .frameOffset = 0,
+        .time = &context.time,
     };
 
     // Dispatch: one advancing index over events already sorted by offset. Render up to

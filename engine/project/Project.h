@@ -26,6 +26,7 @@
 #include "engine/project/Automation.h"
 #include "engine/project/Channel.h"
 #include "engine/project/Controller.h"
+#include "engine/project/Macro.h"
 #include "engine/project/MidiSettings.h"
 #include "engine/project/Mixer.h"
 #include "engine/project/Pattern.h"
@@ -87,6 +88,7 @@ struct IdMarks {
     std::uint32_t sample{0};
     std::uint32_t automationClip{0};
     std::uint32_t controller{0};
+    std::uint32_t macro{0};
 
     [[nodiscard]] friend bool operator==(const IdMarks&, const IdMarks&) noexcept = default;
 };
@@ -102,6 +104,8 @@ public:
     Resources resources;
     std::vector<Marker> markers;
     std::vector<Controller> controllers;
+    /// Macro knobs: the [MACRO] sections (phase_12.md §4.2).
+    std::vector<Macro> macros;
     /// Input routes and learned controls: the [MIDI] section (phase_9.md §3 step 2).
     MidiSettings midi;
     /// Scenes, tracks and launchable clips: the [SESSION] section (phase_11.md §4.1).
@@ -214,6 +218,14 @@ public:
         return m_controllerIds.next();
     }
 
+    [[nodiscard]] core::MacroId newMacroId(core::MacroId wanted = {}) noexcept {
+        if (wanted.valid()) {
+            m_macroIds.observe(wanted);
+            return wanted;
+        }
+        return m_macroIds.next();
+    }
+
     [[nodiscard]] IdMarks idMarks() const noexcept;
     void restoreIdMarks(const IdMarks& marks) noexcept;
 
@@ -229,6 +241,8 @@ public:
     [[nodiscard]] const Channel* findChannelByName(std::string_view name) const noexcept;
     [[nodiscard]] const Pattern* findPatternByName(std::string_view name) const noexcept;
     [[nodiscard]] const Controller* findControllerByName(std::string_view name) const noexcept;
+    [[nodiscard]] const Macro* find(core::MacroId id) const noexcept;
+    [[nodiscard]] const Macro* findMacroByName(std::string_view name) const noexcept;
 
     /// Automation clips live in two places - inside patterns and directly in the
     /// playlist - and a ParamRef does not say which. This looks in both.
@@ -263,6 +277,7 @@ private:
     core::IdCounter<core::SampleTag> m_sampleIds;
     core::IdCounter<core::AutomationClipTag> m_automationClipIds;
     core::IdCounter<core::ControllerTag> m_controllerIds;
+    core::IdCounter<core::MacroTag> m_macroIds;
 };
 
 } // namespace adx::project

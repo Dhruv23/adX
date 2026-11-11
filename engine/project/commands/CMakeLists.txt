@@ -13,4 +13,5 @@ target_sources(adx_engine_static PRIVATE
     PlaylistCommands.cpp
     PluginCommands.cpp
     ProjectCommands.cpp
+    RackCommands.cpp
 )

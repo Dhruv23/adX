@@ -49,7 +49,8 @@ struct VaVoice {
     dsp::Envelope filterEnv;
     dsp::EnvelopeShape ampShape;
     dsp::EnvelopeShape filterShape;
-    std::array<dsp::Lfo, 2> lfo;
+    /// The two LFOs, the extra envelopes, the pitch envelope and the matrix.
+    ModVoice mod;
     float velocity;
     bool released;
 };
@@ -69,11 +70,16 @@ protected:
     bool renderVoice(graph::Voice& voice, std::span<float> left, std::span<float> right,
                      const graph::VoiceRender& render) noexcept override;
     [[nodiscard]] float portamentoSeconds(std::span<const float> params) const noexcept override;
+    [[nodiscard]] std::uint8_t voiceMode(std::span<const float> params) const noexcept override;
+    [[nodiscard]] bool glideAlways(std::span<const float> params) const noexcept override;
+    void retriggerVoice(graph::Voice& voice, const graph::BlockEvent& event,
+                        const graph::VoiceRender& render) noexcept override;
 
 private:
-    /// The block-rate parameters at `frame`: unison layout, envelopes, filter.
+    /// The block-rate parameters at `frame`: unison layout, envelopes, filter. `mod`
+    /// is the frame's modulation, for the cutoff, resonance, drive and detune.
     void refresh(graph::Voice& voice, VaVoice& state, const graph::VoiceRender& render,
-                 std::uint32_t frame, float lfoCutoffOctaves) noexcept;
+                 std::uint32_t frame, const dsp::ModFrame& mod) noexcept;
 };
 
 } // namespace adx::instruments

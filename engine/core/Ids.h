@@ -46,6 +46,7 @@ struct MarkerTag;
 struct SampleTag;
 struct AutomationClipTag;
 struct ControllerTag;
+struct MacroTag;
 
 using ChannelId = Id<ChannelTag>;
 using PatternId = Id<PatternTag>;
@@ -60,6 +61,7 @@ using MarkerId = Id<MarkerTag>;
 using SampleId = Id<SampleTag>;
 using AutomationClipId = Id<AutomationClipTag>;
 using ControllerId = Id<ControllerTag>;
+using MacroId = Id<MacroTag>;
 
 /// A monotonic id source.
 ///

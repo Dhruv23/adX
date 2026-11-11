@@ -33,6 +33,7 @@
 #include "engine/project/commands/PlaylistCommands.h"
 #include "engine/project/commands/PluginCommands.h"
 #include "engine/project/commands/ProjectCommands.h"
+#include "engine/project/commands/RackCommands.h"
 #include "engine/project/commands/SessionCommands.h"
 
 namespace adx::format {
@@ -188,6 +189,9 @@ private:
     void parseArrangement(Section& section);
     void parseTracks(std::span<const BlockNode> nodes, std::string_view where);
     void parseController(Section& section);
+    void parseMacro(Section& section);
+    /// `lo..hi` or a single number, each clamped to 0..127.
+    bool parseByteRange(const Line& line, std::uint8_t& low, std::uint8_t& high);
     void parseControllerSource(project::Controller& controller, const Line& line);
     void parsePlaylistItem(core::PlaylistTrackId track, const BlockNode& node);
     /// ADX1004 for a name `type` does not declare, ADX2001 for a value outside the
@@ -1181,6 +1185,14 @@ V2Parser::ChannelBinding V2Parser::parseChannelHeader(Section& section, std::siz
     };
     flag("MUTE", channel.muted);
     flag("SOLO", channel.soloed);
+    if (Line* line = keys.take(lines(), "KEYS")) {
+        static_cast<void>(
+            parseByteRange(*line, channel.noteFilter.keyLow, channel.noteFilter.keyHigh));
+    }
+    if (Line* line = keys.take(lines(), "VELOCITY")) {
+        static_cast<void>(parseByteRange(*line, channel.noteFilter.velocityLow,
+                                         channel.noteFilter.velocityHigh));
+    }
     if (Line* line = keys.take(lines(), "COLOR")) {
         project::Color color;
         if (parseColor(line->value, line->valueSpan, m_diag, color)) {
@@ -1732,6 +1744,102 @@ void V2Parser::parseController(Section& section) {
     unknownKeys(keys, nodes);
 }
 
+bool V2Parser::parseByteRange(const Line& line, std::uint8_t& low, std::uint8_t& high) {
+    const std::string_view text = line.value;
+    const std::size_t dots = text.find("..");
+    std::int64_t a = 0;
+    std::int64_t b = 0;
+    if (!parseInt64(text.substr(0, dots), line.valueSpan, m_diag, a)) {
+        return false;
+    }
+    b = a;
+    if (dots != std::string_view::npos &&
+        !parseInt64(text.substr(dots + 2), line.valueSpan, m_diag, b)) {
+        return false;
+    }
+    if (a > b) {
+        std::swap(a, b);
+    }
+    low = static_cast<std::uint8_t>(std::clamp<std::int64_t>(a, 0, 127));
+    high = static_cast<std::uint8_t>(std::clamp<std::int64_t>(b, 0, 127));
+    return true;
+}
+
+void V2Parser::parseMacro(Section& section) {
+    section.claimed = true;
+    if (!project::isValidEntityName(section.name) ||
+        m_project.findMacroByName(section.name) != nullptr) {
+        m_diag.add(m_project.findMacroByName(section.name) != nullptr ? code::kDuplicateName
+                                                                      : code::kBadNameCharacter,
+                   section.span, "'" + section.name + "' is not a usable macro name");
+        return;
+    }
+    const std::vector<BlockNode> nodes = buildBlocks(lines(), section);
+    KeyTable keys(lines(), nodes, m_diag);
+    project::Macro macro;
+    macro.name = section.name;
+    if (Line* line = keys.take(lines(), "VALUE")) {
+        double value = 0.0;
+        if (parseDouble(line->value, line->valueSpan, m_diag, value)) {
+            macro.value = static_cast<float>(std::clamp(value, 0.0, 1.0));
+        }
+    }
+    for (const BlockNode& node : nodes) {
+        Line& line = lines()[node.line];
+        if (line.claimed || line.kind != Line::Kind::Positional) {
+            continue;
+        }
+        const std::vector<Token> tokens = tokenize(line, m_diag);
+        if (tokens.empty() || tokens.front().text != "TARGET") {
+            continue;
+        }
+        line.claimed = true;
+        if (tokens.size() < 2 || tokens[1].isKeyValue()) {
+            m_diag.add(code::kWrongFieldCount, line.contentSpan(),
+                       "a macro target is 'TARGET path range=lo..hi [curve=...]'");
+            continue;
+        }
+        project::MacroTarget target;
+        target.path = tokens[1].text;
+        const project::ParamResolution resolved =
+            project::ParamRegistry::resolve(target.path, m_project);
+        if (resolved.ok() && resolved.ref.kind != project::ParamKind::Macro) {
+            target.target = resolved.ref;
+        } else {
+            m_diag.add(code::kUnresolvedParamPath,
+                       subSpan(tokens[1].span, resolved.segmentOffset, resolved.segmentLength),
+                       "'" + target.path + "' does not name a parameter a macro can move");
+        }
+        for (std::size_t i = 2; i < tokens.size(); ++i) {
+            const Token& token = tokens[i];
+            if (token.isKeyValue() && token.text == "range") {
+                const std::string_view text = token.value;
+                const std::size_t dots = text.find("..");
+                double low = 0.0;
+                double high = 1.0;
+                if (dots != std::string_view::npos &&
+                    parseDouble(text.substr(0, dots), token.valueSpan, m_diag, low) &&
+                    parseDouble(text.substr(dots + 2), token.valueSpan, m_diag, high)) {
+                    target.minimum = static_cast<float>(low);
+                    target.maximum = static_cast<float>(high);
+                } else if (dots == std::string_view::npos) {
+                    m_diag.add(code::kWrongFieldCount, token.valueSpan,
+                               "a range is 'lo..hi'");
+                }
+            } else if (token.isKeyValue() && token.text == "curve") {
+                static_cast<void>(parseCurve(token.value, token.valueSpan, m_diag, target.curve));
+            } else {
+                m_diag.add(code::kUnknownInlineKey, token.span, "unknown key on a TARGET line");
+            }
+        }
+        macro.targets.push_back(std::move(target));
+    }
+    std::vector<project::Macro> macros = m_project.macros;
+    macros.push_back(std::move(macro));
+    execute(std::make_unique<project::SetMacros>(std::move(macros)));
+    unknownKeys(keys, nodes);
+}
+
 void V2Parser::parseControllerSource(project::Controller& controller, const Line& line) {
     constexpr std::string_view kChannel = "channel.";
     const std::string_view text = line.value;
@@ -2141,6 +2249,9 @@ void V2Parser::run() {
     for (const ChannelBinding& binding : m_channels) {
         parseChannelOutput(binding);
     }
+    // Before the patterns: a lane may be drawn on `macro.<name>`. After the channels
+    // and the mixer, which a macro's targets name.
+    forEach("MACRO", [this](Section& s) { parseMacro(s); });
 
     for (std::size_t i = 0; i < m_doc.sections().size(); ++i) {
         Section& section = m_doc.sections()[i];

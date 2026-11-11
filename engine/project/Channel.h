@@ -84,6 +84,26 @@ struct ArpSettings {
 [[nodiscard]] const char* toString(VoiceStealMode mode) noexcept;
 [[nodiscard]] bool voiceStealModeFromString(std::string_view name, VoiceStealMode& out) noexcept;
 
+/// Which pattern notes a channel plays (phase_12.md §4.1): a rack layer's `KEYS=` and
+/// `VELOCITY=`. A note outside it is dropped when the channel's events are flattened,
+/// never per block. The default plays everything.
+struct NoteFilter {
+    std::uint8_t keyLow{0};
+    std::uint8_t keyHigh{127};
+    std::uint8_t velocityLow{0};
+    std::uint8_t velocityHigh{127};
+
+    [[nodiscard]] bool accepts(std::uint8_t key, std::uint8_t velocity) const noexcept {
+        return key >= keyLow && key <= keyHigh && velocity >= velocityLow &&
+               velocity <= velocityHigh;
+    }
+    [[nodiscard]] bool all() const noexcept {
+        return keyLow == 0 && keyHigh >= 127 && velocityLow == 0 && velocityHigh >= 127;
+    }
+
+    [[nodiscard]] friend bool operator==(const NoteFilter&, const NoteFilter&) noexcept = default;
+};
+
 struct Channel {
     core::ChannelId id;
     /// Unique within the project, because automation paths address channels by name
@@ -105,6 +125,7 @@ struct Channel {
     VoiceStealMode stealMode{VoiceStealMode::OldestReleased};
 
     ArpSettings arp;
+    NoteFilter noteFilter;
 
     bool muted{false};
     bool soloed{false};

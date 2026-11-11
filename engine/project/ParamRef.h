@@ -32,6 +32,9 @@ enum class ParamKind : std::uint16_t {
     SlotParam,
     /// `owner` is a SendId.
     SendLevel,
+    /// `owner` is a MacroId: the macro's own 0..1 value (Macro.h). It is in no node's
+    /// parameter slice; a lane on it becomes lanes on its targets.
+    Macro,
 };
 
 /// A resolved parameter. POD, eight bytes, trivially copyable - which is what lets

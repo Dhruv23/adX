@@ -53,6 +53,9 @@ struct VoiceRender {
     /// Where this segment starts within the process() call, which is what the
     /// automation spans are indexed from.
     std::uint32_t frameOffset{0};
+    /// The time source driving the channel, for a tempo-synced LFO: its position at
+    /// the start of the process() call, and its tempo map. Null in a bare harness.
+    const transport::TimeSource* time{nullptr};
 
     /// Instrument parameter `index` at frame `frame` of this segment.
     [[nodiscard]] float paramAt(std::uint32_t index, std::uint32_t frame) const noexcept {
@@ -156,6 +159,19 @@ protected:
     /// a legato line - and an explicit slide on the note overrides it.
     [[nodiscard]] virtual float portamentoSeconds(std::span<const float> params) const noexcept;
 
+    /// 0 poly (the default). 1 mono and 2 legato: a note that starts while another is
+    /// held takes over that note's voice instead of starting one, gliding to the new
+    /// pitch by portamentoSeconds. Mono also calls retriggerVoice; legato does not, so
+    /// the envelopes run on (phase_12.md §4.3).
+    [[nodiscard]] virtual std::uint8_t voiceMode(std::span<const float> params) const noexcept;
+    /// True: portamento applies to every note, not only one that overlaps another.
+    [[nodiscard]] virtual bool glideAlways(std::span<const float> params) const noexcept;
+    /// Mono mode: `voice` has just been given a new note. Restart what a new note
+    /// restarts, without the click of resetting what is sounding. The default leaves
+    /// the voice as it is.
+    virtual void retriggerVoice(Voice& voice, const BlockEvent& event,
+                                const VoiceRender& render) noexcept;
+
     /// The slot of `voice` in the pool's storage: the index an instrument's parallel
     /// per-voice state array is read at (P3-6).
     [[nodiscard]] std::size_t voiceIndex(const Voice& voice) const noexcept;
@@ -167,6 +183,9 @@ protected:
 
 private:
     void apply(const BlockEvent& event, const VoiceRender& render) noexcept;
+    /// Mono and legato: the held voice becomes `event`'s note. False when none is held.
+    bool takeOver(VoiceKey key, const BlockEvent& event, const VoiceRender& render,
+                  bool retrigger) noexcept;
     void renderSegment(std::span<float> left, std::span<float> right, std::span<float> scratchLeft,
                        std::span<float> scratchRight, std::span<float> cents,
                        const ProcessContext& context, VoiceRender& render) noexcept;

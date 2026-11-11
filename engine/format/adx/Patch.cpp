@@ -22,6 +22,7 @@
 #include "engine/project/commands/PatternCommands.h"
 #include "engine/project/commands/PlaylistCommands.h"
 #include "engine/project/commands/ProjectCommands.h"
+#include "engine/project/commands/RackCommands.h"
 
 namespace adx::format {
 
@@ -63,6 +64,7 @@ Project normalised(const Project& in) {
     sortBy(p.resources.samples, [](const project::SampleRef& s) { return s.id.value; });
     sortBy(p.markers, [](const project::Marker& m) { return m.id.value; });
     sortBy(p.controllers, [](const project::Controller& c) { return c.id.value; });
+    sortBy(p.macros, [](const project::Macro& m) { return m.id.value; });
     // Where residue sat in its file is not content: a line added above an unknown
     // section must not make the reload structural.
     for (ResidueBlock& block : p.residue.blocks) {
@@ -78,7 +80,7 @@ bool contentEqual(const Project& a, const Project& b) {
     return a.meta == b.meta && a.tempo == b.tempo && a.channels == b.channels &&
            a.patterns == b.patterns && a.playlist == b.playlist && a.mixer == b.mixer &&
            a.resources == b.resources && a.markers == b.markers && a.controllers == b.controllers &&
-           a.residue == b.residue;
+           a.macros == b.macros && a.residue == b.residue;
 }
 
 bool sameClip(const NoteClip& a, const NoteClip& b) {
@@ -141,6 +143,15 @@ public:
             copy.sourceChannel = channel(controller.sourceChannel);
             m_goal.controllers.push_back(copy);
         }
+        m_goal.macros.clear();
+        for (const project::Macro& macro : m_target.macros) {
+            project::Macro copy = macro;
+            copy.id = m_macros.at(macro.id.value);
+            for (project::MacroTarget& target : copy.targets) {
+                target.target = param(target.target);
+            }
+            m_goal.macros.push_back(std::move(copy));
+        }
         return std::move(m_goal);
     }
 
@@ -154,6 +165,7 @@ private:
     std::map<std::uint32_t, core::SampleId> m_samples;
     std::map<std::uint32_t, core::MarkerId> m_markers;
     std::map<std::uint32_t, core::ControllerId> m_controllers;
+    std::map<std::uint32_t, core::MacroId> m_macros;
     std::map<std::uint32_t, core::RouteId> m_routes;
     std::map<std::uint32_t, core::AutomationClipId> m_autoClips;
 
@@ -197,6 +209,10 @@ private:
         for (const project::Controller& c : m_target.controllers) {
             const project::Controller* match = m_cur.findControllerByName(c.name);
             m_controllers[c.id.value] = match != nullptr ? match->id : m_goal.newControllerId();
+        }
+        for (const project::Macro& m : m_target.macros) {
+            const project::Macro* match = m_cur.findMacroByName(m.name);
+            m_macros[m.id.value] = match != nullptr ? match->id : m_goal.newMacroId();
         }
         mapMarkers();
         mapRoutes();
@@ -292,6 +308,11 @@ private:
         case project::ParamKind::ChannelInstrumentParam:
             ref.owner = channel(core::ChannelId{ref.owner}).value;
             break;
+        case project::ParamKind::Macro: {
+            const auto found = m_macros.find(ref.owner);
+            ref.owner = found != m_macros.end() ? found->second.value : 0U;
+            break;
+        }
         default:
             break;
         }
@@ -742,6 +763,17 @@ Commands narrowCommands(const Project& cur, const Project& goal) {
         }
     }
     playlistCommands(cur.playlist, goal.playlist, out);
+    if (!(cur.macros == goal.macros)) {
+        // Only when the same macros exist: a new one needs its id from ReplaceProject.
+        const bool sameSet =
+            cur.macros.size() == goal.macros.size() &&
+            std::ranges::all_of(goal.macros, [&cur](const project::Macro& m) {
+                return cur.find(m.id) != nullptr;
+            });
+        if (sameSet) {
+            out.push_back(std::make_unique<project::SetMacros>(goal.macros));
+        }
+    }
     return out;
 }
 

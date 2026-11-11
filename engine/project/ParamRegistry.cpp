@@ -194,7 +194,7 @@ constexpr auto kNamedParams = std::to_array<ParamDescriptor>({
 });
 
 /// One descriptor per fixed ParamKind, indexed by the enum's value.
-constexpr std::array<ParamDescriptor, 13> kKindDescriptors{{
+constexpr std::array<ParamDescriptor, 14> kKindDescriptors{{
     {"", 0.0F, 1.0F, 0.0F, Unit::Normalized, ScaleKind::Linear},
     {"volume", 0.0F, 2.0F, 1.0F, Unit::Ratio, ScaleKind::Logarithmic},
     {"pan", -1.0F, 1.0F, 0.0F, Unit::Normalized, ScaleKind::Linear},
@@ -208,6 +208,7 @@ constexpr std::array<ParamDescriptor, 13> kKindDescriptors{{
     {"bypass", 0.0F, 1.0F, 0.0F, Unit::Boolean, ScaleKind::Stepped},
     {"", -1e9F, 1e9F, 0.0F, Unit::Normalized, ScaleKind::Linear},
     {"level", 0.0F, 1.0F, 0.0F, Unit::Normalized, ScaleKind::Linear},
+    {"macro", 0.0F, 1.0F, 0.5F, Unit::Normalized, ScaleKind::Linear},
 }};
 // NOLINTEND(modernize-use-designated-initializers)
 
@@ -336,6 +337,16 @@ ParamResolution ParamRegistry::resolve(std::string_view path, const Project& pro
     if (segments.front().text == "insert") {
         return resolveInsert(segments, project);
     }
+    if (segments.front().text == "macro") {
+        if (segments.size() != 2) {
+            return failure(ResolveError::MalformedPath, segments.back());
+        }
+        const Macro* macro = project.findMacroByName(segments[1].text);
+        if (macro == nullptr) {
+            return failure(ResolveError::UnknownParameter, segments[1]);
+        }
+        return success(ParamKind::Macro, macro->id.value, 0);
+    }
     return failure(ResolveError::MalformedPath, segments.front());
 }
 
@@ -406,6 +417,10 @@ std::string ParamRegistry::pathOf(ParamRef ref, const Project& project) {
             return {};
         }
         return insertPath(insertId, "send." + std::to_string(sendId.value) + ".level");
+    }
+    case ParamKind::Macro: {
+        const Macro* macro = project.find(core::MacroId{ref.owner});
+        return macro == nullptr ? std::string{} : "macro." + quoteSegment(macro->name);
     }
     }
     return {};

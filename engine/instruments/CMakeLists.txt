@@ -15,6 +15,7 @@ target_sources(adx_engine_static PRIVATE
     fm/FmParams.cpp
     granular/GranularInstrument.cpp
     midiout/MidiOutInstrument.cpp
+    mod/ModLayer.cpp
     pool/SamplePoolChannel.cpp
     sampler/SamplerInstrument.cpp
     sampler/SamplerSetup.cpp

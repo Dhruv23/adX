@@ -241,7 +241,8 @@ IdMarks Project::idMarks() const noexcept {
                    .marker = m_markerIds.mark(),
                    .sample = m_sampleIds.mark(),
                    .automationClip = m_automationClipIds.mark(),
-                   .controller = m_controllerIds.mark()};
+                   .controller = m_controllerIds.mark(),
+                   .macro = m_macroIds.mark()};
 }
 
 void Project::restoreIdMarks(const IdMarks& marks) noexcept {
@@ -258,6 +259,7 @@ void Project::restoreIdMarks(const IdMarks& marks) noexcept {
     m_sampleIds.restore(marks.sample);
     m_automationClipIds.restore(marks.automationClip);
     m_controllerIds.restore(marks.controller);
+    m_macroIds.restore(marks.macro);
 }
 
 const Channel* Project::find(core::ChannelId id) const noexcept {
@@ -305,6 +307,15 @@ Controller* Project::find(core::ControllerId id) noexcept {
 const Controller* Project::findControllerByName(std::string_view name) const noexcept {
     const auto match = std::ranges::find(controllers, name, &Controller::name);
     return match == controllers.end() ? nullptr : &*match;
+}
+
+const Macro* Project::find(core::MacroId id) const noexcept {
+    return findById(macros, id);
+}
+
+const Macro* Project::findMacroByName(std::string_view name) const noexcept {
+    const auto match = std::ranges::find(macros, name, &Macro::name);
+    return match == macros.end() ? nullptr : &*match;
 }
 
 const AutomationClip* Project::findAutomationClip(core::AutomationClipId id) const noexcept {

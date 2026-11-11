@@ -4,10 +4,13 @@
 #include <array>
 #include <cstdint>
 
+#include "engine/instruments/mod/ModLayer.h"
 #include "engine/project/ParamDescriptor.h"
 
 namespace adx::instruments {
 
+/// The VA's own parameters. The modulation layer's follow them in the table
+/// (kVaMod.base is Count).
 enum class VaParam : std::uint32_t {
     Osc1Wave,
     Osc1Octave,
@@ -99,7 +102,7 @@ constexpr ParamDescriptor value(std::string_view name, float lo, float hi, float
 } // namespace detail
 
 /// Waves: 0 sine, 1 saw, 2 square, 3 triangle, 4 pulse (dsp::OscShape order).
-inline constexpr auto kVaParams = std::to_array<project::ParamDescriptor>({
+inline constexpr auto kVaOwnParams = std::to_array<project::ParamDescriptor>({
     detail::stepped("osc1.wave", 0, 4, 1),
     detail::stepped("osc1.octave", -3, 3, 0),
     detail::stepped("osc1.semi", -12, 12, 0),
@@ -155,6 +158,25 @@ inline constexpr auto kVaParams = std::to_array<project::ParamDescriptor>({
                   project::RateClass::Sample),
 });
 
-static_assert(kVaParams.size() == static_cast<std::size_t>(VaParam::Count));
+static_assert(kVaOwnParams.size() == static_cast<std::size_t>(VaParam::Count));
+
+/// The VA's table: its own parameters, then the modulation layer's (phase_12.md §4.3).
+/// It already had `lfoN.rate` and `lfoN.shape`, so the block stops before its own.
+inline constexpr auto kVaParams =
+    withModParams<kVaOwnParams.size(), kModParamCountNoLfo>(kVaOwnParams);
+
+inline constexpr ModLayout kVaMod{
+    .base = static_cast<std::uint32_t>(VaParam::Count),
+    .lfoRate = {static_cast<std::uint32_t>(VaParam::Lfo1Rate),
+                static_cast<std::uint32_t>(VaParam::Lfo2Rate)},
+    .lfoShape = {static_cast<std::uint32_t>(VaParam::Lfo1Shape),
+                 static_cast<std::uint32_t>(VaParam::Lfo2Shape)},
+    .lfoRetrig = {static_cast<std::uint32_t>(VaParam::Lfo1Retrig),
+                  static_cast<std::uint32_t>(VaParam::Lfo2Retrig)},
+    .legacyTarget = {static_cast<std::uint32_t>(VaParam::Lfo1Target),
+                     static_cast<std::uint32_t>(VaParam::Lfo2Target)},
+    .legacyDepth = {static_cast<std::uint32_t>(VaParam::Lfo1Depth),
+                    static_cast<std::uint32_t>(VaParam::Lfo2Depth)},
+};
 
 } // namespace adx::instruments

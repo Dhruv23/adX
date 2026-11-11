@@ -13,6 +13,7 @@
 #include "engine/format/audio/SamplePool.h"
 #include "engine/format/mininotation/PatternCompiler.h"
 #include "engine/project/ControllerCompile.h"
+#include "engine/project/MacroCompile.h"
 #include "engine/project/EventCompile.h"
 #include "engine/project/Project.h"
 
@@ -205,25 +206,49 @@ struct LaneRange {
 /// Appends one lane's points, its compiled knots and the lane itself. `endTick` is
 /// where the lane stops applying; `lastTick` is where its points are cut, for a clip
 /// envelope trimmed by its item (phase_4.md §4.0: trimming the tail drops points).
+// NOLINTNEXTLINE(misc-no-recursion) - a macro's lane becomes its targets' lanes, once.
 bool addLane(const Project& project, ParamRef target, const std::vector<Breakpoint>& points,
              const Window& window, std::int64_t endTick, std::int64_t lastTick,
              const graph::ParamLayout& layout, SnapshotStorage& storage,
-             std::vector<LaneRange>& ranges) {
+             std::vector<LaneRange>& ranges, const MacroOffsets& macros) {
     if (!target.valid() || points.empty()) {
         return false;
+    }
+    if (target.kind == ParamKind::Macro) {
+        // A lane drawn on a macro: the same lane on each of its targets, every point
+        // put through that target's range and curve.
+        const Macro* macro = project.find(core::MacroId{target.owner});
+        bool any = false;
+        for (const MacroTarget& each : macro != nullptr ? macro->targets
+                                                        : std::vector<MacroTarget>{}) {
+            if (each.target.kind == ParamKind::Macro) {
+                continue;
+            }
+            std::vector<Breakpoint> mapped = points;
+            for (Breakpoint& point : mapped) {
+                point.value = macroTargetValue(each, point.value);
+            }
+            any = addLane(project, each.target, mapped, window, endTick, lastTick, layout, storage,
+                          ranges, {}) ||
+                  any;
+        }
+        return any;
     }
     const std::uint32_t index = paramIndexOf(layout, target);
     if (index == graph::kNone) {
         return false;
     }
+    const auto offset = macros.find(index);
     LaneRange range{.points = storage.points.size(), .knots = storage.knots.size()};
     for (const Breakpoint& point : points) {
         const std::int64_t tick = window.place(point.at.value);
         if (tick > lastTick) {
             break;
         }
-        storage.points.push_back(
-            AutomationPoint{.tick = tick, .value = point.value, .curve = point.curve});
+        storage.points.push_back(AutomationPoint{
+            .tick = tick,
+            .value = offset != macros.end() ? offset->second.apply(point.value) : point.value,
+            .curve = point.curve});
     }
     range.pointCount = storage.points.size() - range.points;
     if (range.pointCount == 0) {
@@ -288,7 +313,7 @@ void addControllerLanes(const Project& project, const graph::ParamLayout& layout
 
 template<class EventsOf>
 void buildAutomation(const Project& project, const graph::ParamLayout& layout,
-                     SnapshotStorage& storage, EventsOf eventsOf) {
+                     SnapshotStorage& storage, const MacroOffsets& macros, EventsOf eventsOf) {
     // Two passes: collect every lane's points into one vector, then point each lane at
     // its slice - a span taken during the first pass would dangle the moment the
     // vector grew.
@@ -299,7 +324,7 @@ void buildAutomation(const Project& project, const graph::ParamLayout& layout,
         // in every DAW.
         const std::int64_t end = bounded ? window.place(window.localEnd) : kForever;
         static_cast<void>(addLane(project, clip.target, clip.points, window, end, kForever, layout,
-                                  storage, ranges));
+                                  storage, ranges, macros));
     };
     // Clip envelopes go last, so where one overlaps a pattern or playlist lane on the
     // same parameter the most specific automation wins.
@@ -342,7 +367,7 @@ void buildAutomation(const Project& project, const graph::ParamLayout& layout,
         for (const ClipEnvelope& envelope : item->envelopes) {
             if (envelope.local == ClipTarget::Param) {
                 static_cast<void>(addLane(project, envelope.target, envelope.points, window, end,
-                                          end, layout, storage, ranges));
+                                          end, layout, storage, ranges, macros));
             }
         }
     }
@@ -509,6 +534,12 @@ std::vector<std::int64_t> SnapshotBuilder::signatureOf(const std::vector<Placeme
              channel->arp.rate.denominator, channel->arp.octaves,
              static_cast<std::int64_t>(std::bit_cast<std::uint32_t>(channel->arp.gate))});
     }
+    if (channel != nullptr && !channel->noteFilter.all()) {
+        const NoteFilter& f = channel->noteFilter;
+        signature.push_back((std::int64_t{1} << 40) | (std::int64_t{f.keyLow} << 24) |
+                            (std::int64_t{f.keyHigh} << 16) | (std::int64_t{f.velocityLow} << 8) |
+                            std::int64_t{f.velocityHigh});
+    }
     for (const Placement& placement : placements) {
         const PlaylistItem& item = *placement.item;
         signature.insert(signature.end(), {static_cast<std::int64_t>(item.id.value),
@@ -575,6 +606,23 @@ SnapshotBuilder::flatten(const std::vector<Placement>& placements, const Channel
                                  item.id.value);
             }
         }
+    }
+    if (channel != nullptr && !channel->noteFilter.all()) {
+        // A rack layer's key and velocity range: the notes outside it, and everything
+        // that belongs to them, never reach the channel.
+        std::vector<std::pair<std::uint32_t, std::uint32_t>> dropped;
+        for (const ScheduledEvent& event : events->events) {
+            if (event.kind == EventKind::NoteOn &&
+                !channel->noteFilter.accepts(event.pitch, event.velocity)) {
+                dropped.emplace_back(event.noteId, event.instance);
+            }
+        }
+        std::ranges::sort(dropped);
+        std::erase_if(events->events, [&dropped](const ScheduledEvent& event) {
+            return event.kind != EventKind::Param &&
+                   std::ranges::binary_search(dropped,
+                                              std::pair{event.noteId, event.instance});
+        });
     }
     std::ranges::sort(events->events, eventLess);
     if (channel != nullptr) {
@@ -791,8 +839,15 @@ SnapshotBuildResult SnapshotBuilder::build(const Project& project, std::uint64_t
         storage->trackChannels.push_back(channel.value);
     }
     graph::fillParams(project, m_graphBuild->params, storage->params);
+    const MacroOffsets macros = foldMacros(
+        project,
+        [this](ParamRef ref) -> std::optional<std::uint32_t> {
+            const std::uint32_t index = paramIndexOf(m_graphBuild->params, ref);
+            return index == graph::kNone ? std::nullopt : std::optional<std::uint32_t>{index};
+        },
+        storage->params);
     storage->paramBase = storage->params;
-    buildAutomation(project, m_graphBuild->params, *storage,
+    buildAutomation(project, m_graphBuild->params, *storage, macros,
                     [this](core::ChannelId channel) -> std::span<const ScheduledEvent> {
                         const auto found = m_channels.find(channel.value);
                         if (found == m_channels.end() || !found->second.events) {
