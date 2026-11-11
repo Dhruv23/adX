@@ -179,10 +179,10 @@ void AdditiveInstrument::refresh(graph::Voice& voice, AdditiveVoice& state,
                                  state.filterEnv.level() * kFilterEnvOctaves;
         const float keyOctaves = render.paramAt(idx(P::ResfilterKeyTrack), frame) *
                                  (static_cast<float>(voice.pitch) - 60.0F) / 12.0F;
-        const float cutoff =
-            std::clamp(resCutoff * dsp::exp2F(envOctaves + keyOctaves), 20.0F, 20000.0F);
-        const float resonance =
-            std::clamp(render.paramAt(idx(P::ResfilterResonance), frame), 0.0F, 1.0F);
+        const float cutoff = std::clamp(
+            resCutoff * dsp::exp2F(envOctaves + keyOctaves + state.modCutoff), 20.0F, 20000.0F);
+        const float resonance = std::clamp(
+            render.paramAt(idx(P::ResfilterResonance), frame) + state.modResonance, 0.0F, 1.0F);
         // v1's mapping: damping k = 2 - 2 * resonance; 0 self-oscillates.
         state.svfCoefficients = dsp::svfCoefficientsK(cutoff, 2.0 - (2.0 * resonance), rate);
         state.svfType =
@@ -195,9 +195,29 @@ void AdditiveInstrument::refresh(graph::Voice& voice, AdditiveVoice& state,
     state.driveNorm = drive > 0.0F ? dsp::driveNorm(state.driveGain) : 1.0F;
 }
 
+std::uint8_t AdditiveInstrument::voiceMode(std::span<const float> params) const noexcept {
+    return static_cast<std::uint8_t>(modVoiceMode(params, kAdditiveMod));
+}
+
+bool AdditiveInstrument::glideAlways(std::span<const float> params) const noexcept {
+    return modGlideAlways(params, kAdditiveMod);
+}
+
+void AdditiveInstrument::retriggerVoice(graph::Voice& voice, const graph::BlockEvent& /*event*/,
+                                        const graph::VoiceRender& render) noexcept {
+    AdditiveVoice& state = stateOf(voice);
+    state.ampEnv.trigger(state.ampShape, sampleRate());
+    state.filterEnv.trigger(state.filterShape, sampleRate());
+    modRetrigger(state.mod, render, kAdditiveMod);
+}
+
 void AdditiveInstrument::startVoice(graph::Voice& voice, const graph::BlockEvent& /*event*/,
                                     const graph::VoiceRender& render) noexcept {
     AdditiveVoice& state = stateOf(voice);
+    modStart(state.mod, voice, render, kAdditiveMod, modVoiceSeed(voice),
+             static_cast<double>(pool().clock()) / static_cast<double>(sampleRate()));
+    state.modCutoff = 0.0F;
+    state.modResonance = 0.0F;
     for (std::uint32_t k = 0; k < kAdditiveHarmonics; ++k) {
         state.phase[k] = render.param(idx(P::HarmonicPhase1) + k);
     }
@@ -232,6 +252,8 @@ bool AdditiveInstrument::renderVoice(graph::Voice& voice, std::span<float> left,
         state.ampEnv.release(state.ampShape, sampleRate());
         state.filterEnv.release(state.filterShape, sampleRate());
     }
+    modBegin(state.mod, voice, render, kAdditiveMod);
+    dsp::ModFrame scratch;
 
     const float velocity = static_cast<float>(voice.velocity) / 127.0F;
     const auto pitch = static_cast<float>(voice.pitch);
@@ -271,9 +293,15 @@ bool AdditiveInstrument::renderVoice(graph::Voice& voice, std::span<float> left,
                 state.vibratoPhase -= 1.0F;
             }
         }
-        const float increment = hzOf(pitch + (cents * 0.01F)) * inverseRate;
+        const bool onGrid = control(voice, i);
+        const dsp::ModFrame& mod =
+            modTick(state.mod, voice, render, kAdditiveMod, i, onGrid, scratch);
+        const float increment =
+            hzOf(pitch + (cents * 0.01F) + mod.of(dsp::ModDest::Pitch)) * inverseRate;
 
-        if (control(voice, i)) {
+        if (onGrid) {
+            state.modCutoff = mod.of(dsp::ModDest::Cutoff);
+            state.modResonance = mod.of(dsp::ModDest::Resonance);
             refresh(voice, state, render, i);
         }
 
@@ -374,6 +402,11 @@ bool AdditiveInstrument::renderVoice(graph::Voice& voice, std::span<float> left,
 
         left[i] = (sample * 0.5F) - (widthSample * 0.5F);
         right[i] = (sample * 0.5F) + (widthSample * 0.5F);
+        if (&mod == &scratch) {
+            left[i] *= mod.of(dsp::ModDest::Level);
+            right[i] *= mod.of(dsp::ModDest::Level);
+            modPan(mod.of(dsp::ModDest::Pan), left[i], right[i]);
+        }
 
         if (state.ampEnv.finished()) {
             alive = false;

@@ -8,6 +8,7 @@
 #include <array>
 #include <cstdint>
 
+#include "engine/instruments/mod/ModLayer.h"
 #include "engine/project/ParamDescriptor.h"
 
 namespace adx::instruments {
@@ -50,7 +51,10 @@ inline constexpr std::uint32_t kFmParamCount = kFmGlobalParams + (kFmOperators *
     return kFmGlobalParams + (op * kFmOpParams) + static_cast<std::uint32_t>(field);
 }
 
-/// One descriptor per parameter, in index order (FmParams.cpp).
-extern const std::array<project::ParamDescriptor, kFmParamCount> kFmParams;
+/// One descriptor per parameter, in index order (FmParams.cpp): the FM's own, then the
+/// modulation layer's (phase_12.md §4.3).
+extern const std::array<project::ParamDescriptor, kFmParamCount + kModParamCount> kFmParams;
+
+inline constexpr ModLayout kFmMod = ModLayout::appendedTo(kFmParamCount);
 
 } // namespace adx::instruments

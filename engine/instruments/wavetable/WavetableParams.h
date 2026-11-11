@@ -5,6 +5,7 @@
 #include <array>
 #include <cstdint>
 
+#include "engine/instruments/mod/ModLayer.h"
 #include "engine/project/ParamDescriptor.h"
 
 namespace adx::instruments {
@@ -50,7 +51,7 @@ constexpr project::ParamDescriptor wt(std::string_view name, float lo, float hi,
 }
 } // namespace detail
 
-inline constexpr auto kWavetableParams = std::to_array<project::ParamDescriptor>({
+inline constexpr auto kWavetableOwnParams = std::to_array<project::ParamDescriptor>({
     detail::wt("table", 0, kWavetableBankCount - 1, 0, project::Unit::Count,
                project::ScaleKind::Stepped),
     // Through the table's frames, 0 the first and 1 the last. Per frame: a sweep is smooth.
@@ -79,6 +80,11 @@ inline constexpr auto kWavetableParams = std::to_array<project::ParamDescriptor>
                project::RateClass::Sample),
 });
 
-static_assert(kWavetableParams.size() == static_cast<std::size_t>(WavetableParam::Count));
+static_assert(kWavetableOwnParams.size() == static_cast<std::size_t>(WavetableParam::Count));
+
+/// The table: the wavetable's own parameters, then the modulation layer's.
+inline constexpr auto kWavetableParams = withModParams(kWavetableOwnParams);
+inline constexpr ModLayout kWavetableMod =
+    ModLayout::appendedTo(static_cast<std::uint32_t>(WavetableParam::Count));
 
 } // namespace adx::instruments

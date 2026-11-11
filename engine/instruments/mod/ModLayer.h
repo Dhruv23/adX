@@ -230,6 +230,25 @@ struct ModVoice {
     bool released;
 };
 
+/// A voice's identity as a seed: from its key, never a clock, so offline and realtime
+/// modulate the same note the same way.
+[[nodiscard]] inline std::uint32_t modVoiceSeed(const graph::Voice& voice) noexcept {
+    std::uint32_t h = 2166136261U;
+    for (const std::uint32_t part : {voice.key.channelId, voice.key.noteId, voice.key.instance}) {
+        h = (h ^ part) * 16777619U;
+    }
+    return h == 0 ? 1U : h;
+}
+
+/// Applies a frame's pan offset (-1..1) to a stereo sample, as the VA always has.
+inline void modPan(float pan, float& left, float& right) noexcept {
+    if (pan != 0.0F) {
+        const float p = pan < -1.0F ? -1.0F : (pan > 1.0F ? 1.0F : pan);
+        left *= p > 0.0F ? 1.0F - p : 1.0F;
+        right *= p < 0.0F ? 1.0F + p : 1.0F;
+    }
+}
+
 /// At the note: resets and triggers everything. `seed` is the voice's identity hash;
 /// `clockSeconds` the channel's time, which a free-running LFO keeps.
 void modStart(ModVoice& state, const graph::Voice& voice, const graph::VoiceRender& render,

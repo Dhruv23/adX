@@ -3,9 +3,10 @@
 
 namespace adx::instruments {
 
+namespace {
 // NOLINTBEGIN(modernize-use-designated-initializers) - a table reads as a table.
-const std::array<project::ParamDescriptor, static_cast<std::size_t>(AdditiveParam::Count)>
-    kAdditiveParams = std::to_array<project::ParamDescriptor>({
+constexpr std::array<project::ParamDescriptor, static_cast<std::size_t>(AdditiveParam::Count)>
+    kAdditiveOwnParams = std::to_array<project::ParamDescriptor>({
         {"env.attack", 0.0F, 10.0F, 0.01F, project::Unit::Seconds, project::ScaleKind::Logarithmic,
          project::RateClass::Block, project::CurvePart::None},
         {"env.decay", 0.0F, 10.0F, 0.2F, project::Unit::Seconds, project::ScaleKind::Logarithmic,
@@ -504,5 +505,10 @@ const std::array<project::ParamDescriptor, static_cast<std::size_t>(AdditivePara
          project::ScaleKind::Linear, project::RateClass::Block, project::CurvePart::None},
     });
 // NOLINTEND(modernize-use-designated-initializers)
+} // namespace
+
+const std::array<project::ParamDescriptor,
+                 static_cast<std::size_t>(AdditiveParam::Count) + kModParamCount>
+    kAdditiveParams = withModParams(kAdditiveOwnParams);
 
 } // namespace adx::instruments

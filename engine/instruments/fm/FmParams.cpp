@@ -3,7 +3,8 @@
 namespace adx::instruments {
 
 // NOLINTBEGIN(modernize-use-designated-initializers) - a table reads as a table.
-const std::array<project::ParamDescriptor, kFmParamCount> kFmParams =
+namespace {
+constexpr std::array<project::ParamDescriptor, kFmParamCount> kFmOwnParams =
     std::to_array<project::ParamDescriptor>({
         {"algorithm", 1.0F, 32.0F, 1.0F, project::Unit::Count, project::ScaleKind::Stepped,
          project::RateClass::Block, project::CurvePart::None},
@@ -134,6 +135,10 @@ const std::array<project::ParamDescriptor, kFmParamCount> kFmParams =
         {"op6.velocity", 0.0F, 1.0F, 0.5F, project::Unit::Normalized, project::ScaleKind::Linear,
          project::RateClass::Block, project::CurvePart::None},
     });
+} // namespace
 // NOLINTEND(modernize-use-designated-initializers)
+
+const std::array<project::ParamDescriptor, kFmParamCount + kModParamCount> kFmParams =
+    withModParams(kFmOwnParams);
 
 } // namespace adx::instruments

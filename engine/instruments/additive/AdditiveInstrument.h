@@ -42,6 +42,11 @@ inline constexpr float kFilterBypassHz = 19000.0F;
 inline constexpr float kUnisonWidth = 0.6F;
 
 struct AdditiveVoice {
+    /// The modulation layer: its envelopes, LFOs and matrix (ModLayer.h).
+    ModVoice mod;
+    /// The frame's cutoff and resonance offsets, kept for the next control tick.
+    float modCutoff;
+    float modResonance;
     std::array<float, kAdditiveHarmonics> phase;
     std::array<float, kAdditiveHarmonics> amplitude;
     /// Harmonic k's frequency multiple, k times its detune ratio.
@@ -102,6 +107,10 @@ protected:
     bool renderVoice(graph::Voice& voice, std::span<float> left, std::span<float> right,
                      const graph::VoiceRender& render) noexcept override;
     [[nodiscard]] float portamentoSeconds(std::span<const float> params) const noexcept override;
+    [[nodiscard]] std::uint8_t voiceMode(std::span<const float> params) const noexcept override;
+    [[nodiscard]] bool glideAlways(std::span<const float> params) const noexcept override;
+    void retriggerVoice(graph::Voice& voice, const graph::BlockEvent& event,
+                        const graph::VoiceRender& render) noexcept override;
 
 private:
     /// Reads the block-rate parameters at frame `frame` and recomputes everything that

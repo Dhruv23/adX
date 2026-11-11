@@ -148,6 +148,7 @@ def additive() -> tuple[str, str]:
 #include <array>
 #include <cstdint>
 
+#include "engine/instruments/mod/ModLayer.h"
 #include "engine/project/ParamDescriptor.h"
 
 namespace adx::instruments {{
@@ -161,9 +162,14 @@ enum class AdditiveParam : std::uint32_t {{
     Count = HarmonicPhase1 + kAdditiveHarmonics,
 }};
 
-/// One descriptor per AdditiveParam, in enum order (AdditiveParams.cpp).
-extern const std::array<project::ParamDescriptor, static_cast<std::size_t>(AdditiveParam::Count)>
+/// One descriptor per AdditiveParam, in enum order, then the modulation layer's
+/// (AdditiveParams.cpp; phase_12.md 4.3).
+extern const std::array<project::ParamDescriptor,
+                        static_cast<std::size_t>(AdditiveParam::Count) + kModParamCount>
     kAdditiveParams;
+
+inline constexpr ModLayout kAdditiveMod =
+    ModLayout::appendedTo(static_cast<std::uint32_t>(AdditiveParam::Count));
 
 }} // namespace adx::instruments
 """
@@ -172,12 +178,18 @@ extern const std::array<project::ParamDescriptor, static_cast<std::size_t>(Addit
 
 namespace adx::instruments {{
 
+namespace {{
 // NOLINTBEGIN(modernize-use-designated-initializers) - a table reads as a table.
-const std::array<project::ParamDescriptor, static_cast<std::size_t>(AdditiveParam::Count)>
-    kAdditiveParams = std::to_array<project::ParamDescriptor>({{
+constexpr std::array<project::ParamDescriptor, static_cast<std::size_t>(AdditiveParam::Count)>
+    kAdditiveOwnParams = std::to_array<project::ParamDescriptor>({{
 {chr(10).join(rows)}
 }});
 // NOLINTEND(modernize-use-designated-initializers)
+}} // namespace
+
+const std::array<project::ParamDescriptor,
+                 static_cast<std::size_t>(AdditiveParam::Count) + kModParamCount>
+    kAdditiveParams = withModParams(kAdditiveOwnParams);
 
 }} // namespace adx::instruments
 """

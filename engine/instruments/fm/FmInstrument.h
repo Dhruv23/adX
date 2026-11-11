@@ -50,6 +50,7 @@ struct FmVoice {
     float feedback1;
     float feedback2;
     bool released;
+    ModVoice mod;
 };
 
 class FmInstrument final : public Instrument<FmVoice> {
@@ -66,6 +67,10 @@ protected:
     bool renderVoice(graph::Voice& voice, std::span<float> left, std::span<float> right,
                      const graph::VoiceRender& render) noexcept override;
     [[nodiscard]] float portamentoSeconds(std::span<const float> params) const noexcept override;
+    [[nodiscard]] std::uint8_t voiceMode(std::span<const float> params) const noexcept override;
+    [[nodiscard]] bool glideAlways(std::span<const float> params) const noexcept override;
+    void retriggerVoice(graph::Voice& voice, const graph::BlockEvent& event,
+                        const graph::VoiceRender& render) noexcept override;
 };
 
 } // namespace adx::instruments

@@ -90,9 +90,30 @@ float FmInstrument::portamentoSeconds(std::span<const float> params) const noexc
     return at < params.size() ? std::max(0.0F, params[at]) : 0.0F;
 }
 
+std::uint8_t FmInstrument::voiceMode(std::span<const float> params) const noexcept {
+    return static_cast<std::uint8_t>(modVoiceMode(params, kFmMod));
+}
+
+bool FmInstrument::glideAlways(std::span<const float> params) const noexcept {
+    return modGlideAlways(params, kFmMod);
+}
+
+void FmInstrument::retriggerVoice(graph::Voice& voice, const graph::BlockEvent& /*event*/,
+                                  const graph::VoiceRender& render) noexcept {
+    // The phases run on; each operator's envelope restarts from where it is.
+    FmVoice& state = stateOf(voice);
+    state.released = false;
+    for (std::uint32_t o = 0; o < kFmOperators; ++o) {
+        state.env[o].trigger(state.shape[o], sampleRate());
+    }
+    modRetrigger(state.mod, render, kFmMod);
+}
+
 void FmInstrument::startVoice(graph::Voice& voice, const graph::BlockEvent& /*event*/,
                               const graph::VoiceRender& render) noexcept {
     FmVoice& state = stateOf(voice);
+    modStart(state.mod, voice, render, kFmMod, modVoiceSeed(voice),
+             static_cast<double>(pool().clock()) / static_cast<double>(sampleRate()));
     const float velocity = static_cast<float>(voice.velocity) / 127.0F;
     for (std::uint32_t o = 0; o < kFmOperators; ++o) {
         state.phase[o] = 0.0F;
@@ -124,6 +145,8 @@ bool FmInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
             state.env[o].release(state.shape[o], sampleRate());
         }
     }
+    modBegin(state.mod, voice, render, kFmMod);
+    dsp::ModFrame scratch;
     const FmAlgorithm& algo = fmAlgorithm(algorithmNumber(render));
     const float inverseRate = 1.0F / static_cast<float>(sampleRate());
     const float feedback =
@@ -168,7 +191,9 @@ bool FmInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
             }
         }
         const bool carrier = ((algo.carriers >> k) & 1U) != 0;
-        runs[k] = carrier || k == algo.feedbackFrom || state.level[k] != 0.0F;
+        // A slot may raise a silent operator's level, so with any routed all six run.
+        runs[k] = carrier || k == algo.feedbackFrom || state.level[k] != 0.0F ||
+                  state.mod.slotCount > 0;
     }
 
     bool alive = true;
@@ -184,8 +209,11 @@ bool FmInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
             right[i] = 0.0F;
             continue;
         }
+        const dsp::ModFrame& mod =
+            modTick(state.mod, voice, render, kFmMod, i, control(voice, i), scratch);
+        const bool modulated = &mod == &scratch;
         const float cents = i < render.pitchCents.size() ? render.pitchCents[i] : 0.0F;
-        const float noteHz = noteHzOf(pitch + (cents * 0.01F));
+        const float noteHz = noteHzOf(pitch + (cents * 0.01F) + mod.of(dsp::ModDest::Pitch));
         if (noteHz != stepsFor) {
             for (std::uint32_t k = 0; k < kFmOperators; ++k) {
                 const float hz = fixedHz[k] > 0.0F ? fixedHz[k] : noteHz * ratio[k];
@@ -207,12 +235,23 @@ bool FmInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
             }
             modulation *= kFmModIndex;
             if (k == algo.feedbackTo) {
-                modulation += feedback * 0.5F * (state.feedback1 + state.feedback2);
+                const float loop =
+                    modulated ? std::clamp(feedback + (kFmFeedbackIndex *
+                                                       mod.of(dsp::ModDest::FmFeedback)),
+                                           0.0F, kFmFeedbackIndex)
+                              : feedback;
+                modulation += loop * 0.5F * (state.feedback1 + state.feedback2);
             }
             const float env = state.env[k].next(state.shape[k]);
             float phase = state.phase[k] + modulation;
             phase -= dsp::floorExact(phase);
-            state.output[k] = dsp::sinUnitF(phase) * env * state.level[k];
+            const float opLevel =
+                modulated ? std::clamp(state.level[k] +
+                                           mod.value[static_cast<std::size_t>(
+                                                         dsp::ModDest::FmOp1) + k],
+                                       0.0F, 1.0F)
+                          : state.level[k];
+            state.output[k] = dsp::sinUnitF(phase) * env * opLevel;
             state.phase[k] += step[k];
             state.phase[k] -= dsp::floorExact(state.phase[k]);
             if (((algo.carriers >> k) & 1U) != 0) {
@@ -228,6 +267,11 @@ bool FmInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
             norm * (levelAutomated ? dsp::dbToGainF(render.paramAt(levelIndex, i)) : level);
         left[i] = out * gain;
         right[i] = out * gain;
+        if (modulated) {
+            left[i] *= mod.of(dsp::ModDest::Level);
+            right[i] *= mod.of(dsp::ModDest::Level);
+            modPan(mod.of(dsp::ModDest::Pan), left[i], right[i]);
+        }
         if (!sounding) {
             alive = false;
         }

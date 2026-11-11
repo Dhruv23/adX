@@ -27,6 +27,7 @@ adx_add_cpp_test(adx_tests
         ${CMAKE_CURRENT_SOURCE_DIR}/../local/teto/test_teto.cpp
         preset/test_presets.cpp
         rack/test_rack.cpp
+        modmatrix/test_modmatrix.cpp
         rt/test_alloc_guard.cpp
         rt/test_spsc_ring.cpp
         rt/test_overwrite_ring.cpp

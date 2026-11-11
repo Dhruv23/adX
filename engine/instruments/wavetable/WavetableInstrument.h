@@ -60,6 +60,7 @@ struct WavetableVoice {
     dsp::Lfo lfo;
     float velocity;
     bool released;
+    ModVoice mod;
 };
 
 class WavetableInstrument final : public Instrument<WavetableVoice> {
@@ -89,10 +90,14 @@ protected:
     bool renderVoice(graph::Voice& voice, std::span<float> left, std::span<float> right,
                      const graph::VoiceRender& render) noexcept override;
     [[nodiscard]] float portamentoSeconds(std::span<const float> params) const noexcept override;
+    [[nodiscard]] std::uint8_t voiceMode(std::span<const float> params) const noexcept override;
+    [[nodiscard]] bool glideAlways(std::span<const float> params) const noexcept override;
+    void retriggerVoice(graph::Voice& voice, const graph::BlockEvent& event,
+                        const graph::VoiceRender& render) noexcept override;
 
 private:
-    void refresh(WavetableVoice& state, const graph::VoiceRender& render,
-                 std::uint32_t frame) noexcept;
+    void refresh(WavetableVoice& state, const graph::VoiceRender& render, std::uint32_t frame,
+                 const dsp::ModFrame& mod) noexcept;
 
     std::array<const WavetablePair*, kWavetableBankCount> m_tables{};
     const WavetablePair* m_user{nullptr};

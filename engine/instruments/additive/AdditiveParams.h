@@ -11,6 +11,7 @@
 #include <array>
 #include <cstdint>
 
+#include "engine/instruments/mod/ModLayer.h"
 #include "engine/project/ParamDescriptor.h"
 
 namespace adx::instruments {
@@ -80,8 +81,13 @@ enum class AdditiveParam : std::uint32_t {
     Count = HarmonicPhase1 + kAdditiveHarmonics,
 };
 
-/// One descriptor per AdditiveParam, in enum order (AdditiveParams.cpp).
-extern const std::array<project::ParamDescriptor, static_cast<std::size_t>(AdditiveParam::Count)>
+/// One descriptor per AdditiveParam, in enum order, then the modulation layer's
+/// (AdditiveParams.cpp; phase_12.md 4.3).
+extern const std::array<project::ParamDescriptor,
+                        static_cast<std::size_t>(AdditiveParam::Count) + kModParamCount>
     kAdditiveParams;
+
+inline constexpr ModLayout kAdditiveMod =
+    ModLayout::appendedTo(static_cast<std::uint32_t>(AdditiveParam::Count));
 
 } // namespace adx::instruments

@@ -68,11 +68,29 @@ float WavetableInstrument::portamentoSeconds(std::span<const float> params) cons
     return at < params.size() ? std::max(0.0F, params[at]) : 0.0F;
 }
 
+std::uint8_t WavetableInstrument::voiceMode(std::span<const float> params) const noexcept {
+    return static_cast<std::uint8_t>(modVoiceMode(params, kWavetableMod));
+}
+
+bool WavetableInstrument::glideAlways(std::span<const float> params) const noexcept {
+    return modGlideAlways(params, kWavetableMod);
+}
+
+void WavetableInstrument::retriggerVoice(graph::Voice& voice, const graph::BlockEvent& /*event*/,
+                                         const graph::VoiceRender& render) noexcept {
+    WavetableVoice& state = stateOf(voice);
+    state.velocity = static_cast<float>(voice.velocity) / 127.0F;
+    state.released = false;
+    state.env.trigger(state.shape, sampleRate());
+    modRetrigger(state.mod, render, kWavetableMod);
+}
+
 void WavetableInstrument::refresh(WavetableVoice& state, const graph::VoiceRender& render,
-                                  std::uint32_t frame) noexcept {
+                                  std::uint32_t frame, const dsp::ModFrame& mod) noexcept {
     const auto count = static_cast<std::uint32_t>(std::clamp(
         stepped(render, P::UnisonVoices, frame), 1, static_cast<int>(kWavetableMaxUnison)));
-    const float detune = render.paramAt(idx(P::UnisonDetune), frame);
+    const float detune = std::max(
+        0.0F, render.paramAt(idx(P::UnisonDetune), frame) + mod.of(dsp::ModDest::UnisonDetune));
     const float spread = std::clamp(render.paramAt(idx(P::UnisonSpread), frame), 0.0F, 1.0F);
     state.unison = count;
     for (std::uint32_t u = 0; u < count; ++u) {
@@ -89,8 +107,13 @@ void WavetableInstrument::refresh(WavetableVoice& state, const graph::VoiceRende
     state.shape.decaySeconds = render.paramAt(idx(P::EnvDecay), frame);
     state.shape.sustain = render.paramAt(idx(P::EnvSustain), frame);
     state.shape.releaseSeconds = render.paramAt(idx(P::EnvRelease), frame);
-    const float cutoff = std::clamp(render.paramAt(idx(P::FilterCutoff), frame), 20.0F, 20000.0F);
-    const float resonance = std::clamp(render.paramAt(idx(P::FilterResonance), frame), 0.0F, 1.0F);
+    const float octaves = mod.of(dsp::ModDest::Cutoff);
+    const float cutoff = std::clamp(render.paramAt(idx(P::FilterCutoff), frame) *
+                                        (octaves != 0.0F ? dsp::exp2F(octaves) : 1.0F),
+                                    20.0F, 20000.0F);
+    const float resonance = std::clamp(
+        render.paramAt(idx(P::FilterResonance), frame) + mod.of(dsp::ModDest::Resonance), 0.0F,
+        1.0F);
     state.coefficients = dsp::svfCoefficients(
         std::min(static_cast<double>(cutoff), sampleRate() * 0.45),
         0.5 + (19.5 * resonance * resonance), static_cast<double>(sampleRate()));
@@ -110,8 +133,10 @@ void WavetableInstrument::startVoice(graph::Voice& voice, const graph::BlockEven
     state.lfo.reset(0.0F);
     state.velocity = static_cast<float>(voice.velocity) / 127.0F;
     state.released = false;
+    modStart(state.mod, voice, render, kWavetableMod, modVoiceSeed(voice),
+             static_cast<double>(pool().clock()) / static_cast<double>(sampleRate()));
     state.env.reset();
-    refresh(state, render, 0);
+    refresh(state, render, 0, dsp::neutralModFrame());
     state.env.trigger(state.shape, sampleRate());
     voice.level = 0.0F;
 }
@@ -125,6 +150,8 @@ bool WavetableInstrument::renderVoice(graph::Voice& voice, std::span<float> left
         state.released = true;
         state.env.release(state.shape, sampleRate());
     }
+    modBegin(state.mod, voice, render, kWavetableMod);
+    dsp::ModFrame scratch;
     const auto bank = static_cast<std::size_t>(
         std::clamp(stepped(render, P::Table, 0), 0, kWavetableBankCount - 1));
     const WavetablePair& pair = *m_tables[bank];
@@ -147,13 +174,18 @@ bool WavetableInstrument::renderVoice(graph::Voice& voice, std::span<float> left
             right[i] = 0.0F;
             continue;
         }
-        if (control(voice, i)) {
-            refresh(state, render, i);
+        const bool onGrid = control(voice, i);
+        const dsp::ModFrame& mod =
+            modTick(state.mod, voice, render, kWavetableMod, i, onGrid, scratch);
+        if (onGrid) {
+            refresh(state, render, i, mod);
         }
         const float lfo = state.lfo.next(dsp::LfoShape::Triangle, lfoIncrement);
-        const float position = render.paramAt(idx(P::Position), i) + (0.5F * lfoDepth * lfo);
+        const float position = render.paramAt(idx(P::Position), i) + (0.5F * lfoDepth * lfo) +
+                               mod.of(dsp::ModDest::WtPosition);
         const float cents = i < render.pitchCents.size() ? render.pitchCents[i] : 0.0F;
-        const float base = hzOf(pitch + (cents * 0.01F)) * inverseRate;
+        const float base =
+            hzOf(pitch + (cents * 0.01F) + mod.of(dsp::ModDest::Pitch)) * inverseRate;
         float l = 0.0F;
         float r = 0.0F;
         for (std::uint32_t u = 0; u < state.unison; ++u) {
@@ -175,6 +207,11 @@ bool WavetableInstrument::renderVoice(graph::Voice& voice, std::span<float> left
             (levelAutomated ? dsp::dbToGainF(render.paramAt(idx(P::Level), i)) : level);
         left[i] = l * gain;
         right[i] = r * gain;
+        if (&mod == &scratch) {
+            left[i] *= mod.of(dsp::ModDest::Level);
+            right[i] *= mod.of(dsp::ModDest::Level);
+            modPan(mod.of(dsp::ModDest::Pan), left[i], right[i]);
+        }
         if (state.env.finished()) {
             alive = false;
         }
