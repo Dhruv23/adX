@@ -269,6 +269,7 @@ void registerRacks(py::module_& m) {
     m.def(
         "library_store", [] { return format::libraryStore().generic_string(); },
         "Where sound libraries are installed.");
+    // GIL: trivial - one directory lookup, remembered
     m.def(
         "resolve_library_path",
         [](const std::string& path) { return format::resolveLibraryPath(path).generic_string(); },
