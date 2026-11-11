@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "engine/graph/Handover.h"
 #include "engine/project/TypeCatalog.h"
 #include "engine/rt/AllocGuard.h"
 #include "tests/cpp/instruments/InstrumentHarness.h"
@@ -177,4 +178,15 @@ TEST_CASE("slide_plus_vibrato_sums_in_cents", "[instruments]") {
     CHECK_THAT(meanCents, Catch::Matchers::WithinAbs(0.0, 2.0));
     CHECK_THAT(highCents, Catch::Matchers::WithinAbs(50.0, 3.0));
     CHECK_THAT(lowCents, Catch::Matchers::WithinAbs(-50.0, 3.0));
+}
+
+TEST_CASE("every_instrument_fits_the_handover", "[instruments]") {
+    // A node remembers its last parameters to ring out after a reload or a removal
+    // (Handover.h). One with more than RememberedParams holds is cut instead: Phase 12's
+    // modulation block took additive past the old 256 and its reload release went silent.
+    for (const adx::project::TypeInfo& type : adx::project::instrumentTypes()) {
+        INFO(type.name);
+        CHECK(type.params.size() + adx::graph::kChannelParamCount <=
+              adx::graph::RememberedParams::kCapacity);
+    }
 }

@@ -1,0 +1,24 @@
+# G4: a bowed string through a cello body, slow bow attack, late vibrato.
+[PRESET]
+NAME="Bowed Cello"
+TYPE=physical
+PACK=demo
+CATEGORY=Strings
+TAGS=cello, bowed, physical, solo
+
+[PARAMS]
+model=1
+bow.pressure=0.45
+bow.speed=0.55
+bow.position=0.12
+string.decay=3
+body.type=3
+body.mix=0.7
+env.attack=0.15
+env.release=0.35
+lfo1.target=1
+lfo1.rate=5.5
+lfo1.depth=0.012
+lfo1.delay=0.4
+lfo1.fade=0.5
+level=-3

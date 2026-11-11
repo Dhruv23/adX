@@ -244,7 +244,8 @@ A parameter path is a reference followed by the parameter's own dotted name.
 
 ```ebnf
 param-path  = "channel" , "." , name-seg , "." , channel-param
-            | "insert" , "." , integer , "." , insert-param ;
+            | "insert" , "." , integer , "." , insert-param
+            | "macro" , "." , name-seg ;
 
 channel-param = "volume" | "pan" | "pitch" | instrument-param ;
 insert-param  = "gain" | "pan" | "width"
@@ -256,6 +257,8 @@ instrument-param = ident , { "." , ident } ;
 `volume`, `pan` and `pitch` are reserved at channel level; any other dotted name
 is a parameter of that channel's instrument (`channel.Lead.filter.cutoff`).
 `slot.N` and `send.N` address the slot or send by **id**, consistent with §5.
+`macro.<name>` is a `[MACRO]` section's knob (§7.7), 0..1: a lane drawn on it is the same
+lane on each of the macro's targets.
 
 A parameter path names a parameter that the file actually declares. Automating
 `channel.Lead.filter.cutoff` requires the channel to carry a
@@ -385,6 +388,14 @@ labelling it v1 would send the next load through the v1 shim.
 | `PLUGIN_PATH` | string: the plugin file where it was last found | none |
 | `PLUGIN_ISOLATED` | boolean | `no` |
 | `STATE` | string: `"base64:"` and the plugin's own state | none |
+| `KEYS` | key range `lo..hi` (numbers) | `0..127` |
+| `VELOCITY` | range `lo..hi` | `0..127` |
+
+`KEYS` and `VELOCITY` are the channel's note filter (phase_12.md §4.1): a pattern note
+outside either is dropped when the channel's events are compiled, with its glides and
+lyrics, and never reaches the instrument. They are how a rack's layer plays only its
+own keys - a kit with a layer per drum, a split, a velocity layer. Each is written only
+when it is not the full range.
 
 `INSTRUMENT=clap` or `INSTRUMENT=vst3` hosts a third-party plugin as the channel's
 instrument (phase_9.md §4.7). `PLUGIN` is its identity - a CLAP plugin's reverse-DNS id,
@@ -428,7 +439,14 @@ zone-kv     = "key" , "=" , key-range          (* default 0..127 *)
             | "tune" , "=" , number            (* cents *)
             | "gain" , "=" , number            (* dB *)
             | "pan" , "=" , number
-            | "rr" , "=" , integer , ":" , integer ;  (* round-robin group:index *)
+            | "rr" , "=" , integer , ":" , integer   (* round-robin group:index *)
+            | "sw" , "=" , key-range , ":" , key    (* keyswitch range : this zone's key *)
+            | "trigger" , "=" , ( "attack" | "release" )
+            | "rtdecay" , "=" , number         (* dB per second held, release zones *)
+            | "xfin" , "=" , key-range         (* dynamic crossfade in, 0..127 *)
+            | "xfout" , "=" , key-range        (* dynamic crossfade out *)
+            | "group" , "=" , integer          (* choke group this zone belongs to *)
+            | "offby" , "=" , integer ;        (* the group whose notes cut it *)
 key-range   = key , [ ".." , key ] ;
 key         = integer | note-name ;
 loop-mode   = "off" | "forward" | "pingpong" | "sustain" | "release" ;
@@ -441,6 +459,23 @@ to the project file - and the same file named by several zones, or by a zone and
 written, except `root`. Zones in a group `rr=g:i` with `g > 0` take turns: each note
 that matches the group plays the zone whose index is next, from a counter that is
 part of the render, so an offline render and a realtime one play the same zones.
+
+Phase 12's fields (phase_12.md §4.7.1), each inert at its default:
+
+- `sw=lo..hi:k` puts the zone in a keyswitch group. Keys `lo..hi` select an
+  articulation and make no sound; the zone plays while the last one pressed was `k`
+  (before any is pressed, the group's lowest key).
+- `trigger=release` plays the zone at the note-off, at the note's velocity, quieter by
+  `rtdecay` dB for every second the note was held: a piano's damper, a harpsichord's
+  jack.
+- `xfin` and `xfout` crossfade dynamic layers, equal power, instead of switching at a
+  velocity boundary. What drives them is the sampler's `xfade.source`: the note's
+  velocity, or its `dynamics` parameter, which moves while a note sustains (a swell).
+- `group` and `offby` are choke groups: a note of a zone in group `g` cuts, in 2 ms,
+  every sounding zone with `offby=g` (a closed hat and the open one).
+
+A path that begins `lib://<library>/` names a file in the sound-library store
+(§13.3) rather than one beside the project.
 
 `PARAM` replaces v1's positional tuples. `RESFILTER=0,1200,0.7,0.5,0.3` is
 unreadable in a diff — which field changed? — and is the reason v1's format could
@@ -697,6 +732,110 @@ keeps the binding. A path that does not resolve is `ADX3001`, and the line is ke
 ```ebnf
 marker-line = position , hspace , string ;
 ```
+
+### 7.7 `[MACRO <name>]`
+
+```
+[MACRO Tail Length]
+VALUE=0.5
+TARGET channel."Euphoric Kick/tail".env.decay range=0.15..0.6 curve=exponential(0.3)
+TARGET insert.7.slot.12.drive range=6..24
+```
+
+```ebnf
+target-line = "TARGET" , hspace , param-path , hspace , "range=" , number , ".." , number ,
+              [ hspace , "curve=" , curve ] ;
+```
+
+A macro is one 0..1 knob over several parameters (phase_12.md §4.2). `VALUE` is the knob
+(default `0.5`); each `TARGET` puts its parameter at `min + (max - min) * curve(VALUE)`.
+The name is unique among macros and may contain `/` (a rack names its macros
+`<rack>/<macro>`); the knob itself is the parameter `macro.<name>`, so it can be
+automated, driven by a controller, MIDI-learned or put on a pad.
+
+Macros are folded in when the engine builds its snapshot, so the audio thread never sees
+one. Where a target also has drawn automation the macro does not replace it: the lane is
+offset, in the parameter's normalised range, by how far the macro moves the target from
+the value the file gives it. A macro left at that value changes nothing. A target that
+does not resolve is `ADX3001` and is kept; a target that names another macro is the same.
+
+---
+
+### 7.8 Racks: `.adxrack`
+
+A rack is a project fragment saved to its own file (phase_12.md §4.1): layers, each a
+channel; a chain, the rack's own insert; sends, each a return; and macros. It uses the
+lines `.adx` already has - `PARAM` and `ZONE` as a channel writes them, `SLOT` as the
+mixer does, `TARGET` as `[MACRO]` does - read by the same lexer.
+
+```
+[RACK]
+NAME="Euphoric Kick"
+PACK=hardcore
+CATEGORY=Drums/Kick
+TAGS=kick, hardstyle
+TEMPO_HINT=150
+ROOT_HINT=F1
+FALLBACK="hardcore/Synth Kick"
+VERSION=1
+
+[LAYER punch]
+TYPE=drumsynth
+KEYS=0..127
+GAIN=-4
+PARAM decay=0.12
+SLOT ParametricEq band1.freq=60
+
+[LAYER tail]
+PRESET="hardcore/Euphoric Tail"
+PARAM env.decay=0.4
+
+[CHAIN]
+SLOT Clipper mode=1 drive=12
+SLOT OTT depth=0.35
+
+[SEND reverb]
+LEVEL=-18
+SLOT Hall size=0.6 decay=1.8
+SLOT Ducker amount=0.8 key=rack
+
+[MACRO Decay]
+VALUE=0.5
+TARGET layer.tail.env.decay range=0.15..0.6 curve=exponential(0.3)
+TARGET chain.1.drive range=6..24
+```
+
+| Section | Keys and lines |
+|---|---|
+| `[RACK]` | `NAME`, `PACK`, `CATEGORY` (app/adx/taxonomy.py), `TAGS`, `TEMPO_HINT`, `ROOT_HINT`, `FALLBACK`, `VERSION` |
+| `[LAYER <name>]` | `TYPE` or `PRESET=pack/name`; `KEYS`, `VELOCITY`, `GAIN` (dB), `PAN`, `PITCH` (cents), `POLYPHONY`; `PARAM` lines (over the preset's, when it has one); `ZONE` lines; `SLOT` lines for the layer's own chain |
+| `[CHAIN]` | `SLOT <Type> [key=value...]`: the rack's insert, after the layers sum |
+| `[SEND <name>]` | `LEVEL` (dB); `SLOT` lines for the return. `key=rack` keys a slot from the rack's insert: a ducked return |
+| `[MACRO <name>]` | as §7.7, with rack-relative targets |
+
+A rack slot has no id: its place in its list is its address. Macro targets inside a
+rack are rack-relative, and exist only in the `.adxrack` file:
+
+| Path | Names |
+|---|---|
+| `layer.<layer>.<param>` | the layer's instrument parameter, or `volume`, `pan`, `pitch` |
+| `layer.<layer>.chain.<n>.<param>` | slot `n` (from 1) of the layer's own chain |
+| `chain.<n>.<param>` | slot `n` of the rack's chain, `mix` included |
+| `send.<send>.level` | the send's level |
+| `send.<send>.<n>.<param>` | slot `n` of the send's return |
+
+Inserting a rack is one command and one undo step. Each layer becomes a channel named
+`<rack>/<layer>` (feeding its own insert when it has a chain, else the rack's); the chain
+becomes an insert named after the rack, routed to the master; each send a return
+`<rack>/<send>` and a send to it; each macro a `[MACRO <rack>/<macro>]` with its targets
+rewritten to ordinary paths. A second copy of the same rack takes the name `<rack> 2`.
+Afterwards nothing in the project is a rack: the `.adx` text has no indirection to read
+through. Saving a rack is the inverse, from the rack's insert.
+
+An unknown key is `ADX1001`, kept and written back. A layer, send or macro name may not
+contain `.`, `"`, `[` or `]`, since it is a path segment.
+
+---
 
 ---
 
@@ -1028,3 +1167,65 @@ listed takes the type's default. `[ZONES]` holds a sampler preset's `ZONE` lines
 The shipped packs live in `engine/preset/packs/<pack>/`. User presets are saved to a
 separate user directory, laid out the same way, and a user preset with the same pack
 and name as a shipped one takes its place in the library.
+
+Two keys were added in Phase 12 (phase_12.md §4.7.3, §4.11):
+
+| `[PRESET]` key | Meaning |
+|---|---|
+| `CATEGORY` | the browser's category, from the fixed list in `app/adx/taxonomy.py` (`Lead`, `Drums/Kick`, ...). It fixes what the preset's macros mean and the loudness its audition is held to |
+| `FALLBACK` | `pack/name` of a synthesized preset to play when a sound library this preset's zones need is not installed |
+
+### 13.1 SFZ import
+
+`tools/packs/import_sfz.py` (and `adx_engine.import_sfz`) turns an SFZ file into a
+sampler preset. The opcodes the sampler can play are mapped onto `ZONE` fields: key and
+velocity ranges, `pitch_keycenter`, `tune`, `transpose`, `volume`, `pan`, `offset`/`end`,
+loops, `seq_length`/`seq_position` (and `lorand`/`hirand`, as a round robin), `sw_*`
+keyswitches, `trigger=release` with `rt_decay`, `xfin_*`/`xfout_*`, `group`/`off_by`. The
+amplitude envelope (`ampeg_*`, `amp_veltrack`) is the instrument's, so the preset takes
+the value most regions use. `<control>`, `<global>`, `<master>`, `<group>` and `<region>`
+inherit as SFZ says; `#define` and `#include` - also between opcodes on one line - are
+expanded. Every opcode not applied is reported with its line and column as unknown,
+ignored (a label) or approximated (understood, but played differently); none is dropped
+silently.
+
+### 13.2 `lib://` paths and the library store
+
+Sound libraries are data, not dependencies (phase_12.md §4.8).
+`tools/packs/fetch_libraries.py fetch <id>` downloads one at a pinned commit into
+`%LOCALAPPDATA%\adX\libraries\<id>@<commit12>` (or `ADX_LIBRARY_STORE`) and checks every
+file against the SHA-256 manifest in `engine/preset/libraries/<id>.sha256`, restoring a
+file that differs. A zone path `lib://<id>/<path>` resolves inside that folder. When the
+library is not installed the zone has no sample: the preset still loads, and loading it
+through the library plays its `FALLBACK` with one diagnostic (`ADX3006`) naming the
+library. A project stores the `lib://` path, never the store's location, so it opens on
+any machine that has the library.
+
+| id | Library | Licence |
+|---|---|---|
+| `vsco2ce` | VSCO 2 Community Edition, SFZ branch | CC0-1.0 |
+| `vcsl` | Versilian Community Sample Library, SFZ branch | CC0-1.0 |
+| `salamander` | Salamander Grand Piano V3 | CC-BY-3.0 (credit Alexander Holm) |
+
+### 13.3 Packs: `pack.adxpack`
+
+Each folder under `engine/preset/packs/` may hold a `pack.adxpack`: what the pack is, what
+it needs, and the licence of everything in it that is not adX's own.
+
+```
+[PACK]
+ID=classical
+NAME="Classical"
+VERSION=1
+REQUIRES=adx>=0.1
+LIBRARIES=vsco2ce, vcsl
+LICENCE=CC0-1.0
+
+[ASSETS]
+ASSET "lib://vsco2ce/" licence=CC0-1.0 redistributable=yes credit="Versilian Studios"
+ASSET "lib://iowa-mis/" licence="free to use" redistributable=no
+```
+
+`LIBRARIES` are the library ids its presets' `lib://` paths name. Each `ASSET` line is a
+path prefix with its licence; `redistributable=no` keeps the files out of the installer,
+and `tools/packs/licence_report.py` fails when one is found there (`licence_gate`).

@@ -21,21 +21,19 @@
 #include "engine/project/commands/RackCommands.h"
 
 namespace py = pybind11;
-namespace project = adx::project;
-namespace core = adx::core;
 
 namespace adx::bindings {
 namespace {
 
-project::Rack loadRackOrThrow(const std::string& path, format::DiagnosticList& diagnostics) {
-    project::Rack rack;
+adx::project::Rack loadRackOrThrow(const std::string& path, format::DiagnosticList& diagnostics) {
+    adx::project::Rack rack;
     if (!preset::loadRack(path, rack, diagnostics)) {
         throw std::runtime_error("cannot read rack " + path);
     }
     return rack;
 }
 
-py::dict rackDict(const project::Rack& rack, const std::string& path) {
+py::dict rackDict(const adx::project::Rack& rack, const std::string& path) {
     py::dict out;
     out["name"] = rack.name;
     out["pack"] = rack.pack;
@@ -48,13 +46,13 @@ py::dict rackDict(const project::Rack& rack, const std::string& path) {
     out["kind"] = "rack";
     py::list layers;
     bool needsLibrary = false;
-    for (const project::RackLayer& layer : rack.layers) {
+    for (const adx::project::RackLayer& layer : rack.layers) {
         py::dict each;
         each["name"] = layer.name;
         each["type"] = layer.preset.empty() ? layer.type : "preset:" + layer.preset;
         each["zones"] = layer.zones.size();
         layers.append(each);
-        for (const project::RackZone& zone : layer.zones) {
+        for (const adx::project::RackZone& zone : layer.zones) {
             needsLibrary = needsLibrary || (format::isLibraryPath(zone.path) &&
                                             format::resolveLibraryPath(zone.path).empty());
         }
@@ -64,24 +62,24 @@ py::dict rackDict(const project::Rack& rack, const std::string& path) {
     out["chain"] = rack.chain.size();
     out["sends"] = rack.sends.size();
     py::list macros;
-    for (const project::RackMacro& macro : rack.macros) {
+    for (const adx::project::RackMacro& macro : rack.macros) {
         macros.append(macro.name);
     }
     out["macros"] = macros;
     return out;
 }
 
-py::list macroList(const project::Project& p) {
+py::list macroList(const adx::project::Project& p) {
     py::list out;
-    for (const project::Macro& macro : p.macros) {
+    for (const adx::project::Macro& macro : p.macros) {
         py::dict each;
         each["id"] = macro.id.value;
         each["name"] = macro.name;
         each["value"] = macro.value;
         py::list targets;
-        for (const project::MacroTarget& target : macro.targets) {
+        for (const adx::project::MacroTarget& target : macro.targets) {
             py::dict t;
-            const std::string path = project::ParamRegistry::pathOf(target.target, p);
+            const std::string path = adx::project::ParamRegistry::pathOf(target.target, p);
             t["path"] = path.empty() ? target.path : path;
             t["resolved"] = target.target.valid();
             t["min"] = target.minimum;
@@ -104,7 +102,7 @@ void defineRacks(py::class_<ProjectHandle>& handleClass) {
             [](ProjectHandle& handle, const std::string& path,
                const std::vector<std::string>& packs) {
                 format::DiagnosticList diagnostics;
-                project::Rack rack = loadRackOrThrow(path, diagnostics);
+                adx::project::Rack rack = loadRackOrThrow(path, diagnostics);
                 py::dict out;
                 std::vector<std::uint32_t> channels;
                 std::vector<std::string> unresolved;
@@ -120,12 +118,12 @@ void defineRacks(py::class_<ProjectHandle>& handleClass) {
                     }
                     preset::resolveRackPresets(rack, library, diagnostics);
                     preset::anchorRackPaths(rack, std::filesystem::path(path).parent_path());
-                    auto command = std::make_unique<project::InsertRack>(std::move(rack));
-                    const project::InsertRack* raw = command.get();
+                    auto command = std::make_unique<adx::project::InsertRack>(std::move(rack));
+                    const adx::project::InsertRack* raw = command.get();
                     handle.stack.execute(std::move(command), handle.project);
                     insert = raw->insert().value;
                     name = raw->instanceName();
-                    for (const core::ChannelId channel : raw->channels()) {
+                    for (const adx::core::ChannelId channel : raw->channels()) {
                         channels.push_back(channel.value);
                     }
                     unresolved = raw->unresolved();
@@ -147,7 +145,8 @@ void defineRacks(py::class_<ProjectHandle>& handleClass) {
             [](const ProjectHandle& handle, std::uint32_t insert, const std::string& path,
                const std::string& name, const std::string& pack, const std::string& category,
                const std::vector<std::string>& tags) {
-                project::Rack rack = project::rackFrom(handle.project, core::InsertId{insert});
+                adx::project::Rack rack =
+                    adx::project::rackFrom(handle.project, adx::core::InsertId{insert});
                 if (rack.name.empty() && rack.layers.empty()) {
                     throw std::invalid_argument("no insert " + std::to_string(insert));
                 }
@@ -173,13 +172,14 @@ void defineRacks(py::class_<ProjectHandle>& handleClass) {
         .def(
             "set_macro",
             [](ProjectHandle& handle, std::uint32_t macro, float value) {
-                if (handle.project.find(core::MacroId{macro}) == nullptr) {
+                if (handle.project.find(adx::core::MacroId{macro}) == nullptr) {
                     throw std::invalid_argument("no macro " + std::to_string(macro));
                 }
                 const py::gil_scoped_release released;
-                handle.stack.execute(std::make_unique<project::SetMacros>(project::macrosWithValue(
-                                         handle.project, core::MacroId{macro}, value)),
-                                     handle.project);
+                handle.stack.execute(
+                    std::make_unique<adx::project::SetMacros>(adx::project::macrosWithValue(
+                        handle.project, adx::core::MacroId{macro}, value)),
+                    handle.project);
             },
             py::arg("macro"), py::arg("value"),
             "Turn a macro's knob (0..1). Consecutive turns are one undo step.");
@@ -190,7 +190,7 @@ void registerRacks(py::module_& m) {
     m.def(
         "scan_racks",
         [](const std::vector<std::string>& directories) {
-            std::vector<std::pair<project::Rack, std::string>> racks;
+            std::vector<std::pair<adx::project::Rack, std::string>> racks;
             {
                 const py::gil_scoped_release released;
                 for (const std::string& directory : directories) {
@@ -204,7 +204,7 @@ void registerRacks(py::module_& m) {
                             continue;
                         }
                         format::DiagnosticList diagnostics;
-                        project::Rack rack;
+                        adx::project::Rack rack;
                         if (preset::loadRack(entry.path(), rack, diagnostics)) {
                             racks.emplace_back(std::move(rack), entry.path().generic_string());
                         }
@@ -224,7 +224,7 @@ void registerRacks(py::module_& m) {
         "read_rack",
         [](const std::string& path) {
             format::DiagnosticList diagnostics;
-            const project::Rack rack = loadRackOrThrow(path, diagnostics);
+            const adx::project::Rack rack = loadRackOrThrow(path, diagnostics);
             py::dict out = rackDict(rack, path);
             out["diagnostics"] = toPython(diagnostics);
             out["text"] = preset::writeRack(rack);

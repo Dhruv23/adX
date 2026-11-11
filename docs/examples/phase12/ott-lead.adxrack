@@ -1,0 +1,43 @@
+# G5: a supersaw lead, clipped, squashed by OTT, into a shimmer Hall.
+[RACK]
+NAME="OTT Lead"
+PACK=demo
+CATEGORY=Lead
+TAGS=lead, supersaw, ott, shimmer
+TEMPO_HINT=160
+ROOT_HINT=C5
+VERSION=1
+
+[LAYER saws]
+TYPE=va
+PARAM osc1.wave=1
+PARAM osc2.wave=1
+PARAM osc2.level=0.7
+PARAM osc2.fine=9
+PARAM unison.voices=8
+PARAM unison.detune=35
+PARAM filter.cutoff=9000
+PARAM env.release=0.25
+PARAM level=-10
+
+[CHAIN]
+SLOT Clipper mode=0 drive=9
+SLOT OTT depth=0.6
+SLOT Limiter ceiling=-1
+
+[SEND space]
+LEVEL=-9
+SLOT Hall size=0.8 decay=6 predelay=30 shimmer=0.4 shimmerInterval=0 modulation=0.4
+
+[MACRO Brightness]
+VALUE=0.7
+TARGET layer.saws.filter.cutoff range=1500..14000 curve=exponential(0.4)
+
+[MACRO Drive]
+VALUE=0.4
+TARGET chain.1.drive range=0..20
+TARGET chain.2.depth range=0.2..1
+
+[MACRO Space]
+VALUE=0.5
+TARGET send.space.level range=0..0.6

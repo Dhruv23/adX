@@ -144,7 +144,7 @@ TEST_CASE("sfz_becomes_a_sampler_preset", "[sfz]") {
     const auto release =
         std::ranges::find(preset.params, "env.release", &adx::project::ParamValue::name);
     REQUIRE(release != preset.params.end());
-    CHECK(release->value == static_cast<double>(0.4F));
+    CHECK(release->value == 0.4);
 
     // The text round-trips, zones and all.
     adx::format::DiagnosticList diagnostics;
@@ -196,9 +196,10 @@ TEST_CASE("lib_path_fallback", "[sfz][library]") {
           std::vector<std::string>{"adx-test-not-installed"});
 
     adx::format::DiagnosticList diagnostics;
-    const adx::preset::Preset& plays = library.playable(*sampled, diagnostics);
-    CHECK(plays.name == "Synth Strings");
-    CHECK(plays.type == "va");
+    const adx::preset::Preset* plays = library.playable(*sampled, diagnostics);
+    REQUIRE(plays != nullptr);
+    CHECK(plays->name == "Synth Strings");
+    CHECK(plays->type == "va");
     REQUIRE(diagnostics.all().size() == 1);
     CHECK(diagnostics.all().front().message.find("adx-test-not-installed") != std::string::npos);
 
@@ -206,7 +207,7 @@ TEST_CASE("lib_path_fallback", "[sfz][library]") {
     adx::format::DiagnosticList quiet;
     const adx::preset::Preset* synth = library.find("Synth Strings", "demo");
     REQUIRE(synth != nullptr);
-    CHECK(&library.playable(*synth, quiet) == synth);
+    CHECK(library.playable(*synth, quiet) == synth);
     CHECK(quiet.all().empty());
 
     // And the zone itself resolves to no file: silence with a reason, not a wrong file.

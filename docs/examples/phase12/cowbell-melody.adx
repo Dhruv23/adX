@@ -1,0 +1,36 @@
+[PROJECT]
+ADX_VERSION=2
+TITLE="Phase 12 demo: an 808 cowbell melody"
+
+[TEMPO]
+0:0:0 140
+
+[CHANNEL Cowbell]
+INSTRUMENT=drumsynth
+OUTPUT=insert.1
+PARAM model=6
+PARAM character=0
+PARAM keyTrack=1
+PARAM decay=0.35
+
+[PATTERN Riff]
+LENGTH=2:0:0
+NOTES Cowbell
+  C5 0:0:0 0:0:480 110
+  C5 0:0:720 0:0:240 90
+  D#5 0:1:0 0:0:480 110
+  F5 0:1:720 0:0:240 100
+  G5 0:2:0 0:0:480 120
+  F5 0:3:0 0:0:480 100
+  D#5 1:0:0 0:0:480 110
+  C5 1:1:0 0:0:480 100
+  A#4 1:2:0 0:0:480 110
+  C5 1:3:0 0:1:0 120
+
+[PLAYLIST]
+TRACK 1
+  PATTERN Riff 0:0:0
+  PATTERN Riff 2:0:0
+
+[MIXER]
+INSERT 1 name="Master"

@@ -1125,6 +1125,10 @@ V2Parser::ChannelBinding V2Parser::parseChannelHeader(Section& section, std::siz
     if (Line* line = keys.take(lines(), "VOICEBANK")) {
         channel.instrument.voicebank = decodeValue(line->value);
     }
+    // A gm channel's bank: the same field, under the name that says what it is.
+    if (Line* line = keys.take(lines(), "BANK")) {
+        channel.instrument.voicebank = decodeValue(line->value);
+    }
     if (Line* line = keys.take(lines(), "PLUGIN")) {
         channel.instrument.plugin.uid = decodeValue(line->value);
     }

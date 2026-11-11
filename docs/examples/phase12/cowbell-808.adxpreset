@@ -1,0 +1,14 @@
+# G6: the 808 cowbell: oscillators 5 and 6 of the metal bank, 540 and 800 Hz.
+[PRESET]
+NAME="808 Cowbell"
+TYPE=drumsynth
+PACK=demo
+CATEGORY=Drums/Perc
+TAGS=808, cowbell, phonk
+
+[PARAMS]
+model=6
+character=0
+keyTrack=1
+decay=0.35
+level=-6

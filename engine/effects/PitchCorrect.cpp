@@ -55,7 +55,7 @@ float snapToScale(float midi, int key, int scale) noexcept {
 }
 
 float yinPitch(std::span<const float> window, double rate, std::span<float> scratch) noexcept {
-    const std::size_t tauMin = static_cast<std::size_t>(rate / kHighestHz);
+    const auto tauMin = static_cast<std::size_t>(rate / kHighestHz);
     const std::size_t tauMax =
         std::min(static_cast<std::size_t>(rate / kLowestHz), window.size() / 2);
     if (tauMax <= tauMin + 2 || scratch.size() < tauMax + 1) {
@@ -171,7 +171,7 @@ void PitchCorrect::processWet(std::span<const float> inLeft, std::span<const flo
             analyse(context, i);
         }
         m_logRatio = m_targetLogRatio + (glide * (m_logRatio - m_targetLogRatio));
-        const double ratio = static_cast<double>(dsp::exp2F(m_logRatio));
+        const auto ratio = static_cast<double>(dsp::exp2F(m_logRatio));
         m_phase += (1.0 - ratio) / m_grain;
         m_phase -= dsp::floorExact(m_phase);
         for (std::size_t c = 0; c < 2; ++c) {

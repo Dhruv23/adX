@@ -1,0 +1,16 @@
+# G4: the modal model on the marimba table: 1 : 3.9 : 9.2, upper modes dying first.
+[PRESET]
+NAME="Marimba"
+TYPE=physical
+PACK=demo
+CATEGORY=Keys/Mallet
+TAGS=mallet, marimba, physical
+
+[PARAMS]
+model=2
+modes.table=2
+modes.decay=1.4
+modes.decayTilt=1.5
+exciter.hardness=0.4
+env.release=0.8
+level=-6

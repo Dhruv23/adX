@@ -17,6 +17,7 @@ adx_add_cpp_test(adx_tests
         effects/test_tranche_c.cpp
         effects/test_tranche_d.cpp
         effects/test_tranche_e.cpp
+        physical/test_physical.cpp
         instruments/InstrumentHarness.cpp
         instruments/test_instrument_base.cpp
         instruments/test_instrument_cost.cpp
@@ -30,6 +31,7 @@ adx_add_cpp_test(adx_tests
         rack/test_rack.cpp
         modmatrix/test_modmatrix.cpp
         sfz/test_sfz.cpp
+        soundfont/test_soundfont.cpp
         rt/test_alloc_guard.cpp
         rt/test_spsc_ring.cpp
         rt/test_overwrite_ring.cpp

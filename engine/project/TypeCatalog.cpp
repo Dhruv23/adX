@@ -25,8 +25,10 @@
 #include "engine/instruments/drumsynth/DrumSynthParams.h"
 #include "engine/instruments/dx7/Dx7ParamTable.h"
 #include "engine/instruments/fm/FmParams.h"
+#include "engine/instruments/gm/GmInstrument.h"
 #include "engine/instruments/granular/GranularParams.h"
 #include "engine/instruments/midiout/MidiOutInstrument.h"
+#include "engine/instruments/physical/PhysicalParams.h"
 #include "engine/instruments/sampler/SamplerParams.h"
 #include "engine/instruments/va/VaParams.h"
 #include "engine/instruments/voice/VoiceParams.h"
@@ -57,6 +59,10 @@ constexpr auto kInstruments = std::to_array<TypeInfo>({
      "the FM-1's engine: a port of msfa, every DX7 voice parameter editable (FM-1 rate)"},
     {"midiout", TypeKind::Instrument, instruments::kMidiOutParams,
      "an external instrument: the channel's notes to a MIDI output (an FM-1 part)"},
+    {"gm", TypeKind::Instrument, instruments::kGmParams,
+     "General MIDI player over an SF2 or DLS bank; the Windows GM bank by default"},
+    {"physical", TypeKind::Instrument, instruments::kPhysicalParams,
+     "physical models: plucked and bowed strings, struck bars and bells, blown tubes"},
     {"wavetable", TypeKind::Instrument, instruments::kWavetableParams,
      "mipmapped 2D tables, linear or spectral morph, .wav import, unison"},
     {"voice", TypeKind::Instrument, instruments::kVoiceParams,

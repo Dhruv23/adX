@@ -5,4 +5,10 @@ add_subdirectory(mininotation)
 add_subdirectory(audio)
 add_subdirectory(text)
 add_subdirectory(midi)
-target_sources(adx_engine_static PRIVATE sfz/SfzParser.cpp)
+target_sources(adx_engine_static PRIVATE
+    sfz/SfzParser.cpp
+    soundfont/DlsParser.cpp
+    soundfont/Generators.cpp
+    soundfont/Riff.cpp
+    soundfont/Sf2Parser.cpp
+)

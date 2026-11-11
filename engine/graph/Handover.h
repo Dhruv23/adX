@@ -41,7 +41,7 @@ inline constexpr std::uint32_t kInstrumentReleaseCapMs = 4000;
 /// than this simply does not hand over (and is cut, as before Phase 7).
 class RememberedParams {
 public:
-    static constexpr std::size_t kCapacity = 256;
+    static constexpr std::size_t kCapacity = 512;
 
     void capture(const ProcessContext& context) noexcept {
         if (context.params.size() > kCapacity) {

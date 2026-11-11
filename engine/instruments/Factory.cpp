@@ -8,8 +8,10 @@
 #include "engine/instruments/drumsynth/DrumSynth.h"
 #include "engine/instruments/dx7/Dx7Instrument.h"
 #include "engine/instruments/fm/FmInstrument.h"
+#include "engine/instruments/gm/GmInstrument.h"
 #include "engine/instruments/granular/GranularInstrument.h"
 #include "engine/instruments/midiout/MidiOutInstrument.h"
+#include "engine/instruments/physical/PhysicalInstrument.h"
 #include "engine/instruments/pool/SamplePoolChannel.h"
 #include "engine/instruments/sampler/SamplerInstrument.h"
 #include "engine/instruments/sampler/SamplerSetup.h"
@@ -19,6 +21,7 @@
 #include "engine/instruments/wavetable/WavetableSetup.h"
 #include "engine/plugin/PluginInstrument.h"
 #include "engine/project/PluginRef.h"
+#include "engine/project/Resources.h"
 #include "engine/project/TypeCatalog.h"
 
 namespace adx::instruments {
@@ -49,6 +52,12 @@ std::shared_ptr<graph::ChannelNode> makeInstrument(std::string_view type, std::u
     }
     if (type == "granular") {
         return std::make_shared<GranularInstrument>(channelId, maxPolyphony, stealMode);
+    }
+    if (type == "gm") {
+        return std::make_shared<GmInstrument>(channelId, maxPolyphony, stealMode);
+    }
+    if (type == "physical") {
+        return std::make_shared<PhysicalInstrument>(channelId, maxPolyphony, stealMode);
     }
     if (type == "fm") {
         return std::make_shared<FmInstrument>(channelId, maxPolyphony, stealMode);
@@ -85,6 +94,11 @@ std::shared_ptr<graph::ChannelNode> makeInstrument(const project::Channel& chann
     if (auto* voice = dynamic_cast<VoiceInstrument*>(node.get())) {
         configureVoice(*voice, channel, context.project, context.resources);
     }
+    if (auto* gm = dynamic_cast<GmInstrument*>(node.get())) {
+        configureGm(*gm, channel,
+                    context.resources != nullptr ? context.resources->baseDirectory
+                                                 : std::string{});
+    }
     return node;
 }
 
@@ -107,6 +121,11 @@ bool configMatches(const graph::ChannelNode& node, const project::Channel& chann
     }
     if (const auto* voice = dynamic_cast<const VoiceInstrument*>(&node)) {
         return voiceMatches(*voice, channel, context.project, context.resources);
+    }
+    if (const auto* gm = dynamic_cast<const GmInstrument*>(&node)) {
+        return gmMatches(*gm, channel,
+                         context.resources != nullptr ? context.resources->baseDirectory
+                                                      : std::string{});
     }
     return true;
 }

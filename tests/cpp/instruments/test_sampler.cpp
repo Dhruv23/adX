@@ -320,8 +320,8 @@ TEST_CASE("sampler_keyswitch", "[instruments][sampler]") {
     sustain.switchKey = 24;
     SampleZone staccato = sustain;
     staccato.switchKey = 25;
-    Rig rig({writeMono("ks_sus.wav", level(0.25F)), writeMono("ks_stac.wav", level(0.5F))},
-            {sustain, staccato});
+    const Rig rig({writeMono("ks_sus.wav", level(0.25F)), writeMono("ks_stac.wav", level(0.5F))},
+                  {sustain, staccato});
     const InstrumentRun run = adx::tests::runInstrument(
         *rig.node,
         {noteOn(0, 1, 60), noteOff(1000, 1, 60),    // before any switch: the lowest key's
@@ -336,7 +336,7 @@ TEST_CASE("sampler_keyswitch", "[instruments][sampler]") {
     CHECK(run.violations == 0);
 
     // With the first note over before the switch, the switch key is exactly silent.
-    Rig quiet(
+    const Rig quiet(
         {writeMono("ks_sus2.wav", level(0.25F, 500)), writeMono("ks_stac2.wav", level(0.5F, 500))},
         {sustain, staccato});
     const InstrumentRun second =
@@ -354,13 +354,13 @@ TEST_CASE("sampler_keyswitch", "[instruments][sampler]") {
 TEST_CASE("sampler_release_trigger", "[instruments][sampler]") {
     // A release zone fires at the note-off, and is 6 dB quieter for each second the
     // note was held.
-    SampleZone attack;
+    const SampleZone attack;
     SampleZone release;
     release.trigger = adx::project::ZoneTrigger::Release;
     release.rtDecay = 6.0F;
-    Rig rig({writeMono("rt_attack.wav", level(0.25F, 96000)),
-             writeMono("rt_release.wav", level(0.5F, 2400))},
-            {attack, release});
+    const Rig rig({writeMono("rt_attack.wav", level(0.25F, 96000)),
+                   writeMono("rt_release.wav", level(0.5F, 2400))},
+                  {attack, release});
     std::vector<float> params = Rig::flatParams();
     params[adx::tests::instrumentParamIndex("sampler", "env.release")] = 0.0F;
     const InstrumentRun run = adx::tests::runInstrument(
@@ -388,7 +388,7 @@ TEST_CASE("sampler_dynamic_crossfade", "[instruments][sampler]") {
     const std::vector<fs::path> files{writeMono("xf_soft.wav", level(0.25F, 96000)),
                                       writeMono("xf_loud.wav", level(0.5F, 96000))};
     const auto play = [&](std::uint8_t velocity) {
-        Rig rig(files, {soft, loud});
+        const Rig rig(files, {soft, loud});
         return at(adx::tests::runInstrument(*rig.node, {noteOn(0, 1, 60, velocity)}, 2000,
                                             Rig::flatParams()),
                   1000);
@@ -399,14 +399,14 @@ TEST_CASE("sampler_dynamic_crossfade", "[instruments][sampler]") {
     CHECK(std::abs(play(65) - (0.75F * std::sqrt(0.5F))) < 1e-4F);
 
     // By dynamics: a lane sweeps the parameter and the blend follows mid-note.
-    Rig rig(files, {soft, loud});
+    const Rig rig(files, {soft, loud});
     std::vector<float> params = Rig::flatParams();
     params[adx::tests::instrumentParamIndex("sampler", "xfade.source")] = 1.0F;
     params[adx::tests::instrumentParamIndex("sampler", "dynamics")] = 0.0F;
     const InstrumentRun low =
         adx::tests::runInstrument(*rig.node, {noteOn(0, 1, 60, 127)}, 2000, params);
     CHECK(at(low, 1000) == 0.25F);
-    Rig other(files, {soft, loud});
+    const Rig other(files, {soft, loud});
     params[adx::tests::instrumentParamIndex("sampler", "dynamics")] = 1.0F;
     const InstrumentRun high =
         adx::tests::runInstrument(*other.node, {noteOn(0, 1, 60, 1)}, 2000, params);
@@ -423,9 +423,9 @@ TEST_CASE("sampler_choke_group", "[instruments][sampler]") {
     closed.keyLow = closed.keyHigh = 42;
     closed.rootKey = 42;
     closed.group = 1;
-    Rig rig({writeMono("hat_open.wav", level(0.25F, 48000)),
-             writeMono("hat_closed.wav", level(0.5F, 4800))},
-            {open, closed});
+    const Rig rig({writeMono("hat_open.wav", level(0.25F, 48000)),
+                   writeMono("hat_closed.wav", level(0.5F, 4800))},
+                  {open, closed});
     const InstrumentRun run = adx::tests::runInstrument(
         *rig.node, {noteOn(0, 1, 46), noteOn(9600, 2, 42)}, 20000, Rig::flatParams(true));
     CHECK(at(run, 9000) == 0.25F);

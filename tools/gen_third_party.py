@@ -104,6 +104,11 @@ def render() -> str:
         f"| {name} | {version} | {spdx} | {use} |" for name, version, spdx, use in PYTHON_SIDE
     ]
     lines.append("")
+    # The sound libraries and the packs' assets (phase_12.md 4.8).
+    sys.path.insert(0, str(ROOT / "tools" / "packs"))
+    import licence_report
+
+    lines.append(licence_report.section())
     return "\n".join(lines)
 
 

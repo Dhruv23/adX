@@ -246,9 +246,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "list":
         for lib in LIBRARIES.values():
             have = "fetched" if (root / lib.folder).is_dir() else "absent"
-            print(
-                f"{lib.id:<12} {lib.gigabytes:>4.1f} GB  {lib.licence:<10} {have:<8} {lib.title}"
-            )
+            print(f"{lib.id:<12} {lib.gigabytes:>4.1f} GB  {lib.licence:<10} {have:<8} {lib.title}")
         return 0
 
     names = args.libraries or list(LIBRARIES)

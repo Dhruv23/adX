@@ -42,7 +42,7 @@ double rmsDb(const std::vector<float>& x, std::size_t from, std::size_t to) {
     for (std::size_t i = from; i < to; ++i) {
         sum += static_cast<double>(x[i]) * static_cast<double>(x[i]);
     }
-    return 10.0 * std::log10(sum / static_cast<double>(to - from) + 1e-30);
+    return 10.0 * std::log10((sum / static_cast<double>(to - from)) + 1e-30);
 }
 
 /// Mean frequency over [from, to) from rising zero crossings.
@@ -67,7 +67,9 @@ double rt60(const std::vector<float>& x) {
         sum += static_cast<double>(x[i]) * static_cast<double>(x[i]);
         energy[i] = sum;
     }
-    const auto db = [&](std::size_t i) { return 10.0 * std::log10(energy[i] / energy[0] + 1e-30); };
+    const auto db = [&](std::size_t i) {
+        return 10.0 * std::log10((energy[i] / energy[0]) + 1e-30);
+    };
     std::size_t start = 0;
     while (start < x.size() && db(start) > -5.0) {
         ++start;

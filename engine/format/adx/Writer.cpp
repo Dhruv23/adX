@@ -207,7 +207,8 @@ void writeChannel(Emitter& emitter, const Project& project, const project::Chann
         }
     }
     if (!channel.instrument.voicebank.empty()) {
-        emitter.line(keyValue("VOICEBANK", quoteAlways(channel.instrument.voicebank)));
+        emitter.line(keyValue(channel.instrument.type == "gm" ? "BANK" : "VOICEBANK",
+                              quoteAlways(channel.instrument.voicebank)));
     }
     emitter.line(keyValue("OUTPUT", "insert." + std::to_string(channel.output.value)));
     if (!channel.frozen.empty()) {

@@ -38,3 +38,13 @@ files needed to relink adX against a modified shine are provided.
 | PySide6 (Qt for Python) | 6.11.2 | LGPL-3.0-only | the user interface; shipped as separate DLLs |
 | NumPy | >=1.26 | BSD-3-Clause | arrays across the engine boundary |
 | PyYAML | >=6.0 | MIT | reads OpenUtau .ustx projects |
+
+## Sound libraries
+
+Fetched by `tools/packs/fetch_libraries.py` into the user's library store at a pinned commit, never bundled in the installer; presets name their files as `lib://` paths.
+
+| Library | Commit | Licence | Credit |
+|---|---|---|---|
+| VSCO 2 Community Edition (SFZ) | 6dd651d55dde | CC0-1.0 | Versilian Studios |
+| Versilian Community Sample Library (SFZ) | dfcf4a491877 | CC0-1.0 | Versilian Studios |
+| Salamander Grand Piano V3 | 3382bf9496bb | CC-BY-3.0 | Alexander Holm |

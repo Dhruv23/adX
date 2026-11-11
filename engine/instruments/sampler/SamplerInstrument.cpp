@@ -62,17 +62,17 @@ using project::LoopMode;
 /// One layer's constants for a renderVoice call, and its pitch cache.
 struct LayerCall {
     format::SampleView view;
-    double frames;
-    double endFade;
-    double loopStart;
-    double loopEnd;
-    double loopLength;
-    double rateRatio;
-    double increment;
-    float rootOffset;
-    float cents;
-    bool ready;
-    bool looping;
+    double frames{0.0};
+    double endFade{0.0};
+    double loopStart{0.0};
+    double loopEnd{0.0};
+    double loopLength{0.0};
+    double rateRatio{1.0};
+    double increment{1.0};
+    float rootOffset{0.0F};
+    float cents{0.0F};
+    bool ready{false};
+    bool looping{false};
 };
 
 } // namespace
@@ -213,7 +213,7 @@ void SamplerInstrument::addReleaseLayer(SamplerVoice& state,
 }
 
 void SamplerInstrument::chokeGroup(const graph::Voice& starting, std::uint16_t group) noexcept {
-    for (graph::Voice& other : pool().voices()) {
+    for (const graph::Voice& other : pool().voices()) {
         if (&other == &starting || other.phase == graph::VoicePhase::Free) {
             continue;
         }

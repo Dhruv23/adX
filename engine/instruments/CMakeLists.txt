@@ -13,9 +13,11 @@ target_sources(adx_engine_static PRIVATE
     dx7/msfa/Tables.cpp
     fm/FmInstrument.cpp
     fm/FmParams.cpp
+    gm/GmInstrument.cpp
     granular/GranularInstrument.cpp
     midiout/MidiOutInstrument.cpp
     mod/ModLayer.cpp
+    physical/PhysicalInstrument.cpp
     pool/SamplePoolChannel.cpp
     sampler/SamplerInstrument.cpp
     sampler/SamplerSetup.cpp

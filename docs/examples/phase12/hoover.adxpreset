@@ -1,0 +1,33 @@
+# G3: the hoover. Detuned unison saws and a sub, a two-octave pitch dive into each note,
+# vibrato that waits half a second and fades in, and legato glides between notes.
+[PRESET]
+NAME="Hoover"
+TYPE=va
+PACK=demo
+CATEGORY=Lead
+TAGS=hoover, rave, legato
+
+[PARAMS]
+osc1.wave=1
+osc2.wave=4
+osc2.level=0.8
+osc2.octave=-1
+osc2.pulseWidth=0.3
+sub.level=0.5
+unison.voices=7
+unison.detune=40
+unison.spread=1
+filter.cutoff=6000
+filter.resonance=0.2
+env.attack=0.01
+env.release=0.3
+pitchEnv.amount=-12
+pitchEnv.time=0.12
+lfo1.target=1
+lfo1.rate=6
+lfo1.depth=0.025
+lfo1.delay=0.5
+lfo1.fade=0.4
+voice.mode=2
+glide=0.12
+level=-8

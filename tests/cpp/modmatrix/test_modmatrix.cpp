@@ -382,7 +382,7 @@ TEST_CASE("modmatrix_each_source_dest", "[modmatrix]") {
             set(params, type.name, "mod.3.amount", 0.6F);
             return runInstrument(*preparedInstrument(type.name), events, 12000, params);
         };
-        for (int source = 1; source < static_cast<int>(adx::dsp::kModSourceCount); ++source) {
+        for (std::uint8_t source = 1; source < adx::dsp::kModSourceCount; ++source) {
             for (const ModDest dest : type.reads) {
                 INFO(type.name << " source " << source << " dest " << static_cast<int>(dest));
                 const auto run = with(source, dest);

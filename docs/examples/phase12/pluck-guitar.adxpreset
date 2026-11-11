@@ -1,0 +1,19 @@
+# G4: a plucked steel string through a guitar body.
+[PRESET]
+NAME="Pluck Guitar"
+TYPE=physical
+PACK=demo
+CATEGORY=Guitar
+TAGS=guitar, pluck, physical
+
+[PARAMS]
+model=0
+string.decay=4
+string.damping=0.3
+string.brightness=0.65
+string.dispersion=0.1
+exciter.position=0.15
+body.type=1
+body.mix=0.6
+env.release=0.4
+level=-4

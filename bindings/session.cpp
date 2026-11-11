@@ -85,6 +85,8 @@ py::dict presetDict(const adx::preset::Preset& preset) {
     out["name"] = preset.name;
     out["type"] = preset.type;
     out["pack"] = preset.pack;
+    out["category"] = preset.category;
+    out["fallback"] = preset.fallback;
     out["tags"] = preset.tags;
     out["path"] = preset.source.generic_string();
     out["kind"] = preset.kind() == project::TypeKind::Effect ? "effect" : "instrument";

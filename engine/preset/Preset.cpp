@@ -127,6 +127,8 @@ Preset parsePreset(std::string_view text, format::DiagnosticList& diagnostics) {
                 out.pack = value;
             } else if (line.key == "FALLBACK") {
                 out.fallback = value;
+            } else if (line.key == "CATEGORY") {
+                out.category = value;
             } else if (line.key == "MIX") {
                 double mix = 0.0;
                 if (format::parseDouble(value, line.valueSpan, diagnostics, mix)) {
@@ -165,6 +167,9 @@ std::string writePreset(const Preset& preset) {
     out << "TYPE=" << preset.type << '\n';
     if (!preset.pack.empty()) {
         out << "PACK=" << preset.pack << '\n';
+    }
+    if (!preset.category.empty()) {
+        out << "CATEGORY=" << preset.category << '\n';
     }
     if (preset.mix.has_value()) {
         out << "MIX=" << format::formatDouble(*preset.mix) << '\n';

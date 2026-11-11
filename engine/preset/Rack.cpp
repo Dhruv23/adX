@@ -21,7 +21,6 @@ using format::code::kValueOutOfRange;
 using format::code::kWrongFieldCount;
 using project::Rack;
 using project::RackLayer;
-using project::RackMacro;
 using project::RackSend;
 using project::RackSlot;
 

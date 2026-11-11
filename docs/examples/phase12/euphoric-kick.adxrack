@@ -1,0 +1,60 @@
+# G1 + G2: a layered hardstyle kick. punch is the body, tail the tuned pitch-dive tone,
+# click the transient; the chain is EQ -> clip -> OTT -> limit; the Hall return is ducked
+# by the kick itself (key=rack).
+[RACK]
+NAME="Euphoric Kick"
+PACK=demo
+CATEGORY=Drums/Kick
+TAGS=kick, hardstyle, layered
+TEMPO_HINT=150
+ROOT_HINT=F1
+VERSION=1
+
+[LAYER punch]
+TYPE=drumsynth
+GAIN=-4
+PARAM model=0
+PARAM decay=0.12
+PARAM pitchDrop=30
+PARAM pitchTime=0.018
+PARAM click=0.4
+SLOT ParametricEq band1.type=4 band1.freq=60
+
+[LAYER tail]
+TYPE=va
+GAIN=-2
+PARAM osc1.wave=0
+PARAM env.attack=0
+PARAM env.decay=0.35
+PARAM env.sustain=0
+PARAM env.release=0.05
+PARAM pitchEnv.amount=24
+PARAM pitchEnv.time=0.06
+PARAM level=0
+
+[LAYER click]
+TYPE=drumsynth
+GAIN=-10
+PARAM model=2
+PARAM decay=0.02
+
+[CHAIN]
+SLOT ParametricEq band1.type=4 band1.freq=30 band2.type=1 band2.freq=700 band2.gain=6
+SLOT Clipper mode=1 drive=12
+SLOT OTT depth=0.35
+SLOT Limiter ceiling=-0.3
+
+[SEND reverb]
+LEVEL=-18
+SLOT Hall size=0.6 decay=1.8 predelay=10
+SLOT Ducker amount=0.8 releaseMs=120 key=rack
+
+[MACRO Decay]
+VALUE=0.5
+TARGET layer.tail.env.decay range=0.15..0.6 curve=exponential(0.3)
+TARGET layer.tail.pitchEnv.time range=0.03..0.09
+
+[MACRO Drive]
+VALUE=0.4
+TARGET chain.2.drive range=6..24
+TARGET chain.3.depth range=0.1..0.6

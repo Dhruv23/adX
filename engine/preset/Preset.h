@@ -51,6 +51,8 @@ struct Preset {
     /// spells it.
     std::string type;
     std::string pack;
+    /// The browser's category (app/adx/taxonomy.py): `Lead`, `Drums/Kick`.
+    std::string category;
     std::vector<std::string> tags;
     /// An effect preset's wet/dry: the slot's `mix`, which is a field of the slot and
     /// not one of the effect's parameters. Unset for instruments.
@@ -71,7 +73,7 @@ struct Preset {
     [[nodiscard]] friend bool operator==(const Preset& a, const Preset& b) noexcept {
         return a.name == b.name && a.type == b.type && a.pack == b.pack && a.tags == b.tags &&
                a.mix == b.mix && a.params == b.params && a.zones == b.zones &&
-               a.fallback == b.fallback;
+               a.fallback == b.fallback && a.category == b.category;
     }
 };
 
