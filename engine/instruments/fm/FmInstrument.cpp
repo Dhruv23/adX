@@ -192,8 +192,8 @@ bool FmInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
         }
         const bool carrier = ((algo.carriers >> k) & 1U) != 0;
         // A slot may raise a silent operator's level, so with any routed all six run.
-        runs[k] = carrier || k == algo.feedbackFrom || state.level[k] != 0.0F ||
-                  state.mod.slotCount > 0;
+        runs[k] =
+            carrier || k == algo.feedbackFrom || state.level[k] != 0.0F || state.mod.slotCount > 0;
     }
 
     bool alive = true;
@@ -235,22 +235,22 @@ bool FmInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
             }
             modulation *= kFmModIndex;
             if (k == algo.feedbackTo) {
-                const float loop =
-                    modulated ? std::clamp(feedback + (kFmFeedbackIndex *
-                                                       mod.of(dsp::ModDest::FmFeedback)),
-                                           0.0F, kFmFeedbackIndex)
-                              : feedback;
+                const float loop = modulated
+                                       ? std::clamp(feedback + (kFmFeedbackIndex *
+                                                                mod.of(dsp::ModDest::FmFeedback)),
+                                                    0.0F, kFmFeedbackIndex)
+                                       : feedback;
                 modulation += loop * 0.5F * (state.feedback1 + state.feedback2);
             }
             const float env = state.env[k].next(state.shape[k]);
             float phase = state.phase[k] + modulation;
             phase -= dsp::floorExact(phase);
             const float opLevel =
-                modulated ? std::clamp(state.level[k] +
-                                           mod.value[static_cast<std::size_t>(
-                                                         dsp::ModDest::FmOp1) + k],
-                                       0.0F, 1.0F)
-                          : state.level[k];
+                modulated
+                    ? std::clamp(state.level[k] +
+                                     mod.value[static_cast<std::size_t>(dsp::ModDest::FmOp1) + k],
+                                 0.0F, 1.0F)
+                    : state.level[k];
             state.output[k] = dsp::sinUnitF(phase) * env * opLevel;
             state.phase[k] += step[k];
             state.phase[k] -= dsp::floorExact(state.phase[k]);

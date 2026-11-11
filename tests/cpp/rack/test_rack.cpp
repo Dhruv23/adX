@@ -262,11 +262,11 @@ TEST_CASE("save_rack_inverse", "[rack]") {
 }
 
 TEST_CASE("macro_format_roundtrip", "[rack][macro]") {
-    const std::string text = toneText(
-        "PARAM filter.cutoff=2000\n",
-        "\n[MACRO Bright]\nVALUE=0.25\n"
-        "TARGET channel.Lead.filter.cutoff range=200..8000 curve=exponential(0.2)\n"
-        "TARGET channel.Lead.volume range=0.5..1\n");
+    const std::string text =
+        toneText("PARAM filter.cutoff=2000\n",
+                 "\n[MACRO Bright]\nVALUE=0.25\n"
+                 "TARGET channel.Lead.filter.cutoff range=200..8000 curve=exponential(0.2)\n"
+                 "TARGET channel.Lead.volume range=0.5..1\n");
     const auto loaded = adx::tests::loadText(text);
     REQUIRE(loaded->project.macros.size() == 1);
     const Macro& macro = loaded->project.macros.front();

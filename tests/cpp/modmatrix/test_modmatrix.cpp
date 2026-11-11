@@ -24,8 +24,7 @@ namespace {
 
 constexpr double kRate = 48000.0;
 
-void set(std::vector<float>& params, std::string_view type, const std::string& name,
-         float value) {
+void set(std::vector<float>& params, std::string_view type, const std::string& name, float value) {
     const std::uint32_t index = instrumentParamIndex(type, name);
     REQUIRE(index != adx::project::kNoParam);
     params[index] = value;
@@ -85,11 +84,13 @@ TEST_CASE("va_lfo_target_equals_matrix_slot", "[modmatrix][va]") {
         adx::dsp::ModDest dest;
         float scale;
     };
+    // NOLINTBEGIN(modernize-use-designated-initializers) - a table reads as a table.
     const std::vector<Case> cases{{1, adx::dsp::ModDest::Pitch, 0.25F},
                                   {2, adx::dsp::ModDest::Cutoff, 0.5F},
                                   {3, adx::dsp::ModDest::Level, 1.0F},
                                   {4, adx::dsp::ModDest::Pan, 1.0F},
                                   {5, adx::dsp::ModDest::PulseWidth, 1.0F}};
+    // NOLINTEND(modernize-use-designated-initializers)
     for (const Case& c : cases) {
         INFO("target " << c.target);
         std::vector<float> base = instrumentParams("va");
@@ -131,8 +132,8 @@ TEST_CASE("pitch_env_exact", "[modmatrix][va]") {
         set(params, "va", "pitchEnv.amount", static_cast<float>(kAmount));
         set(params, "va", "pitchEnv.time", static_cast<float>(kTime));
         set(params, "va", "pitchEnv.curve", curve);
-        const auto run = runInstrument(*preparedInstrument("va"), {noteOn(0, 1, kNote)}, 24000,
-                                       params);
+        const auto run =
+            runInstrument(*preparedInstrument("va"), {noteOn(0, 1, kNote)}, 24000, params);
 
         std::vector<double> expected;
         const double frames = kTime * kRate;
@@ -165,8 +166,9 @@ TEST_CASE("pitch_env_exact", "[modmatrix][va]") {
             std::llround((measured[count - 1] - expected[count - 1]) * hzOf(kNote) / kRate);
         std::vector<double> lag;
         for (std::size_t k = count - 40; k < count; ++k) {
-            lag.push_back(measured[k] -
-                          expected[static_cast<std::size_t>(static_cast<std::ptrdiff_t>(k) + shift)]);
+            lag.push_back(
+                measured[k] -
+                expected[static_cast<std::size_t>(static_cast<std::ptrdiff_t>(k) + shift)]);
         }
         std::ranges::sort(lag);
         const double delay = lag[lag.size() / 2];
@@ -178,8 +180,8 @@ TEST_CASE("pitch_env_exact", "[modmatrix][va]") {
                 measured[k] < 0.005 * kRate) {
                 continue;
             }
-            worst = std::max(
-                worst, std::abs(measured[k] - expected[static_cast<std::size_t>(e)] - delay));
+            worst = std::max(worst,
+                             std::abs(measured[k] - expected[static_cast<std::size_t>(e)] - delay));
             ++compared;
         }
         CHECK(compared > 100);
@@ -198,10 +200,10 @@ TEST_CASE("legato_no_retrigger", "[modmatrix][va]") {
         set(params, "va", "env.release", 0.01F);
         set(params, "va", "glide", 0.1F);
         set(params, "va", "voice.mode", mode);
-        return runInstrument(*preparedInstrument("va"),
-                             {noteOn(0, 1, 57), noteOn(24000, 2, 69), noteOff(36000, 1, 57),
-                              noteOff(40000, 2, 69)},
-                             48000, params);
+        return runInstrument(
+            *preparedInstrument("va"),
+            {noteOn(0, 1, 57), noteOn(24000, 2, 69), noteOff(36000, 1, 57), noteOff(40000, 2, 69)},
+            48000, params);
     };
     const auto poly = play(0.0F);
     const auto mono = play(1.0F);
@@ -241,8 +243,8 @@ TEST_CASE("glide_mode_always", "[modmatrix][va]") {
         set(params, "va", "glide", 0.2F);
         set(params, "va", "glide.mode", mode);
         return runInstrument(*preparedInstrument("va"),
-                             {noteOn(0, 1, 57), noteOff(8000, 1, 57), noteOn(12000, 2, 69)},
-                             24000, params);
+                             {noteOn(0, 1, 57), noteOff(8000, 1, 57), noteOn(12000, 2, 69)}, 24000,
+                             params);
     };
     CHECK(std::abs(1200.0 * std::log2(frequencyIn(play(0.0F).left, 12100, 14000) / hzOf(69.0))) <
           2.0);
@@ -258,12 +260,12 @@ TEST_CASE("lfo_delay_and_fade", "[modmatrix][va]") {
     set(params, "va", "lfo1.delay", 0.25F);
     set(params, "va", "lfo1.fade", 0.25F);
     const auto late = runInstrument(*preparedInstrument("va"), {noteOn(0, 1, 69)}, 48000, params);
-    std::vector<float> none = sineVa();
+    const std::vector<float> none = sineVa();
     const auto plain = runInstrument(*preparedInstrument("va"), {noteOn(0, 1, 69)}, 48000, none);
     // Identical until the delay is over, different after.
     CHECK(std::equal(late.left.begin(), late.left.begin() + 11900, plain.left.begin()));
-    CHECK_FALSE(
-        std::equal(late.left.begin() + 30000, late.left.begin() + 40000, plain.left.begin() + 30000));
+    CHECK_FALSE(std::equal(late.left.begin() + 30000, late.left.begin() + 40000,
+                           plain.left.begin() + 30000));
 }
 
 TEST_CASE("lfo_sync_tempo_change", "[modmatrix][va]") {
@@ -297,7 +299,7 @@ TEST_CASE("lfo_sync_tempo_change", "[modmatrix][va]") {
         const double at = loaded->project.tempo.secondsAt(adx::core::Ticks{tick}) * kRate;
         // The quietest window within half a beat either side.
         const auto centre = static_cast<std::size_t>(at / kWindow);
-        const std::size_t reach = static_cast<std::size_t>(0.2 * kRate / kWindow);
+        const auto reach = static_cast<std::size_t>(0.2 * kRate / kWindow);
         std::size_t quietest = centre;
         for (std::size_t w = centre > reach ? centre - reach : 0;
              w < std::min(envelope.size(), centre + reach); ++w) {
@@ -306,7 +308,7 @@ TEST_CASE("lfo_sync_tempo_change", "[modmatrix][va]") {
             }
         }
         INFO("beat " << beat);
-        CHECK(std::abs((static_cast<double>(quietest) + 0.5) * kWindow - at) < 0.006 * kRate);
+        CHECK(std::abs(((static_cast<double>(quietest) + 0.5) * kWindow) - at) < 0.006 * kRate);
         ++checked;
     }
     CHECK(checked == 11);
@@ -322,21 +324,35 @@ TEST_CASE("modmatrix_each_source_dest", "[modmatrix]") {
         std::vector<ModDest> reads;
         ModDest ignores;
     };
+    // NOLINTBEGIN(modernize-use-designated-initializers) - a table reads as a table.
     const std::vector<Type> types{
         {"va",
-         {{"osc1.wave", 4.0F}, {"osc2.level", 0.5F}, {"unison.voices", 3.0F}, {"filter.cutoff", 900.0F}, {"filter.resonance", 0.3F}, {"filter.drive", 1.0F}},
+         {{"osc1.wave", 4.0F},
+          {"osc2.level", 0.5F},
+          {"unison.voices", 3.0F},
+          {"filter.cutoff", 900.0F},
+          {"filter.resonance", 0.3F},
+          {"filter.drive", 1.0F}},
          {ModDest::Pitch, ModDest::Osc1Pitch, ModDest::Osc2Pitch, ModDest::PulseWidth,
           ModDest::Cutoff, ModDest::Resonance, ModDest::Level, ModDest::Pan, ModDest::Drive,
           ModDest::UnisonDetune},
          ModDest::FmOp1},
         {"wavetable",
-         {{"unison.voices", 3.0F}, {"filter.cutoff", 900.0F}, {"filter.resonance", 0.3F}, {"position", 0.3F}},
+         {{"unison.voices", 3.0F},
+          {"filter.cutoff", 900.0F},
+          {"filter.resonance", 0.3F},
+          {"position", 0.3F}},
          {ModDest::Pitch, ModDest::Cutoff, ModDest::Resonance, ModDest::Level, ModDest::Pan,
           ModDest::UnisonDetune, ModDest::WtPosition},
          ModDest::PulseWidth},
         {"fm",
-         {{"algorithm", 5.0F}, {"feedback", 0.3F}, {"op2.level", 0.4F}, {"op4.level", 0.4F},
-          {"op6.level", 0.4F}, {"op3.level", 0.5F}, {"op5.level", 0.5F}},
+         {{"algorithm", 5.0F},
+          {"feedback", 0.3F},
+          {"op2.level", 0.4F},
+          {"op4.level", 0.4F},
+          {"op6.level", 0.4F},
+          {"op3.level", 0.5F},
+          {"op5.level", 0.5F}},
          {ModDest::Pitch, ModDest::Level, ModDest::Pan, ModDest::FmOp1, ModDest::FmOp2,
           ModDest::FmOp3, ModDest::FmOp4, ModDest::FmOp5, ModDest::FmOp6, ModDest::FmFeedback},
          ModDest::Cutoff},
@@ -345,6 +361,7 @@ TEST_CASE("modmatrix_each_source_dest", "[modmatrix]") {
          {ModDest::Pitch, ModDest::Cutoff, ModDest::Resonance, ModDest::Level, ModDest::Pan},
          ModDest::WtPosition},
     };
+    // NOLINTEND(modernize-use-designated-initializers)
     const std::vector<adx::graph::BlockEvent> events{noteOn(0, 1, 52, 100), noteOff(9000, 1, 52)};
     for (const Type& type : types) {
         std::vector<float> base = instrumentParams(type.name);
@@ -365,7 +382,7 @@ TEST_CASE("modmatrix_each_source_dest", "[modmatrix]") {
             set(params, type.name, "mod.3.amount", 0.6F);
             return runInstrument(*preparedInstrument(type.name), events, 12000, params);
         };
-        for (int source = 1; source < adx::dsp::kModSourceCount; ++source) {
+        for (int source = 1; source < static_cast<int>(adx::dsp::kModSourceCount); ++source) {
             for (const ModDest dest : type.reads) {
                 INFO(type.name << " source " << source << " dest " << static_cast<int>(dest));
                 const auto run = with(source, dest);

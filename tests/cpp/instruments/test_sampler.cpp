@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "engine/format/adx/Writer.h"
 #include "engine/format/audio/SamplePool.h"
 #include "engine/instruments/Factory.h"
 #include "engine/instruments/sampler/SamplerInstrument.h"
@@ -293,4 +294,164 @@ TEST_CASE("sampler_plays_silence_while_loading", "[instruments][sampler]") {
     const auto ready =
         adx::tests::runInstrument(node, {noteOn(0, 2, 60, 127)}, 32, Rig::flatParams());
     CHECK(ready.left[5] == 0.5F);
+}
+
+// --- phase_12.md §4.7.1: keyswitches, release zones, dynamic crossfades, chokes ---
+
+namespace {
+
+/// A constant: the output names which zone played.
+std::vector<float> level(float value, std::size_t length = 9600) {
+    return std::vector<float>(length, value);
+}
+
+float at(const InstrumentRun& run, std::size_t frame) {
+    return run.left[frame];
+}
+
+} // namespace
+
+TEST_CASE("sampler_keyswitch", "[instruments][sampler]") {
+    // Two articulations on the same keys, selected by keys 24 and 25. The last switch
+    // pressed selects the group; the switch keys themselves are silent.
+    SampleZone sustain;
+    sustain.switchLow = 24;
+    sustain.switchHigh = 25;
+    sustain.switchKey = 24;
+    SampleZone staccato = sustain;
+    staccato.switchKey = 25;
+    Rig rig({writeMono("ks_sus.wav", level(0.25F)), writeMono("ks_stac.wav", level(0.5F))},
+            {sustain, staccato});
+    const InstrumentRun run = adx::tests::runInstrument(
+        *rig.node,
+        {noteOn(0, 1, 60), noteOff(1000, 1, 60),    // before any switch: the lowest key's
+         noteOn(2000, 2, 25), noteOff(2100, 2, 25), // switch to staccato: silent
+         noteOn(3000, 3, 60), noteOff(4000, 3, 60), // staccato
+         noteOn(5000, 4, 24), noteOff(5100, 4, 24), // back
+         noteOn(6000, 5, 60), noteOff(7000, 5, 60)},
+        8000, Rig::flatParams(true));
+    CHECK(at(run, 500) == 0.25F);
+    CHECK(at(run, 2050) == 0.25F); // only the first note's one-shot: the switch adds nothing
+    CHECK(at(run, 3500) == 0.25F + 0.5F);
+    CHECK(run.violations == 0);
+
+    // With the first note over before the switch, the switch key is exactly silent.
+    Rig quiet(
+        {writeMono("ks_sus2.wav", level(0.25F, 500)), writeMono("ks_stac2.wav", level(0.5F, 500))},
+        {sustain, staccato});
+    const InstrumentRun second =
+        adx::tests::runInstrument(*quiet.node,
+                                  {noteOn(0, 1, 60), noteOn(2000, 2, 25), noteOn(3000, 3, 60),
+                                   noteOn(5000, 4, 24), noteOn(6000, 5, 60)},
+                                  8000, Rig::flatParams(true));
+    CHECK(at(second, 100) == 0.25F);
+    CHECK(at(second, 2100) == 0.0F);
+    CHECK(at(second, 3100) == 0.5F);
+    CHECK(at(second, 5100) == 0.0F);
+    CHECK(at(second, 6100) == 0.25F);
+}
+
+TEST_CASE("sampler_release_trigger", "[instruments][sampler]") {
+    // A release zone fires at the note-off, and is 6 dB quieter for each second the
+    // note was held.
+    SampleZone attack;
+    SampleZone release;
+    release.trigger = adx::project::ZoneTrigger::Release;
+    release.rtDecay = 6.0F;
+    Rig rig({writeMono("rt_attack.wav", level(0.25F, 96000)),
+             writeMono("rt_release.wav", level(0.5F, 2400))},
+            {attack, release});
+    std::vector<float> params = Rig::flatParams();
+    params[adx::tests::instrumentParamIndex("sampler", "env.release")] = 0.0F;
+    const InstrumentRun run = adx::tests::runInstrument(
+        *rig.node, {noteOn(0, 1, 60), noteOff(48000, 1, 60)}, 60000, params);
+    CHECK(at(run, 24000) == 0.25F); // held: the attack zone alone
+    // After the note-off: the release zone, one second's worth of decay down.
+    const float expected = 0.5F * std::pow(10.0F, -6.0F / 20.0F);
+    CHECK(std::abs(at(run, 48100) - expected) < 1e-4F);
+    // It plays to its end whatever the envelope does, then the voice is done.
+    CHECK(std::abs(at(run, 50300) - expected) < 1e-4F);
+    CHECK(at(run, 50500) == 0.0F);
+    CHECK(run.sounding.back() == 0);
+    CHECK(run.violations == 0);
+}
+
+TEST_CASE("sampler_dynamic_crossfade", "[instruments][sampler]") {
+    // Two layers crossfading across 40..90. By velocity the note's velocity fixes the
+    // blend; by `dynamics` the blend moves while the note sustains.
+    SampleZone soft;
+    soft.xfadeOutLow = 40;
+    soft.xfadeOutHigh = 90;
+    SampleZone loud;
+    loud.xfadeInLow = 40;
+    loud.xfadeInHigh = 90;
+    const std::vector<fs::path> files{writeMono("xf_soft.wav", level(0.25F, 96000)),
+                                      writeMono("xf_loud.wav", level(0.5F, 96000))};
+    const auto play = [&](std::uint8_t velocity) {
+        Rig rig(files, {soft, loud});
+        return at(adx::tests::runInstrument(*rig.node, {noteOn(0, 1, 60, velocity)}, 2000,
+                                            Rig::flatParams()),
+                  1000);
+    };
+    CHECK(play(20) == 0.25F);
+    CHECK(play(120) == 0.5F);
+    // Halfway: equal power, each layer at cos(45 degrees).
+    CHECK(std::abs(play(65) - (0.75F * std::sqrt(0.5F))) < 1e-4F);
+
+    // By dynamics: a lane sweeps the parameter and the blend follows mid-note.
+    Rig rig(files, {soft, loud});
+    std::vector<float> params = Rig::flatParams();
+    params[adx::tests::instrumentParamIndex("sampler", "xfade.source")] = 1.0F;
+    params[adx::tests::instrumentParamIndex("sampler", "dynamics")] = 0.0F;
+    const InstrumentRun low =
+        adx::tests::runInstrument(*rig.node, {noteOn(0, 1, 60, 127)}, 2000, params);
+    CHECK(at(low, 1000) == 0.25F);
+    Rig other(files, {soft, loud});
+    params[adx::tests::instrumentParamIndex("sampler", "dynamics")] = 1.0F;
+    const InstrumentRun high =
+        adx::tests::runInstrument(*other.node, {noteOn(0, 1, 60, 1)}, 2000, params);
+    CHECK(at(high, 1000) == 0.5F);
+}
+
+TEST_CASE("sampler_choke_group", "[instruments][sampler]") {
+    // The closed hat (group 1) cuts the open hat (off by 1) within 2 ms.
+    SampleZone open;
+    open.keyLow = open.keyHigh = 46;
+    open.rootKey = 46;
+    open.offBy = 1;
+    SampleZone closed;
+    closed.keyLow = closed.keyHigh = 42;
+    closed.rootKey = 42;
+    closed.group = 1;
+    Rig rig({writeMono("hat_open.wav", level(0.25F, 48000)),
+             writeMono("hat_closed.wav", level(0.5F, 4800))},
+            {open, closed});
+    const InstrumentRun run = adx::tests::runInstrument(
+        *rig.node, {noteOn(0, 1, 46), noteOn(9600, 2, 42)}, 20000, Rig::flatParams(true));
+    CHECK(at(run, 9000) == 0.25F);
+    CHECK(at(run, 9600 + 200) == 0.5F); // 96 frames of fade, then the closed hat alone
+    CHECK(at(run, 15000) == 0.0F);
+    CHECK(run.violations == 0);
+}
+
+TEST_CASE("zone_extension_fields_roundtrip", "[instruments][sampler][format]") {
+    const std::string text =
+        "[PROJECT]\nADX_VERSION=2\n\n[CHANNEL S]\nINSTRUMENT=sampler\nOUTPUT=insert.1\n"
+        "ZONE \"a.wav\" root=60 sw=24..27:25 trigger=release rtdecay=6 xfin=40..90 "
+        "xfout=100..120 group=3 offby=4\n\n[MIXER]\nINSERT 1 name=\"Master\"\n";
+    const auto loaded = adx::tests::loadText(text);
+    const SampleZone& zone = loaded->project.channels.front().instrument.zones.front();
+    CHECK(zone.switchLow == 24);
+    CHECK(zone.switchHigh == 27);
+    CHECK(zone.switchKey == 25);
+    CHECK(zone.trigger == adx::project::ZoneTrigger::Release);
+    CHECK(zone.rtDecay == 6.0F);
+    CHECK(zone.xfadeInLow == 40);
+    CHECK(zone.xfadeInHigh == 90);
+    CHECK(zone.xfadeOutLow == 100);
+    CHECK(zone.xfadeOutHigh == 120);
+    CHECK(zone.group == 3);
+    CHECK(zone.offBy == 4);
+    const std::string written = adx::format::write(loaded->project);
+    CHECK(adx::format::write(adx::tests::loadText(written)->project) == written);
 }

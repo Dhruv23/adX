@@ -34,17 +34,35 @@
 
 namespace adx::instruments {
 
-struct SamplerVoice {
+/// Zones one note can sound at once: crossfaded dynamic layers, and a release zone.
+inline constexpr std::size_t kSamplerLayers = 4;
+
+/// One zone being played by a voice.
+struct SamplerLayer {
     const SamplerZone* zone;
     /// Position in the sample's own frames.
     double position;
     /// Ping-pong direction: +1 or -1.
     double direction;
+    /// The layer's own gain: its place in a dynamic crossfade, or a release zone's
+    /// fall-off. 1 for a plain zone, which is then not multiplied by it at all.
+    float gain;
+    bool scaled;
+    bool tailStarted;
+    bool active;
+    /// A release zone: it plays to its end whatever the envelope does.
+    bool release;
+};
+
+struct SamplerVoice {
+    std::array<SamplerLayer, kSamplerLayers> layers;
+    std::uint32_t layerCount;
     float velocityGain;
     /// 1 while playing; ramps to 0 once a choking note or a slice end cuts the voice.
     float cut;
     bool released;
-    bool tailStarted;
+    /// Cut by a note in the choke group this voice's zone is `offBy`.
+    bool choked;
     dsp::Envelope env;
     dsp::EnvelopeShape shape;
 };
@@ -67,13 +85,27 @@ protected:
                      const graph::VoiceRender& render) noexcept override;
 
 private:
+    /// Whether `zone` is in the articulation the last keyswitch selected.
+    [[nodiscard]] bool switched(const project::SampleZone& zone) const noexcept;
+    [[nodiscard]] bool plays(const project::SampleZone& zone, std::uint8_t key,
+                             std::uint8_t velocity) const noexcept;
     /// The zone a note plays, round robin applied; null when none matches.
     [[nodiscard]] const SamplerZone* choose(std::uint8_t key, std::uint8_t velocity) noexcept;
+    /// Adds the other dynamic layers that crossfade with the voice's first zone.
+    void addCrossfadeLayers(SamplerVoice& state, std::uint8_t key, std::uint8_t velocity,
+                            bool byDynamics, float source) const noexcept;
+    /// At the note-off: the release zone for this key, if there is one.
+    void addReleaseLayer(SamplerVoice& state, const graph::Voice& voice) const noexcept;
+    /// A note in a choke group cuts the voices that group turns off.
+    void chokeGroup(const graph::Voice& starting, std::uint16_t group) noexcept;
 
     std::array<std::uint32_t, 256> m_roundRobin{};
     /// The most recent note's voice: the one a choke spares.
     graph::VoiceKey m_latest{};
     const dsp::SincTable* m_sinc{nullptr};
+    /// The last keyswitch pressed; 255 until one is, which selects each group's
+    /// lowest switch key.
+    std::uint8_t m_switch{255};
 };
 
 } // namespace adx::instruments

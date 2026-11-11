@@ -1190,8 +1190,8 @@ V2Parser::ChannelBinding V2Parser::parseChannelHeader(Section& section, std::siz
             parseByteRange(*line, channel.noteFilter.keyLow, channel.noteFilter.keyHigh));
     }
     if (Line* line = keys.take(lines(), "VELOCITY")) {
-        static_cast<void>(parseByteRange(*line, channel.noteFilter.velocityLow,
-                                         channel.noteFilter.velocityHigh));
+        static_cast<void>(
+            parseByteRange(*line, channel.noteFilter.velocityLow, channel.noteFilter.velocityHigh));
     }
     if (Line* line = keys.take(lines(), "COLOR")) {
         project::Color color;
@@ -1823,8 +1823,7 @@ void V2Parser::parseMacro(Section& section) {
                     target.minimum = static_cast<float>(low);
                     target.maximum = static_cast<float>(high);
                 } else if (dots == std::string_view::npos) {
-                    m_diag.add(code::kWrongFieldCount, token.valueSpan,
-                               "a range is 'lo..hi'");
+                    m_diag.add(code::kWrongFieldCount, token.valueSpan, "a range is 'lo..hi'");
                 }
             } else if (token.isKeyValue() && token.text == "curve") {
                 static_cast<void>(parseCurve(token.value, token.valueSpan, m_diag, target.curve));

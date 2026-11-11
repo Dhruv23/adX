@@ -69,8 +69,8 @@ void VaInstrument::refresh(graph::Voice& voice, VaVoice& state, const graph::Voi
     // Unison: copies detuned symmetrically about the note, spread across the field.
     const auto count = static_cast<std::uint32_t>(
         std::clamp(stepped(render, P::UnisonVoices, frame), 1, static_cast<int>(kVaMaxUnison)));
-    const float detune = std::max(
-        0.0F, render.paramAt(idx(P::UnisonDetune), frame) + mod.of(dsp::ModDest::UnisonDetune));
+    const float detune = std::max(0.0F, render.paramAt(idx(P::UnisonDetune), frame) +
+                                            mod.of(dsp::ModDest::UnisonDetune));
     const float spread = std::clamp(render.paramAt(idx(P::UnisonSpread), frame), 0.0F, 1.0F);
     state.unison = count;
     for (std::uint32_t u = 0; u < count; ++u) {
@@ -104,13 +104,13 @@ void VaInstrument::refresh(graph::Voice& voice, VaVoice& state, const graph::Voi
         mod.of(dsp::ModDest::Cutoff);
     const float cutoff = std::clamp(
         render.paramAt(idx(P::FilterCutoff), frame) * dsp::exp2F(octaves), 20.0F, 20000.0F);
-    const float resonance = std::clamp(
-        render.paramAt(idx(P::FilterResonance), frame) + mod.of(dsp::ModDest::Resonance), 0.0F,
-        1.0F);
+    const float resonance =
+        std::clamp(render.paramAt(idx(P::FilterResonance), frame) + mod.of(dsp::ModDest::Resonance),
+                   0.0F, 1.0F);
     state.filterType = static_cast<VaFilterType>(
         std::clamp(stepped(render, P::FilterType, frame), 0, kVaFilterTypeCount - 1));
-    state.filterDrive = std::max(
-        0.0F, render.paramAt(idx(P::FilterDrive), frame) + mod.of(dsp::ModDest::Drive));
+    state.filterDrive =
+        std::max(0.0F, render.paramAt(idx(P::FilterDrive), frame) + mod.of(dsp::ModDest::Drive));
     if (state.filterType == VaFilterType::Ladder) {
         state.ladderCoefficients = dsp::ladderCoefficients(cutoff, resonance, rate);
     } else {
@@ -202,10 +202,8 @@ bool VaInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
         // --- sources --------------------------------------------------------------
         const float cents = i < render.pitchCents.size() ? render.pitchCents[i] : 0.0F;
         const float note = pitch + (cents * 0.01F) + pitchMod;
-        const float base1 =
-            hz1Of(note + offset1 + mod.of(dsp::ModDest::Osc1Pitch)) * inverseRate;
-        const float base2 =
-            hz2Of(note + offset2 + mod.of(dsp::ModDest::Osc2Pitch)) * inverseRate;
+        const float base1 = hz1Of(note + offset1 + mod.of(dsp::ModDest::Osc1Pitch)) * inverseRate;
+        const float base2 = hz2Of(note + offset2 + mod.of(dsp::ModDest::Osc2Pitch)) * inverseRate;
         const float level1 = render.paramAt(idx(P::Osc1Level), i);
         const float level2 = render.paramAt(idx(P::Osc2Level), i);
         const float width1 =

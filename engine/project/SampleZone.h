@@ -32,6 +32,10 @@ inline constexpr std::size_t kLoopModeCount = 5;
 [[nodiscard]] const char* toString(LoopMode mode) noexcept;
 [[nodiscard]] bool loopModeFromString(std::string_view name, LoopMode& out) noexcept;
 
+/// When a zone plays: at the note-on, or at the note-off (a piano's or harpsichord's
+/// release noise).
+enum class ZoneTrigger : std::uint8_t { Attack, Release };
+
 struct SampleZone {
     core::SampleId sample;
     std::uint8_t keyLow{0};
@@ -58,6 +62,37 @@ struct SampleZone {
     /// whose index is next. Seeded per snapshot, never rand() (phase_4.md §4.5).
     std::uint8_t roundRobinGroup{0};
     std::uint8_t roundRobinIndex{0};
+
+    // --- phase_12.md §4.7.1. Every default leaves the zone as it was. ---
+
+    /// A keyswitch: keys switchLow..switchHigh select an articulation and make no
+    /// sound, and this zone plays only while the last one pressed was `switchKey`.
+    /// 0..0 means the zone is in no keyswitch group.
+    std::uint8_t switchLow{0};
+    std::uint8_t switchHigh{0};
+    std::uint8_t switchKey{0};
+    ZoneTrigger trigger{ZoneTrigger::Attack};
+    /// A release zone's level falls by this many dB for each second the note was held.
+    float rtDecay{0.0F};
+    /// An equal-power crossfade between dynamic layers: the zone fades in across
+    /// xfadeInLow..xfadeInHigh and out across xfadeOutLow..xfadeOutHigh of the
+    /// sampler's `xfade.source` (velocity, or the `dynamics` parameter). The defaults
+    /// are no fade.
+    std::uint8_t xfadeInLow{0};
+    std::uint8_t xfadeInHigh{0};
+    std::uint8_t xfadeOutLow{127};
+    std::uint8_t xfadeOutHigh{127};
+    /// Choke groups: a note in `group` cuts every sounding zone whose `offBy` is that
+    /// group (a closed hat cutting the open one). 0 is no group.
+    std::uint16_t group{0};
+    std::uint16_t offBy{0};
+
+    [[nodiscard]] bool hasSwitch() const noexcept {
+        return switchLow != 0 || switchHigh != 0;
+    }
+    [[nodiscard]] bool hasXfade() const noexcept {
+        return xfadeInHigh != 0 || xfadeOutLow != 127;
+    }
 
     [[nodiscard]] bool matches(std::uint8_t key, std::uint8_t velocity) const noexcept {
         return key >= keyLow && key <= keyHigh && velocity >= velocityLow &&

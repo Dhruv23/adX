@@ -26,10 +26,9 @@ float MacroOffset::apply(float value) const noexcept {
     return range.map(normalisedIn(range, value) + offset);
 }
 
-MacroOffsets
-foldMacros(const Project& project,
-           const std::function<std::optional<std::uint32_t>(ParamRef)>& indexOf,
-           std::vector<float>& params) {
+MacroOffsets foldMacros(const Project& project,
+                        const std::function<std::optional<std::uint32_t>(ParamRef)>& indexOf,
+                        std::vector<float>& params) {
     MacroOffsets offsets;
     for (const Macro& macro : project.macros) {
         for (const MacroTarget& target : macro.targets) {
@@ -52,10 +51,9 @@ foldMacros(const Project& project,
                 range.minimum = std::min(target.minimum, target.maximum);
                 range.maximum = std::max(target.minimum, target.maximum);
             }
-            offsets[*index] =
-                MacroOffset{.range = range,
-                            .offset = normalisedIn(range, value) -
-                                      normalisedIn(range, params[*index])};
+            offsets[*index] = MacroOffset{.range = range,
+                                          .offset = normalisedIn(range, value) -
+                                                    normalisedIn(range, params[*index])};
             params[*index] = value;
         }
     }

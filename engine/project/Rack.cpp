@@ -315,6 +315,7 @@ std::string rackPath(const Project& project, const Expanded& rack, ParamRef ref)
 
 std::vector<core::SlotId> slotIds(const Insert& insert) {
     std::vector<core::SlotId> ids;
+    ids.reserve(insert.slots.size());
     for (const Slot& slot : insert.slots) {
         ids.push_back(slot.id);
     }
@@ -414,8 +415,8 @@ void InsertRack::apply(Project& project) {
         macro.id = project.newMacroId();
         macro.name = m_instance + "/" + sanitizeEntityName(from.name, "macro");
         for (int n = 2; project.findMacroByName(macro.name) != nullptr; ++n) {
-            macro.name = m_instance + "/" + sanitizeEntityName(from.name, "macro") + " " +
-                         std::to_string(n);
+            macro.name =
+                m_instance + "/" + sanitizeEntityName(from.name, "macro") + " " + std::to_string(n);
         }
         macro.value = std::clamp(from.value, 0.0F, 1.0F);
         for (const RackMacroTarget& target : from.targets) {

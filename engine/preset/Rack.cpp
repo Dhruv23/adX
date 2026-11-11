@@ -50,7 +50,7 @@ public:
                 open(line);
             } else if (line.kind == format::Line::Kind::KeyValue) {
                 keyValue(line);
-            } else if (m_section != Section::None) {
+            } else if (m_section != Section::kNone) {
                 positional(line);
             }
         }
@@ -58,31 +58,31 @@ public:
     }
 
 private:
-    enum class Section : std::uint8_t { None, Rack, Layer, Chain, Send, Macro };
+    enum class Section : std::uint8_t { kNone, kRack, kLayer, kChain, kSend, kMacro };
 
     void open(const format::Line& line) {
         const std::string name = format::decodeValue(line.sectionName);
         if (line.sectionType == "RACK") {
-            m_section = Section::Rack;
+            m_section = Section::kRack;
         } else if (line.sectionType == "CHAIN") {
-            m_section = Section::Chain;
+            m_section = Section::kChain;
         } else if (line.sectionType == "LAYER") {
-            m_section = usable(name, line, "layer") ? Section::Layer : Section::None;
-            if (m_section == Section::Layer) {
-                m_rack.layers.push_back(RackLayer{.name = name});
+            m_section = usable(name, line, "layer") ? Section::kLayer : Section::kNone;
+            if (m_section == Section::kLayer) {
+                m_rack.layers.emplace_back().name = name;
             }
         } else if (line.sectionType == "SEND") {
-            m_section = usable(name, line, "send") ? Section::Send : Section::None;
-            if (m_section == Section::Send) {
-                m_rack.sends.push_back(RackSend{.name = name});
+            m_section = usable(name, line, "send") ? Section::kSend : Section::kNone;
+            if (m_section == Section::kSend) {
+                m_rack.sends.emplace_back().name = name;
             }
         } else if (line.sectionType == "MACRO") {
-            m_section = usable(name, line, "macro") ? Section::Macro : Section::None;
-            if (m_section == Section::Macro) {
-                m_rack.macros.push_back(RackMacro{.name = name});
+            m_section = usable(name, line, "macro") ? Section::kMacro : Section::kNone;
+            if (m_section == Section::kMacro) {
+                m_rack.macros.emplace_back().name = name;
             }
         } else {
-            m_section = Section::None;
+            m_section = Section::kNone;
             m_diag.add(kUnknownSection, line.span(),
                        "unknown section [" + line.sectionType + "] in a rack");
         }
@@ -131,10 +131,10 @@ private:
         const std::string value = format::decodeValue(line.value);
         double n = 0.0;
         switch (m_section) {
-        case Section::Rack:
+        case Section::kRack:
             rackKey(line, value);
             break;
-        case Section::Layer: {
+        case Section::kLayer: {
             RackLayer& layer = m_rack.layers.back();
             if (line.key == "TYPE") {
                 layer.type = value;
@@ -164,7 +164,7 @@ private:
             }
             break;
         }
-        case Section::Send: {
+        case Section::kSend: {
             RackSend& send = m_rack.sends.back();
             if (line.key == "LEVEL") {
                 if (number(line, value, n)) {
@@ -175,7 +175,7 @@ private:
             }
             break;
         }
-        case Section::Macro:
+        case Section::kMacro:
             if (line.key == "VALUE") {
                 if (number(line, value, n)) {
                     m_rack.macros.back().value = static_cast<float>(std::clamp(n, 0.0, 1.0));
@@ -184,8 +184,8 @@ private:
                 m_diag.add(kUnknownKey, line.keySpan, "unknown macro key '" + line.key + "'");
             }
             break;
-        case Section::Chain:
-        case Section::None:
+        case Section::kChain:
+        case Section::kNone:
             m_diag.add(kUnknownKey, line.keySpan, "'" + line.key + "' has no section to set");
             break;
         }
@@ -219,8 +219,8 @@ private:
                 if (!tag.empty()) {
                     m_rack.tags.push_back(std::move(tag));
                 }
-                rest = comma == std::string_view::npos ? std::string_view{}
-                                                       : rest.substr(comma + 1);
+                rest =
+                    comma == std::string_view::npos ? std::string_view{} : rest.substr(comma + 1);
             }
         } else {
             unknown(line, m_rack.extra);
@@ -233,17 +233,17 @@ private:
             return;
         }
         const std::string& head = tokens.front().text;
-        if (head == "SLOT" && m_section != Section::Rack && m_section != Section::Macro) {
-            if (m_section == Section::Chain) {
+        if (head == "SLOT" && m_section != Section::kRack && m_section != Section::kMacro) {
+            if (m_section == Section::kChain) {
                 slot(line, tokens, m_rack.chain);
-            } else if (m_section == Section::Send) {
+            } else if (m_section == Section::kSend) {
                 slot(line, tokens, m_rack.sends.back().slots);
             } else {
                 slot(line, tokens, m_rack.layers.back().chain);
             }
-        } else if (head == "PARAM" && m_section == Section::Layer) {
+        } else if (head == "PARAM" && m_section == Section::kLayer) {
             param(line, tokens);
-        } else if (head == "ZONE" && m_section == Section::Layer) {
+        } else if (head == "ZONE" && m_section == Section::kLayer) {
             if (tokens.size() < 2 || tokens[1].isKeyValue()) {
                 m_diag.add(kWrongFieldCount, line.contentSpan(),
                            "a zone is 'ZONE \"sample.wav\" key=... root=...'");
@@ -254,7 +254,7 @@ private:
             format::parseZoneFields(std::span<const format::Token>{tokens}.subspan(2), m_diag,
                                     zone.zone);
             m_rack.layers.back().zones.push_back(std::move(zone));
-        } else if (head == "TARGET" && m_section == Section::Macro) {
+        } else if (head == "TARGET" && m_section == Section::kMacro) {
             target(line, tokens);
         } else {
             m_diag.add(kUnknownKey, line.contentSpan(), "unrecognised line in a rack");
@@ -391,7 +391,7 @@ private:
 
     format::DiagnosticList& m_diag;
     Rack m_rack;
-    Section m_section{Section::None};
+    Section m_section{Section::kNone};
 };
 
 void writeSlots(std::ostringstream& out, const std::vector<RackSlot>& slots) {
@@ -567,7 +567,7 @@ void resolveRackPresets(project::Rack& rack, const PresetLibrary& library,
             continue;
         }
         std::vector<project::ParamValue> params = preset->params;
-        for (project::ParamValue& own : layer.params) {
+        for (const project::ParamValue& own : layer.params) {
             const auto match = std::ranges::find(params, own.name, &project::ParamValue::name);
             if (match != params.end()) {
                 *match = own;

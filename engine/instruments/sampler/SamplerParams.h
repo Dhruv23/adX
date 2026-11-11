@@ -21,6 +21,8 @@ enum class SamplerParam : std::uint32_t {
     Velocity,
     OneShot,
     Interpolation,
+    XfadeSource,
+    Dynamics,
     Count,
 };
 
@@ -47,6 +49,12 @@ inline constexpr auto kSamplerParams = std::to_array<project::ParamDescriptor>({
      project::RateClass::Block, project::CurvePart::None},
     // 0 linear, 1 the 8-point windowed sinc. Only used when the pitch ratio is not 1.
     {"interpolation", 0.0F, 1.0F, 1.0F, project::Unit::Count, project::ScaleKind::Stepped,
+     project::RateClass::Block, project::CurvePart::None},
+    // What crossfades the zones' dynamic layers: 0 the note's velocity, 1 `dynamics`.
+    {"xfade.source", 0.0F, 1.0F, 0.0F, project::Unit::Count, project::ScaleKind::Stepped,
+     project::RateClass::Block, project::CurvePart::None},
+    // 0..1 across the layers, and it moves while a note sustains: a swell.
+    {"dynamics", 0.0F, 1.0F, 0.5F, project::Unit::Normalized, project::ScaleKind::Linear,
      project::RateClass::Block, project::CurvePart::None},
 });
 // NOLINTEND(modernize-use-designated-initializers)

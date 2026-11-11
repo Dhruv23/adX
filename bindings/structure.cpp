@@ -582,6 +582,8 @@ py::object paramValue(const ProjectHandle& handle, const std::string& path) {
     }
     case project::ParamKind::SendLevel:
         return py::float_(p.mixer.findSend(adx::core::SendId{ref.owner})->level);
+    case project::ParamKind::Macro:
+        return py::float_(p.find(adx::core::MacroId{ref.owner})->value);
     case project::ParamKind::None:
         return py::none();
     }

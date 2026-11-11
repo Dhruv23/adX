@@ -89,8 +89,8 @@ void WavetableInstrument::refresh(WavetableVoice& state, const graph::VoiceRende
                                   std::uint32_t frame, const dsp::ModFrame& mod) noexcept {
     const auto count = static_cast<std::uint32_t>(std::clamp(
         stepped(render, P::UnisonVoices, frame), 1, static_cast<int>(kWavetableMaxUnison)));
-    const float detune = std::max(
-        0.0F, render.paramAt(idx(P::UnisonDetune), frame) + mod.of(dsp::ModDest::UnisonDetune));
+    const float detune = std::max(0.0F, render.paramAt(idx(P::UnisonDetune), frame) +
+                                            mod.of(dsp::ModDest::UnisonDetune));
     const float spread = std::clamp(render.paramAt(idx(P::UnisonSpread), frame), 0.0F, 1.0F);
     state.unison = count;
     for (std::uint32_t u = 0; u < count; ++u) {
@@ -111,9 +111,9 @@ void WavetableInstrument::refresh(WavetableVoice& state, const graph::VoiceRende
     const float cutoff = std::clamp(render.paramAt(idx(P::FilterCutoff), frame) *
                                         (octaves != 0.0F ? dsp::exp2F(octaves) : 1.0F),
                                     20.0F, 20000.0F);
-    const float resonance = std::clamp(
-        render.paramAt(idx(P::FilterResonance), frame) + mod.of(dsp::ModDest::Resonance), 0.0F,
-        1.0F);
+    const float resonance =
+        std::clamp(render.paramAt(idx(P::FilterResonance), frame) + mod.of(dsp::ModDest::Resonance),
+                   0.0F, 1.0F);
     state.coefficients = dsp::svfCoefficients(
         std::min(static_cast<double>(cutoff), sampleRate() * 0.45),
         0.5 + (19.5 * resonance * resonance), static_cast<double>(sampleRate()));

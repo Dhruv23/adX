@@ -13,8 +13,8 @@
 #include "engine/format/audio/SamplePool.h"
 #include "engine/format/mininotation/PatternCompiler.h"
 #include "engine/project/ControllerCompile.h"
-#include "engine/project/MacroCompile.h"
 #include "engine/project/EventCompile.h"
+#include "engine/project/MacroCompile.h"
 #include "engine/project/Project.h"
 
 namespace adx::project {
@@ -219,8 +219,8 @@ bool addLane(const Project& project, ParamRef target, const std::vector<Breakpoi
         // put through that target's range and curve.
         const Macro* macro = project.find(core::MacroId{target.owner});
         bool any = false;
-        for (const MacroTarget& each : macro != nullptr ? macro->targets
-                                                        : std::vector<MacroTarget>{}) {
+        for (const MacroTarget& each :
+             macro != nullptr ? macro->targets : std::vector<MacroTarget>{}) {
             if (each.target.kind == ParamKind::Macro) {
                 continue;
             }
@@ -620,8 +620,7 @@ SnapshotBuilder::flatten(const std::vector<Placement>& placements, const Channel
         std::ranges::sort(dropped);
         std::erase_if(events->events, [&dropped](const ScheduledEvent& event) {
             return event.kind != EventKind::Param &&
-                   std::ranges::binary_search(dropped,
-                                              std::pair{event.noteId, event.instance});
+                   std::ranges::binary_search(dropped, std::pair{event.noteId, event.instance});
         });
     }
     std::ranges::sort(events->events, eventLess);

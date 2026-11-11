@@ -765,11 +765,10 @@ Commands narrowCommands(const Project& cur, const Project& goal) {
     playlistCommands(cur.playlist, goal.playlist, out);
     if (!(cur.macros == goal.macros)) {
         // Only when the same macros exist: a new one needs its id from ReplaceProject.
-        const bool sameSet =
-            cur.macros.size() == goal.macros.size() &&
-            std::ranges::all_of(goal.macros, [&cur](const project::Macro& m) {
-                return cur.find(m.id) != nullptr;
-            });
+        const bool sameSet = cur.macros.size() == goal.macros.size() &&
+                             std::ranges::all_of(goal.macros, [&cur](const project::Macro& m) {
+                                 return cur.find(m.id) != nullptr;
+                             });
         if (sameSet) {
             out.push_back(std::make_unique<project::SetMacros>(goal.macros));
         }

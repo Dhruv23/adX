@@ -7,6 +7,7 @@
 #include "engine/project/commands/ChannelCommands.h"
 #include "engine/project/commands/CommandStack.h"
 #include "engine/project/commands/MixerCommands.h"
+#include "engine/project/commands/RackCommands.h"
 #include "engine/rt/RtConfig.h"
 
 namespace adx::render {
@@ -228,6 +229,10 @@ std::unique_ptr<project::Command> commandFor(const project::Project& project, pr
     }
     case ParamKind::SendLevel:
         return std::make_unique<project::SetSendLevel>(core::SendId{ref.owner}, value);
+    case ParamKind::Macro:
+        // A macro's knob: the whole list with this one's value changed (SetMacros).
+        return std::make_unique<project::SetMacros>(
+            project::macrosWithValue(project, core::MacroId{ref.owner}, value));
     case ParamKind::ChannelArpGate:
     case ParamKind::None:
         return nullptr;

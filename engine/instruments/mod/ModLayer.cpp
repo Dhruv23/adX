@@ -26,12 +26,14 @@ struct LegacyRoute {
     ModDest dest;
     float scale;
 };
-constexpr std::array<LegacyRoute, 6> kLegacyRoutes{{{ModDest::None, 0.0F},
-                                                    {ModDest::Pitch, 0.25F},
-                                                    {ModDest::Cutoff, 0.5F},
-                                                    {ModDest::Level, 1.0F},
-                                                    {ModDest::Pan, 1.0F},
-                                                    {ModDest::PulseWidth, 1.0F}}};
+constexpr std::array<LegacyRoute, 6> kLegacyRoutes{{
+    {.dest = ModDest::None, .scale = 0.0F},
+    {.dest = ModDest::Pitch, .scale = 0.25F},
+    {.dest = ModDest::Cutoff, .scale = 0.5F},
+    {.dest = ModDest::Level, .scale = 1.0F},
+    {.dest = ModDest::Pan, .scale = 1.0F},
+    {.dest = ModDest::PulseWidth, .scale = 1.0F},
+}};
 
 void readShapes(ModVoice& state, const graph::VoiceRender& render, const ModLayout& layout,
                 std::uint32_t frame) noexcept {
@@ -52,7 +54,7 @@ void readShapes(ModVoice& state, const graph::VoiceRender& render, const ModLayo
                                     std::uint8_t sync) noexcept {
     const double lengthBeats = 4.0 * dsp::kLfoSyncWholes.at(sync);
     const auto rate = static_cast<double>(render.sampleRate);
-    const double interval = static_cast<double>(project::kControlFrames);
+    const auto interval = static_cast<double>(project::kControlFrames);
     double beats = 2.0 * interval / rate; // 120 bpm when there is no timeline
     if (render.time != nullptr) {
         const double seconds =
@@ -60,8 +62,8 @@ void readShapes(ModVoice& state, const graph::VoiceRender& render, const ModLayo
                                 static_cast<std::int64_t>(render.frameOffset + frame)) /
             rate;
         const core::TempoView& tempo = render.time->tempo();
-        beats = effects::beatsAt(tempo, seconds + (interval / rate)) -
-                effects::beatsAt(tempo, seconds);
+        beats =
+            effects::beatsAt(tempo, seconds + (interval / rate)) - effects::beatsAt(tempo, seconds);
     }
     return static_cast<float>(beats / (interval * lengthBeats));
 }
@@ -83,8 +85,7 @@ void readControl(ModVoice& state, const graph::VoiceRender& render, const ModLay
         }
     }
     state.wheel = std::clamp(render.paramAt(layout.at(ModParam::ModWheel), frame), 0.0F, 1.0F);
-    state.pressure =
-        std::clamp(render.paramAt(layout.at(ModParam::Aftertouch), frame), 0.0F, 1.0F);
+    state.pressure = std::clamp(render.paramAt(layout.at(ModParam::Aftertouch), frame), 0.0F, 1.0F);
 
     state.slotCount = 0;
     state.usesEnvelopes = false;
@@ -98,9 +99,10 @@ void readControl(ModVoice& state, const graph::VoiceRender& render, const ModLay
         if (source == ModSource::None || dest == ModDest::None || amount == 0.0F) {
             continue;
         }
-        state.slots[state.slotCount++] = dsp::ModSlot{.source = source, .dest = dest, .amount = amount};
-        state.usesEnvelopes = state.usesEnvelopes || source == ModSource::ModEnv1 ||
-                              source == ModSource::ModEnv2;
+        state.slots[state.slotCount++] =
+            dsp::ModSlot{.source = source, .dest = dest, .amount = amount};
+        state.usesEnvelopes =
+            state.usesEnvelopes || source == ModSource::ModEnv1 || source == ModSource::ModEnv2;
     }
 }
 
@@ -179,16 +181,15 @@ void modStart(ModVoice& state, const graph::Voice& voice, const graph::VoiceRend
     state.velocity = static_cast<float>(voice.velocity) / 127.0F;
     state.key = std::clamp((static_cast<float>(voice.pitch) - 60.0F) / 60.0F, -1.0F, 1.0F);
     // The seed's bits as -1..1: the same note, the same value, on every render.
-    state.random =
-        (static_cast<float>((seed * 2654435761U) >> 8U) * (2.0F / 16777216.0F)) - 1.0F;
+    state.random = (static_cast<float>((seed * 2654435761U) >> 8U) * (2.0F / 16777216.0F)) - 1.0F;
     state.released = false;
     for (std::uint32_t l = 0; l < 2; ++l) {
         // An LFO in free mode keeps the channel's time, so two notes see one LFO;
         // retrig starts it from zero at the note. The channel's clock, never the wall
         // clock.
         state.lfo[l] = dsp::Lfo{seed ^ (l + 1)};
-        const bool retrig = layout.lfoRetrig[l] == project::kNoParam ||
-                            render.param(layout.lfoRetrig[l]) >= 0.5F;
+        const bool retrig =
+            layout.lfoRetrig[l] == project::kNoParam || render.param(layout.lfoRetrig[l]) >= 0.5F;
         if (retrig) {
             state.lfo[l].reset(0.0F);
         } else {
@@ -239,8 +240,7 @@ void modBegin(ModVoice& state, const graph::Voice& voice, const graph::VoiceRend
 
 const dsp::ModFrame& modTick(ModVoice& state, const graph::Voice& voice,
                              const graph::VoiceRender& render, const ModLayout& layout,
-                             std::uint32_t frame, bool control,
-                             dsp::ModFrame& scratch) noexcept {
+                             std::uint32_t frame, bool control, dsp::ModFrame& scratch) noexcept {
     if (control) {
         readControl(state, render, layout, frame);
     }

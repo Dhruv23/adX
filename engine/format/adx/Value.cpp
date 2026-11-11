@@ -624,6 +624,47 @@ void parseZoneFields(std::span<const Token> fields, DiagnosticList& diagnostics,
                     zone.pan = value;
                 }
             }
+        } else if (key == "sw") {
+            // lo..hi:key - the switch range, and the key that selects this zone.
+            const std::size_t colon = token.value.find(':');
+            Token range = token;
+            range.value = token.value.substr(0, colon);
+            std::uint8_t last = 0;
+            std::uint32_t bad = 0;
+            if (colon == std::string::npos ||
+                !parseKeyRange(range, diagnostics, zone.switchLow, zone.switchHigh) ||
+                !noteNameToMidi(std::string_view(token.value).substr(colon + 1), last, bad)) {
+                diagnostics.add(code::kValueOutOfRange, token.valueSpan,
+                                "a keyswitch is sw=<lo>..<hi>:<key>");
+                continue;
+            }
+            zone.switchKey = last;
+        } else if (key == "trigger") {
+            if (token.value == "release") {
+                zone.trigger = project::ZoneTrigger::Release;
+            } else if (token.value == "attack") {
+                zone.trigger = project::ZoneTrigger::Attack;
+            } else {
+                diagnostics.add(code::kUnknownInlineKey, token.valueSpan,
+                                "trigger is attack or release");
+            }
+        } else if (key == "rtdecay") {
+            if (parseDouble(token.value, token.valueSpan, diagnostics, number)) {
+                zone.rtDecay = static_cast<float>(number);
+            }
+        } else if (key == "xfin") {
+            (void)parseKeyRange(token, diagnostics, zone.xfadeInLow, zone.xfadeInHigh);
+        } else if (key == "xfout") {
+            (void)parseKeyRange(token, diagnostics, zone.xfadeOutLow, zone.xfadeOutHigh);
+        } else if (key == "group" || key == "offby") {
+            std::int64_t value = 0;
+            if (parseInt64(token.value, token.valueSpan, diagnostics, value) && value >= 0 &&
+                value <= 65535) {
+                (key == "group" ? zone.group : zone.offBy) = static_cast<std::uint16_t>(value);
+            } else {
+                diagnostics.add(code::kValueOutOfRange, token.valueSpan,
+                                "a choke group is 0..65535");
+            }
         } else if (key == "rr") {
             // group:index
             const std::size_t colon = token.value.find(':');
@@ -698,6 +739,30 @@ std::string formatZoneFields(const project::SampleZone& zone) {
     if (zone.roundRobinGroup != 0) {
         text += " rr=" + std::to_string(zone.roundRobinGroup) + ":" +
                 std::to_string(zone.roundRobinIndex);
+    }
+    if (zone.hasSwitch()) {
+        text += " sw=" + std::to_string(zone.switchLow) + ".." + std::to_string(zone.switchHigh) +
+                ":" + std::to_string(zone.switchKey);
+    }
+    if (zone.trigger == project::ZoneTrigger::Release) {
+        text += " trigger=release";
+    }
+    if (zone.rtDecay != 0.0F) {
+        text += " rtdecay=" + formatFloat(zone.rtDecay);
+    }
+    if (zone.xfadeInLow != 0 || zone.xfadeInHigh != 0) {
+        text +=
+            " xfin=" + std::to_string(zone.xfadeInLow) + ".." + std::to_string(zone.xfadeInHigh);
+    }
+    if (zone.xfadeOutLow != 127 || zone.xfadeOutHigh != 127) {
+        text +=
+            " xfout=" + std::to_string(zone.xfadeOutLow) + ".." + std::to_string(zone.xfadeOutHigh);
+    }
+    if (zone.group != 0) {
+        text += " group=" + std::to_string(zone.group);
+    }
+    if (zone.offBy != 0) {
+        text += " offby=" + std::to_string(zone.offBy);
     }
     return text;
 }
