@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "engine/format/audio/AudioFileLoader.h"
+#include "engine/format/audio/LibraryPaths.h"
 #include "engine/project/Resources.h"
 
 namespace adx::format {
@@ -68,6 +69,10 @@ std::shared_ptr<const SampleEntry> SamplePool::request(const std::filesystem::pa
 std::filesystem::path resolveSamplePath(const project::Resources& resources,
                                         std::span<const std::filesystem::path> library,
                                         std::string_view relative) {
+    if (isLibraryPath(relative)) {
+        // A library sample: in the store, or nowhere (an empty path is "no sample").
+        return resolveLibraryPath(relative);
+    }
     const std::filesystem::path written{std::string(relative)};
     const std::filesystem::path base{resources.baseDirectory};
     std::vector<std::filesystem::path> candidates;

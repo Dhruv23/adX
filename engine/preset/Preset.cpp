@@ -7,6 +7,7 @@
 
 #include "engine/format/adx/Lexer.h"
 #include "engine/format/adx/Value.h"
+#include "engine/format/audio/LibraryPaths.h"
 
 namespace adx::preset {
 namespace {
@@ -124,6 +125,8 @@ Preset parsePreset(std::string_view text, format::DiagnosticList& diagnostics) {
                 }
             } else if (line.key == "PACK") {
                 out.pack = value;
+            } else if (line.key == "FALLBACK") {
+                out.fallback = value;
             } else if (line.key == "MIX") {
                 double mix = 0.0;
                 if (format::parseDouble(value, line.valueSpan, diagnostics, mix)) {
@@ -165,6 +168,9 @@ std::string writePreset(const Preset& preset) {
     }
     if (preset.mix.has_value()) {
         out << "MIX=" << format::formatDouble(*preset.mix) << '\n';
+    }
+    if (!preset.fallback.empty()) {
+        out << "FALLBACK=" << format::quoteAlways(preset.fallback) << '\n';
     }
     if (!preset.tags.empty()) {
         out << "TAGS=";
@@ -212,6 +218,18 @@ bool savePreset(const Preset& preset, const std::filesystem::path& path) {
     std::ofstream out(path, std::ios::binary);
     out << writePreset(preset);
     return static_cast<bool>(out);
+}
+
+std::vector<std::string> missingLibraries(const Preset& preset) {
+    std::vector<std::string> missing;
+    for (const PresetZone& zone : preset.zones) {
+        const std::string library = format::libraryOf(zone.path);
+        if (!library.empty() && std::ranges::find(missing, library) == missing.end() &&
+            format::resolveLibraryPath(zone.path).empty()) {
+            missing.push_back(library);
+        }
+    }
+    return missing;
 }
 
 project::InstrumentSpec instrumentOf(const Preset& preset) {

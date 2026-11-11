@@ -57,6 +57,9 @@ struct Preset {
     std::optional<double> mix;
     std::vector<project::ParamValue> params;
     std::vector<PresetZone> zones;
+    /// `FALLBACK=pack/name`: a synthesized preset to play when a library this preset's
+    /// zones name is not installed (phase_12.md §4.7.3).
+    std::string fallback;
     /// Where it was read from. Not serialised.
     std::filesystem::path source;
 
@@ -67,7 +70,8 @@ struct Preset {
     /// Equal content; `source` excluded.
     [[nodiscard]] friend bool operator==(const Preset& a, const Preset& b) noexcept {
         return a.name == b.name && a.type == b.type && a.pack == b.pack && a.tags == b.tags &&
-               a.mix == b.mix && a.params == b.params && a.zones == b.zones;
+               a.mix == b.mix && a.params == b.params && a.zones == b.zones &&
+               a.fallback == b.fallback;
     }
 };
 
@@ -88,5 +92,8 @@ struct Preset {
 /// left to the caller, who owns the project's sample pool (Resources): it gets each
 /// zone's path, resolved against the preset's directory.
 [[nodiscard]] project::InstrumentSpec instrumentOf(const Preset& preset);
+
+/// The libraries the preset's `lib://` zones name that are not installed, once each.
+[[nodiscard]] std::vector<std::string> missingLibraries(const Preset& preset);
 
 } // namespace adx::preset

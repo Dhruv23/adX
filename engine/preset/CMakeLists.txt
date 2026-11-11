@@ -2,5 +2,6 @@
 target_sources(adx_engine_static PRIVATE
     Preset.cpp
     Rack.cpp
+    SfzImport.cpp
     PresetLibrary.cpp
 )

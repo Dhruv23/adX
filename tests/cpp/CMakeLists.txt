@@ -28,6 +28,7 @@ adx_add_cpp_test(adx_tests
         preset/test_presets.cpp
         rack/test_rack.cpp
         modmatrix/test_modmatrix.cpp
+        sfz/test_sfz.cpp
         rt/test_alloc_guard.cpp
         rt/test_spsc_ring.cpp
         rt/test_overwrite_ring.cpp

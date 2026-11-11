@@ -58,6 +58,12 @@ public:
     /// `query` must match one of them. Results in name order.
     [[nodiscard]] std::vector<const Preset*> search(std::string_view query) const;
 
+    /// What to load for `preset`: itself, or - when a library its zones need is not
+    /// installed - its FALLBACK preset, with one diagnostic naming the library. A
+    /// missing library never plays silence with no explanation (phase_12.md §4.7.3).
+    [[nodiscard]] const Preset& playable(const Preset& preset,
+                                         format::DiagnosticList& diagnostics) const;
+
     /// Every tag in use, sorted, once each - what a browser's tag filter lists.
     [[nodiscard]] std::vector<std::string> tags() const;
 

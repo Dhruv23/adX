@@ -164,6 +164,31 @@ std::vector<const Preset*> PresetLibrary::search(std::string_view query) const {
     return out;
 }
 
+const Preset& PresetLibrary::playable(const Preset& preset,
+                                      format::DiagnosticList& diagnostics) const {
+    const std::vector<std::string> missing = missingLibraries(preset);
+    if (missing.empty()) {
+        return preset;
+    }
+    std::string names;
+    for (const std::string& library : missing) {
+        names += (names.empty() ? "" : ", ") + library;
+    }
+    const std::size_t slash = preset.fallback.find('/');
+    const Preset* fallback =
+        preset.fallback.empty()
+            ? nullptr
+            : find(slash == std::string::npos ? preset.fallback : preset.fallback.substr(slash + 1),
+                   slash == std::string::npos ? std::string{} : preset.fallback.substr(0, slash));
+    diagnostics.add(format::code::kMissingSampleFile, format::Span{},
+                    "'" + preset.name + "' needs the sound library " + names +
+                        ", which is not installed" +
+                        (fallback != nullptr ? "; playing '" + fallback->name + "' instead"
+                                             : "; it has no fallback and will be silent"),
+                    "Get sound libraries: python tools/packs/fetch_libraries.py fetch " + names);
+    return fallback != nullptr ? *fallback : preset;
+}
+
 std::vector<std::string> PresetLibrary::tags() const {
     std::set<std::string> unique;
     for (const Preset& preset : m_presets) {
