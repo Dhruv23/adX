@@ -275,7 +275,8 @@ void registerRacks(py::module_& m) {
         [](const std::string& path) { return format::resolveLibraryPath(path).generic_string(); },
         py::arg("path"), "A lib:// path as a file; empty when the library is not installed.");
     m.def(
-        "forget_library_folders", [] { format::forgetLibraryFolders(); },
+        "forget_library_folders",
+        [] { format::forgetLibraryFolders(); }, // GIL: trivial - clears a small map
         "Look for installed libraries again (after a fetch).");
 }
 
