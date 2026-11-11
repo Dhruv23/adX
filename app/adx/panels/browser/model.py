@@ -22,7 +22,7 @@ class Entry:
     """One browser row."""
 
     label: str
-    kind: str  # "folder", "audio", "project", "preset", "pattern", "effect", "note"
+    kind: str  # folder, audio, project, preset, rack, pattern, effect, note
     path: str = ""
     payload: dnd.Payload | None = None
     tags: tuple[str, ...] = ()
@@ -58,6 +58,8 @@ def folder_entries(root: str, depth: int = 0, limit: int = 400) -> tuple[Entry, 
             out.append(Entry(path.name, "project", str(path)))
         elif suffix == PRESET_SUFFIX:
             out.append(Entry(path.stem, "preset", str(path), dnd.Preset(str(path), "instrument")))
+        elif suffix == ".adxrack":
+            out.append(Entry(path.stem, "rack", str(path), dnd.RackFile(str(path))))
     return tuple(out)
 
 
@@ -132,3 +134,66 @@ def filtered(entries: tuple[Entry, ...], words: list[str]) -> tuple[Entry, ...]:
         elif entry.matches(words):
             out.append(entry)
     return tuple(out)
+
+
+RACK_SUFFIX = ".adxrack"
+
+
+def audition_cache() -> Path:
+    """Where tools/packs/audition.py writes each sound's preview."""
+    import os
+
+    local = os.environ.get("LOCALAPPDATA")
+    return (Path(local) if local else Path.home() / ".cache") / "adX" / "audition"
+
+
+def _safe(name: str) -> str:
+    import re
+
+    return re.sub(r"[^A-Za-z0-9._ -]+", "_", name).strip() or "untitled"
+
+
+def cached_preview(pack: str, name: str, cache: Path | None = None) -> str:
+    """The audition WAV for a sound, or "" when none has been rendered."""
+    path = (cache or audition_cache()) / _safe(pack or "user") / f"{_safe(name)}.wav"
+    return str(path) if path.is_file() else ""
+
+
+def sound_entries(
+    presets: list[dict[str, object]], racks: list[dict[str, object]]
+) -> tuple[Entry, ...]:
+    """Every instrument preset and rack, by category across packs (phase_12.md 4.11).
+
+    A sound whose library is not installed says so in its label; it still drags, and
+    plays its fallback.
+    """
+    groups: dict[str, list[Entry]] = {}
+    for preset in presets:
+        if str(preset.get("kind")) != "instrument":
+            continue
+        category = str(preset.get("category") or "Uncategorised")
+        groups.setdefault(category, []).append(
+            Entry(
+                f"{preset['name']}  [{preset.get('pack') or 'user'}]",
+                "preset",
+                str(preset["path"]),
+                dnd.Preset(str(preset["path"]), "instrument"),
+                tags=(*tags_of(preset), str(preset.get("pack", "")), category),
+            )
+        )
+    for rack in racks:
+        category = str(rack.get("category") or "Uncategorised")
+        needs = " (needs library)" if rack.get("needs_library") else ""
+        groups.setdefault(category, []).append(
+            Entry(
+                f"{rack['name']}  [{rack.get('pack') or 'user'}]{needs}",
+                "rack",
+                str(rack["path"]),
+                dnd.RackFile(str(rack["path"])),
+                tags=(*tags_of(rack), str(rack.get("pack", "")), category, "rack"),
+            )
+        )
+    return tuple(
+        Entry(category, "folder", children=tuple(sorted(items, key=lambda e: e.label.lower())))
+        for category, items in sorted(groups.items())
+    )

@@ -57,13 +57,24 @@ class EffectType:
     name: str
 
 
-Payload = SampleFile | Preset | PatternRef | EffectType
+@dataclass(frozen=True, slots=True)
+class RackFile:
+    """An .adxrack: layered channels, a chain, sends and macros (phase_12.md 4.1)."""
 
-_TYPES: dict[str, type[SampleFile] | type[Preset] | type[PatternRef] | type[EffectType]] = {
+    path: str
+
+
+Payload = SampleFile | Preset | PatternRef | EffectType | RackFile
+
+_TYPES: dict[
+    str,
+    type[SampleFile] | type[Preset] | type[PatternRef] | type[EffectType] | type[RackFile],
+] = {
     "sample": SampleFile,
     "preset": Preset,
     "pattern": PatternRef,
     "effect": EffectType,
+    "rack": RackFile,
 }
 
 
@@ -110,7 +121,7 @@ def encode(payload: Payload) -> QMimeData:
     name = next(key for key, kind in _TYPES.items() if isinstance(payload, kind))
     data = QMimeData()
     data.setData(MIME, QByteArray(json.dumps({"type": name, **asdict(payload)}).encode()))
-    if isinstance(payload, SampleFile | Preset):
+    if isinstance(payload, SampleFile | Preset | RackFile):
         from PySide6.QtCore import QUrl
 
         data.setUrls([QUrl.fromLocalFile(payload.path)])
@@ -133,6 +144,8 @@ def decode(data: QMimeData) -> Payload | None:
                 return SampleFile(path)
             if suffix == ".adxpreset":
                 return Preset(path, "instrument")
+            if suffix == ".adxrack":
+                return RackFile(path)
     return None
 
 
@@ -146,6 +159,8 @@ def accepts(payload: Payload, target: Target) -> bool:
         return isinstance(target, ChannelTarget | RackTarget)
     if isinstance(payload, PatternRef):
         return isinstance(target, PlaylistTarget)
+    if isinstance(payload, RackFile):
+        return isinstance(target, RackTarget | ChannelTarget)
     return isinstance(target, SlotTarget)
 
 
@@ -184,6 +199,12 @@ def perform(session: Session, payload: Payload, target: Target) -> str:
         assert isinstance(target, PlaylistTarget)
         session.build_and_execute("AddPatternItem", target.track, payload.pattern, target.tick, 0)
         return "AddPatternItem"
+    if isinstance(payload, RackFile):
+        # A rack is new channels wherever it is dropped: it never replaces one.
+        from adx.panels.browser.panel import PACKS
+
+        session.call(project.insert_rack, payload.path, [str(PACKS)])
+        return "insert_rack"
     assert isinstance(target, SlotTarget)
     if target.slot:
         session.call(project.set_slot_effect, target.slot, payload.name)

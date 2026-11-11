@@ -279,6 +279,7 @@ TEST_CASE("gm_program_change", "[soundfont][gm]") {
 TEST_CASE("gm_bank_shared", "[soundfont][gm]") {
     // Twenty gm channels on one bank hold it once.
     std::vector<std::shared_ptr<adx::instruments::GmInstrument>> nodes;
+    nodes.reserve(20);
     for (int i = 0; i < 20; ++i) {
         nodes.push_back(gmNode(banks() / "tiny_gm.sf2"));
     }

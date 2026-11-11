@@ -194,10 +194,11 @@ def verify(lib: Library, folder: Path, manifest: Path, *, repair: bool = True) -
     return VerifyResult(checked=len(wanted), repaired=repaired, failed=failed)
 
 
-def write_index(root: Path) -> None:
-    """index.json: library id -> folder, which is what lib:// paths resolve through."""
+def write_index(root: Path, also: Library | None = None) -> None:
+    """index.json: library id -> folder, which is what lib:// paths resolve through.
+    Every known library that is installed, and `also` (one fetched by its own record)."""
     index = {}
-    for lib in LIBRARIES.values():
+    for lib in [*LIBRARIES.values(), *([also] if also is not None else [])]:
         if (root / lib.folder).is_dir():
             index[lib.id] = {
                 "folder": lib.folder,
@@ -220,7 +221,7 @@ def fetch(lib: Library, root: Path, manifests: Path, *, write: bool) -> VerifyRe
         count = write_manifest(lib, folder, manifest)
         print(f"{lib.id}: wrote {manifest.name} ({count} files)")
     result = verify(lib, folder, manifest)
-    write_index(root)
+    write_index(root, lib)
     return result
 
 

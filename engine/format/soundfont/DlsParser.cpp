@@ -337,7 +337,7 @@ bool parseDls(std::span<const std::byte> file, Bank& out, std::string& error) {
         BankPreset preset;
         const bool drums = (bankWord & kDrumFlag) != 0;
         preset.bank = drums ? Bank::kDrumBank
-                            : static_cast<std::uint16_t>(((bankWord >> 8U) & 0x7FU) * 128U +
+                            : static_cast<std::uint16_t>((((bankWord >> 8U) & 0x7FU) * 128U) +
                                                          (bankWord & 0x7FU));
         preset.program = static_cast<std::uint8_t>(program & 0x7FU);
         if (const Chunk* info = findChunk(parts, "LIST", "INFO")) {

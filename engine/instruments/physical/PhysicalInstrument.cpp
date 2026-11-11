@@ -318,7 +318,7 @@ void PhysicalInstrument::retriggerVoice(graph::Voice& voice, const graph::BlockE
 }
 
 float PhysicalInstrument::pluck(PhysicalVoice& state, std::span<float> line,
-                                std::span<float> pick) noexcept {
+                                std::span<float> pick) const noexcept {
     const float read = line[(state.write - state.integerDelay) & m_lineMask];
     // Fractional delay: y = eta x + x1 - eta y1.
     const float frac = (state.eta * read) + state.fracX1 - (state.eta * state.fracY1);
@@ -351,7 +351,7 @@ float PhysicalInstrument::pluck(PhysicalVoice& state, std::span<float> line,
 }
 
 float PhysicalInstrument::bow(PhysicalVoice& state, std::span<float> neck, std::span<float> bridge,
-                              float velocity, float pressure) noexcept {
+                              float velocity, float pressure) const noexcept {
     const float bridgeOut = readBehind(bridge, m_lineMask, state.write, state.lengthB);
     const float neckOut = readBehind(neck, m_lineMask, state.write, state.lengthA);
     state.lossState = ((1.0F - state.lossA) * bridgeOut) + (state.lossA * state.lossState);
@@ -375,7 +375,7 @@ float PhysicalInstrument::modal(PhysicalVoice& state, float velocity) noexcept {
     if (state.strikeLeft > 0) {
         const auto n = static_cast<float>(state.strikeLength - state.strikeLeft);
         x = velocity * dsp::sinTurnsF(0.5F * n / static_cast<float>(state.strikeLength)) *
-            (3.14159265F / static_cast<float>(state.strikeLength));
+            (std::numbers::pi_v<float> / static_cast<float>(state.strikeLength));
         --state.strikeLeft;
     }
     float out = 0.0F;
@@ -390,7 +390,8 @@ float PhysicalInstrument::modal(PhysicalVoice& state, float velocity) noexcept {
 }
 
 float PhysicalInstrument::tube(PhysicalVoice& state, std::span<float> bore, std::span<float> jet,
-                               float breath, float noise, float stiffness, int kind) noexcept {
+                               float breath, float noise, float stiffness,
+                               int kind) const noexcept {
     const float boreOut = readBehind(bore, m_lineMask, state.write, state.lengthA);
     const float pole = state.lossA;
     if (kind == 0) {

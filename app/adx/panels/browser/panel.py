@@ -23,14 +23,22 @@ from adx.panels.browser.drag import EntryTree
 from adx.panels.browser.model import (
     Entry,
     all_tags,
+    cached_preview,
     effect_entries,
     filtered,
     folder_entries,
     pattern_entries,
     preset_entries,
+    sound_entries,
 )
 from adx.panels.browser.preview import Preview
 from adx.session import Session
+
+
+def _key(path: str) -> str:
+    """One spelling of a path: the engine writes forward slashes, Qt may not."""
+    return str(Path(path).resolve()).lower()
+
 
 #: Where the built-in preset packs live, beside the engine's sources.
 PACKS = Path(__file__).resolve().parents[4] / "engine" / "preset" / "packs"
@@ -53,6 +61,7 @@ class BrowserPanel(DockPanel):
         self.session = session
         self.preview = Preview(self)
         self.favorites: list[str] = []
+        self._sounds: dict[str, dict[str, object]] = {}
         self.preset_dirs: list[str] = [str(PACKS)]
         self._root = root or str(Path.cwd())
         body = QWidget()
@@ -94,6 +103,8 @@ class BrowserPanel(DockPanel):
     def sections(self) -> tuple[Entry, ...]:
         """Every section, read now."""
         presets = engine_bridge.scan_presets(self.preset_dirs)
+        racks = engine_bridge.scan_racks(self.preset_dirs)
+        self._sounds = {_key(str(p["path"])): p for p in [*presets, *racks]}
         tags = all_tags(presets)
         if [self.tag.itemText(i) for i in range(1, self.tag.count())] != tags:
             current = self.tag.currentText()
@@ -115,6 +126,7 @@ class BrowserPanel(DockPanel):
         )
         return (
             Entry("Samples & projects", "folder", self._root, children=folder_entries(self._root)),
+            Entry("Sounds", "folder", children=sound_entries(presets, racks)),
             Entry("Presets", "folder", children=preset_entries(presets, self.tag.currentText())),
             Entry("Patterns", "folder", children=patterns),
             Entry("Effects", "folder", children=effect_entries(effects)),
@@ -142,6 +154,19 @@ class BrowserPanel(DockPanel):
         if entry is not None and entry.kind == "audio":
             self.preview.play(entry.path)
             self.audio_activated.emit(entry.path)
+        elif entry is not None and entry.kind in ("preset", "rack"):
+            self.audition(entry.path)
+
+    def audition(self, path: str) -> str:
+        """Play a sound's cached audition (tools/packs/audition.py) without loading it:
+        nothing in the project or the engine's graph changes. The WAV played, or ""."""
+        sound = self._sounds.get(_key(path))
+        if sound is None:
+            return ""
+        wav = cached_preview(str(sound.get("pack", "")), str(sound.get("name", "")))
+        if wav:
+            self.preview.play(wav)
+        return wav
 
     def _activated(self, item: QTreeWidgetItem, _column: int) -> None:
         entry = self.tree.entry(item)

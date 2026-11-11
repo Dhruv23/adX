@@ -131,13 +131,13 @@ private:
               const dsp::ModFrame& mod) noexcept;
     void setBody(PhysicalVoice& state, std::uint8_t type) const noexcept;
     [[nodiscard]] float pluck(PhysicalVoice& state, std::span<float> line,
-                              std::span<float> pick) noexcept;
+                              std::span<float> pick) const noexcept;
     [[nodiscard]] float bow(PhysicalVoice& state, std::span<float> neck, std::span<float> bridge,
-                            float velocity, float pressure) noexcept;
-    [[nodiscard]] float modal(PhysicalVoice& state, float velocity) noexcept;
+                            float velocity, float pressure) const noexcept;
+    [[nodiscard]] static float modal(PhysicalVoice& state, float velocity) noexcept;
     [[nodiscard]] float tube(PhysicalVoice& state, std::span<float> bore, std::span<float> jet,
-                             float breath, float noise, float stiffness, int kind) noexcept;
-    [[nodiscard]] float bodyOf(PhysicalVoice& state, float x, float mix) noexcept;
+                             float breath, float noise, float stiffness, int kind) const noexcept;
+    [[nodiscard]] static float bodyOf(PhysicalVoice& state, float x, float mix) noexcept;
 
     rt::OwnedArray<float> m_lines;
     std::size_t m_lineSize{4096};

@@ -846,3 +846,85 @@ Where the build differs from the plan above, and why. Recorded as the work lands
    are whole and band-limited, that drawbar registrations land on their harmonics, and
    that the room and plate decay times are right. `generated_assets_decode` reads every
    file through the engine's decoder.
+7. **The modulation layer is one shared block (§4.3).** `engine/instruments/mod/ModLayer.h`
+   holds the pitch envelope, two mod envelopes, the two LFOs' sync/delay/fade, the wheel
+   and pressure sources, `voice.mode`, `glide.mode` and eight slots; each of va,
+   wavetable, fm, additive and physical appends its 49 rows (va's 45: it already had
+   `lfoN.rate/shape`). The plan's `ModMatrix.h/.cpp`, `ModEnvelope.h`, `PitchEnvelope.h`
+   and `TempoLfo.h` are that one file and `dsp/ModMatrix.h`. Two extra sources (the
+   wheel and pressure) are parameters, `mod.wheel` and `mod.pressure`, so they are
+   learnable and automatable without a new event kind. Wavetable's §4.3 extension
+   (osc2, sub, noise, warp, filter types and envelope) is **not built**: open issue.
+8. **A synced LFO reads the tempo map, not a rate.** Each control interval's phase step
+   is the beats the interval spans (GrossBeat's `beatsAt`) over the LFO's length, so it
+   stays on the beat through a ramp (`lfo_sync_tempo_change`: the minimum of a
+   quarter-note tremolo within 6 ms of beat + 3/4 for eleven beats of a 90-150 ramp).
+9. **The pitch envelope is exponential to 1 % in `time`, or linear (`pitchEnv.curve`).**
+   `pitch_env_exact` checks the zero crossings against the formula integrated sample by
+   sample: within 4 us after 5 ms, which is under a cent at the frequencies involved.
+   The plan's "curve= honoured" is the two shapes, not a `core::Curve`.
+10. **Mono and legato live in ChannelNode.** A note that starts while another is held
+    takes over the held voice (`takeOver`) and glides from where it sounds; mono also
+    calls the new `retriggerVoice`. `glide.mode=1` glides into a note that does not
+    overlap too.
+11. **Racks are `project::Rack` with the parser in `engine/preset/Rack.cpp` (§2).** The
+    plan's `engine/project/Rack.h` (expansion) and `engine/preset/Rack.h` (text) are as
+    planned; `RackCommands.*` holds SetMacros and SetChannelNoteFilter, and InsertRack is
+    in `project/Rack.cpp` beside the inverse (`rackFrom`). Layer channels are named
+    `<rack>/<layer>`, not `<rack>.<layer>`: a dot is a path separator. Rack slots are
+    addressed by position (`chain.2.drive`), since a rack's slots have no ids.
+12. **Macros are folded at snapshot build (§4.2) and have no curve-per-macro, only per
+    target.** A lane drawn on `macro.<name>` becomes the same lane on each target through
+    its range; a target that is also automated is offset in its normalised range by
+    where the macro moves it from the file's value (`macro_offsets_automation`).
+13. **OTT is its own effect type, not `MultibandComp` extended (§4.6).** MultibandComp's
+    goldens set every parameter to a quarter and three quarters of its range; added
+    upward-compression parameters would be off their defaults there and move its hashes.
+    `OTT` is three bands (88 Hz / 2.5 kHz), each with downward and upward thresholds and
+    ratios, `depth`, `time`, `upward`, `downward`. `ott_upward` holds the static curve
+    exactly; through a peak follower on a sine the reduction is about 1 dB less than the
+    curve, and the through-signal check allows 1.5 dB.
+14. **Shaper's curve is seven knots (§4.6).** There is still no curve-valued parameter;
+    `knot1..7` at x = -1..1 joined linearly or by a monotone cubic are automatable today.
+    VolumeShaper keeps its shapes (correction 3).
+15. **Hall's lines are whole samples.** An unmodulated line needs no interpolation, which
+    would lose highs every pass and slowly kill a frozen tail; modulation is off while
+    frozen. RT60 matches `decay` within 10 % at 0.5, 4 and 30 s, measured on a record
+    1.2 x the decay long (a shorter one truncates Schroeder's integral and reads short).
+16. **PitchCorrect is YIN plus a period-synchronous two-head shifter**, not PSOLA with
+    epoch marking (§9's risk). Grains are two detected periods, so the heads read in
+    phase on a voiced signal; `formant=0` is a fixed 40 ms grain. Hard-tune and retune
+    glides are what is built; natural correction is not attempted.
+17. **The sampler's articulation is not per zone (§4.7.4).** Keyswitches, release zones,
+    crossfades and choke groups are on `SampleZone` and play in the sampler; DAHDSR,
+    filter and LFOs per zone are in the `gm` instrument's own voice (`GmInstrument`),
+    which is where SF2 and DLS banks play. An SFZ's per-region envelope therefore plays
+    as the instrument's (the import takes the value most regions use and reports the
+    rest), and ARIA's `egNN`/`lfoNN` are reported as approximated: `sfz_import_aria_gm`'s
+    audible eg06/lfo07 half is an open issue. `zone_articulation_inert` holds trivially:
+    no zone carries one.
+18. **`physical`'s body is three resonances per type, not a commuted IR (§4.4.1).** Loading
+    an IR file into an instrument node is a pipeline the instrument path does not have;
+    three two-pole resonances per body cost nothing per voice. The modal model has eight
+    modes and no per-mode overrides (`mode.1..24.*`); the tables are the textbook ratios,
+    not yet measured against library samples (`mode_tables_match_references` is open).
+19. **`gm` is single-part (§4.7.5).** A channel plays one program (`program`, `bankMsb`,
+    `bankLsb`, `drums`), read at each note so an automation step is a program change.
+    The 16-part mode, per-note MIDI channels and the "play on one GM channel" MIDI import
+    option are not built: a `.mid` imports as the existing per-channel split, onto `gm`
+    channels. The bank is `BANK=` (stored where `VOICEBANK` is); empty or
+    `system:gm.dls` is the Windows bank, read in place. The ARIAConverted folder-as-bank
+    path is not built, since DLS landed first.
+20. **SF2's bank modulators are reported, not mapped.** The default set (velocity to
+    attenuation and cutoff, the pitch wheel) is applied; any `pmod`/`imod` entry outside
+    it is counted in the report. CC-driven modulation (CC1 vibrato, CC7/10/11) needs
+    per-channel controller state the `gm` voice does not have yet.
+21. **Library manifests are `engine/preset/libraries/<id>.sha256`, one per library**, not
+    per pack (§4.8): a library is shared by packs. VSCO 2 CE and VCSL are fetched from
+    their upstreams' SFZ branches (`SFZ`, `sfz`), which carry the mappings.
+22. **The demonstration set is in `docs/examples/phase12/`, not a pack.** The per-preset
+    golden test requires every shipped preset to sound in CI, where `lib://` presets are
+    silent; the demo is examples, shipped with the installer, without that constraint.
+23. **The library dialog is a command, not yet a dialog.** `fetch_libraries.py` is what
+    "Get sound libraries" runs; the Qt dialog is an open issue. The browser shows a
+    rack that needs a missing library as "(needs library)".

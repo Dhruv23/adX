@@ -597,6 +597,34 @@ class Project:
         return list(self.native.apply_preset(channel, path))
 
     @_ffi
+    def insert_rack(self, path: str, packs: list[str] | None = None) -> dict[str, Any]:
+        """An .adxrack expanded into channels, inserts, sends and macros: one step."""
+        return dict(self.native.insert_rack(path, packs or []))
+
+    @_ffi
+    def save_rack(
+        self,
+        insert: int,
+        path: str,
+        name: str = "",
+        pack: str = "",
+        category: str = "",
+        tags: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """The rack whose insert is ``insert`` saved as an .adxrack."""
+        return dict(self.native.save_rack(insert, path, name, pack, category, tags or []))
+
+    @_ffi
+    def macros(self) -> list[dict[str, Any]]:
+        """The project's macros: id, name, value and targets."""
+        return [dict(m) for m in self.native.macros()]
+
+    @_ffi
+    def set_macro(self, macro: int, value: float) -> None:
+        """Turn a macro's knob, 0..1; consecutive turns are one undo step."""
+        self.native.set_macro(macro, value)
+
+    @_ffi
     def apply_effect_preset(
         self, insert: int, slot: int, path: str
     ) -> tuple[int, list[dict[str, Any]]]:
@@ -1389,6 +1417,30 @@ def scan_presets(directories: list[str]) -> list[dict[str, Any]]:
 def read_preset(path: str) -> dict[str, Any]:
     """One preset's summary."""
     return dict(_native.read_preset(path))
+
+
+@_ffi
+def scan_racks(directories: list[str]) -> list[dict[str, Any]]:
+    """Every .adxrack under the folders: name, pack, category, layers, macros..."""
+    return [dict(d) for d in _native.scan_racks(directories)]
+
+
+@_ffi
+def read_rack(path: str) -> dict[str, Any]:
+    """One rack's summary, diagnostics and canonical text."""
+    return dict(_native.read_rack(path))
+
+
+@_ffi
+def library_store() -> str:
+    """Where sound libraries are installed."""
+    return str(_native.library_store())
+
+
+@_ffi
+def resolve_library_path(path: str) -> str:
+    """A lib:// path as a file; empty when its library is not installed."""
+    return str(_native.resolve_library_path(path))
 
 
 @_ffi

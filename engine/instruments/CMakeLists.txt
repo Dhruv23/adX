@@ -13,6 +13,7 @@ target_sources(adx_engine_static PRIVATE
     dx7/msfa/Tables.cpp
     fm/FmInstrument.cpp
     fm/FmParams.cpp
+    gm/GmBankCache.cpp
     gm/GmInstrument.cpp
     granular/GranularInstrument.cpp
     midiout/MidiOutInstrument.cpp

@@ -101,6 +101,7 @@ TEST_CASE("physical_pluck_pitch", "[physical]") {
     // 40 notes across A0..C8, each within 3 cents. Damping and dispersion on, so the
     // loop filters' phase delay is part of what the tuning has to absorb.
     std::vector<int> notes;
+    notes.reserve(40);
     for (int i = 0; i < 40; ++i) {
         notes.push_back(21 + ((i * (108 - 21)) / 39));
     }
@@ -189,6 +190,7 @@ TEST_CASE("physical_cpu_budget", "[physical][.perf]") {
     // 256-frame blocks. A measurement in Debug; the gate is the Release run.
     for (int model = 0; model < 4; ++model) {
         std::vector<adx::graph::BlockEvent> events;
+        events.reserve(16);
         for (std::uint32_t v = 0; v < 16; ++v) {
             events.push_back(noteOn(0, v + 1, static_cast<std::uint8_t>(40 + (v * 2))));
         }

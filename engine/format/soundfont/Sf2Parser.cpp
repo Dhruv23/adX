@@ -157,7 +157,12 @@ BankZone zoneOf(const GenSet& g, const SampleHeader& s, std::uint32_t sampleInde
     z.loopEnd = clampFrame(static_cast<std::int64_t>(s.loopEnd) - s.start +
                            offset(Gen::EndloopAddrsOffset, Gen::EndloopAddrsCoarseOffset));
     const int modes = g.get(Gen::SampleModes) & 3;
-    z.loop = modes == 1 ? BankLoop::Continuous : modes == 3 ? BankLoop::Sustain : BankLoop::None;
+    z.loop = BankLoop::None;
+    if (modes == 1) {
+        z.loop = BankLoop::Continuous;
+    } else if (modes == 3) {
+        z.loop = BankLoop::Sustain;
+    }
     if (z.loopEnd <= z.loopStart + 1) {
         z.loop = BankLoop::None;
     }
@@ -465,7 +470,8 @@ std::filesystem::path systemGmBank() {
     if (_dupenv_s(&root, &size, "SystemRoot") != 0 || root == nullptr) {
         return {};
     }
-    std::filesystem::path path = std::filesystem::path(root) / "System32" / "drivers" / "gm.dls";
+    const std::filesystem::path path =
+        std::filesystem::path(root) / "System32" / "drivers" / "gm.dls";
     std::free(root); // NOLINT(cppcoreguidelines-no-malloc): _dupenv_s allocates with malloc
 #else
     static_cast<void>(root);

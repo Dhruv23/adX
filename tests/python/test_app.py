@@ -47,6 +47,7 @@ def test_opens_plays_and_moves_the_playhead(window: object, repo_root: pathlib.P
         "browser",
         "channel_rack",
         "history",
+        "rack",
         "playlist",
         "piano_roll",
         "mixer",

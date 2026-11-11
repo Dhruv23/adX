@@ -157,7 +157,7 @@ protected:
 private:
     void startLayer(GmLayer& layer, const format::soundfont::BankZone& zone,
                     const graph::Voice& voice, float velocity, float tune) const noexcept;
-    void refreshLayer(GmLayer& layer, float cents) const noexcept;
+    static void refreshLayer(GmLayer& layer, float cents) noexcept;
 
     std::shared_ptr<const format::soundfont::Bank> m_bank;
     std::filesystem::path m_path;

@@ -51,6 +51,7 @@ from adx.panels.piano_roll.panel import PianoRollPanel
 from adx.panels.piano_roll.scales import CustomScales
 from adx.panels.playlist.panel import PlaylistPanel
 from adx.panels.plugins.browser import PluginBrowserPanel
+from adx.panels.rack.panel import RackPanel
 from adx.panels.session.panel import SessionPanel
 from adx.panels.waveform.widget import WaveformPanel
 from adx.plugin_runtime import PluginRuntime, RestartButton
@@ -192,6 +193,7 @@ class MainWindow(QMainWindow):
         self.effect = EffectPanel(s, sel, self)
         self.automation = AutomationPanel(s, sel, self)
         self.history = HistoryPanel(s, self)
+        self.rack = RackPanel(s, self)
         self.inspector = InspectorPanel(s, sel, self)
         self.waveform = WaveformPanel(self)
         self.clip_editor = ClipEditorPanel(s, sel, self)
@@ -225,6 +227,7 @@ class MainWindow(QMainWindow):
             self.browser,
             self.channel_rack,
             self.history,
+            self.rack,
             self.playlist,
             self.piano_roll,
             self.mixer,
@@ -775,6 +778,7 @@ class MainWindow(QMainWindow):
         self.tabifyDockWidget(self.channel_rack, self.piano_roll)
         self.tabifyDockWidget(self.instrument, self.effect)
         self.tabifyDockWidget(self.effect, self.inspector)
+        self.tabifyDockWidget(self.inspector, self.rack)
         self.tabifyDockWidget(self.inspector, self.editor)
         self.tabifyDockWidget(self.editor, self.analysis_panel)
         self.tabifyDockWidget(self.mixer, self.automation)

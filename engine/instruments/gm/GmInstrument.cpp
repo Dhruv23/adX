@@ -2,11 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
-#include <map>
-#include <mutex>
+#include <numbers>
 
 #include "engine/dsp/Math.h"
-#include "engine/format/soundfont/SoundFont.h"
 
 namespace adx::instruments {
 namespace {
@@ -71,14 +69,20 @@ void enter(GmEnvelope& env, std::uint8_t stage, const BankEnvelope& shape, std::
     case kDecay: {
         const float seconds = shape.decay * keyScale(shape.keyToDecay, key);
         env.left = frames(seconds, rate);
-        env.step = volume ? fallFactor(seconds, rate)
-                          : (env.left > 0 ? 1.0F / static_cast<float>(env.left) : 1.0F);
+        if (volume) {
+            env.step = fallFactor(seconds, rate);
+        } else {
+            env.step = env.left > 0 ? 1.0F / static_cast<float>(env.left) : 1.0F;
+        }
         break;
     }
     case kRelease:
         env.left = frames(shape.release, rate);
-        env.step = volume ? fallFactor(shape.release, rate)
-                          : (env.left > 0 ? env.level / static_cast<float>(env.left) : 1.0F);
+        if (volume) {
+            env.step = fallFactor(shape.release, rate);
+        } else {
+            env.step = env.left > 0 ? env.level / static_cast<float>(env.left) : 1.0F;
+        }
         break;
     default:
         break;
@@ -138,70 +142,13 @@ float next(GmEnvelope& env, const BankEnvelope& shape, std::uint8_t key, float r
 /// The triangle SF2's LFOs are: -1..1, starting at 0 rising.
 [[nodiscard]] float triangle(float phase) noexcept {
     const float p = phase - dsp::floorExact(phase);
-    return p < 0.25F ? 4.0F * p : (p < 0.75F ? 2.0F - (4.0F * p) : (4.0F * p) - 4.0F);
-}
-
-struct CacheEntry {
-    std::weak_ptr<const format::soundfont::Bank> bank;
-};
-
-std::mutex& cacheMutex() {
-    static std::mutex mutex;
-    return mutex;
-}
-
-std::map<std::string, CacheEntry>& cache() {
-    static std::map<std::string, CacheEntry> entries;
-    return entries;
+    if (p < 0.25F) {
+        return 4.0F * p;
+    }
+    return p < 0.75F ? 2.0F - (4.0F * p) : (4.0F * p) - 4.0F;
 }
 
 } // namespace
-
-std::shared_ptr<const format::soundfont::Bank> GmBankCache::get(const std::filesystem::path& path,
-                                                                std::string& error) {
-    const std::string key = path.lexically_normal().generic_string();
-    {
-        const std::lock_guard lock(cacheMutex());
-        if (auto held = cache()[key].bank.lock()) {
-            return held;
-        }
-    }
-    auto bank = std::make_shared<format::soundfont::Bank>();
-    if (!format::soundfont::loadBank(path, *bank, error)) {
-        return nullptr;
-    }
-    std::shared_ptr<const format::soundfont::Bank> shared = std::move(bank);
-    const std::lock_guard lock(cacheMutex());
-    if (auto raced = cache()[key].bank.lock()) {
-        return raced;
-    }
-    cache()[key].bank = shared;
-    return shared;
-}
-
-std::filesystem::path gmBankPath(const std::string& written, const std::filesystem::path& base) {
-    if (written.empty() || written == "system:gm.dls") {
-        return format::soundfont::systemGmBank();
-    }
-    std::filesystem::path path(written);
-    if (path.is_relative() && !base.empty()) {
-        path = base / path;
-    }
-    std::error_code error;
-    return std::filesystem::is_regular_file(path, error) ? path : std::filesystem::path{};
-}
-
-void configureGm(GmInstrument& node, const project::Channel& channel,
-                 const std::filesystem::path& base) {
-    const std::filesystem::path path = gmBankPath(channel.instrument.voicebank, base);
-    std::string error;
-    node.setBank(path.empty() ? nullptr : GmBankCache::get(path, error), path);
-}
-
-bool gmMatches(const GmInstrument& node, const project::Channel& channel,
-               const std::filesystem::path& base) {
-    return node.bankPath() == gmBankPath(channel.instrument.voicebank, base);
-}
 
 void GmInstrument::setBank(std::shared_ptr<const format::soundfont::Bank> bank,
                            std::filesystem::path path) noexcept {
@@ -209,7 +156,7 @@ void GmInstrument::setBank(std::shared_ptr<const format::soundfont::Bank> bank,
     m_path = std::move(path);
 }
 
-void GmInstrument::refreshLayer(GmLayer& layer, float cents) const noexcept {
+void GmInstrument::refreshLayer(GmLayer& layer, float cents) noexcept {
     layer.increment =
         static_cast<float>(layer.rateRatio * static_cast<double>(dsp::exp2F(cents / 1200.0F)));
 }
@@ -232,8 +179,8 @@ void GmInstrument::startLayer(GmLayer& layer, const BankZone& zone, const graph:
          dsp::log2F(std::max(1.0F, static_cast<float>(voice.velocity)) / 127.0F) * 0.30103F);
     const float gain = dsp::dbToGainF(db);
     const float pan = std::clamp(zone.pan, -1.0F, 1.0F);
-    layer.gainLeft = gain * dsp::cosTurnsF((pan + 1.0F) * 0.125F) * 1.41421356F;
-    layer.gainRight = gain * dsp::sinTurnsF((pan + 1.0F) * 0.125F) * 1.41421356F;
+    layer.gainLeft = gain * dsp::cosTurnsF((pan + 1.0F) * 0.125F) * std::numbers::sqrt2_v<float>;
+    layer.gainRight = gain * dsp::sinTurnsF((pan + 1.0F) * 0.125F) * std::numbers::sqrt2_v<float>;
     layer.volume = GmEnvelope{.stage = kDelay, .level = 0.0F, .left = 0, .step = 0.0F};
     layer.modulation = layer.volume;
     enter(layer.volume, kDelay, zone.volume, voice.pitch, rate, true);
