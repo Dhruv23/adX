@@ -150,10 +150,29 @@ float next(GmEnvelope& env, const BankEnvelope& shape, std::uint8_t key, float r
 
 } // namespace
 
-void GmInstrument::setBank(std::shared_ptr<const format::soundfont::Bank> bank,
-                           std::filesystem::path path) noexcept {
-    m_bank = std::move(bank);
-    m_path = std::move(path);
+GmInstrument::~GmInstrument() {
+    destroyGmPins(m_pins);
+}
+
+void GmInstrument::setBank(const GmBankView& view, GmPins* pins) noexcept {
+    m_view = view;
+    destroyGmPins(m_pins);
+    m_pins = pins;
+}
+
+const GmPresetView* GmInstrument::find(std::uint16_t bank, std::uint8_t program) const noexcept {
+    for (const GmPresetView& p : m_view.presets) {
+        if (p.bank == bank && p.program == program) {
+            return &p;
+        }
+    }
+    // An unknown program: the same one on bank 0. A missing kit: the first kit.
+    for (const GmPresetView& p : m_view.presets) {
+        if (bank == kGmDrumBank ? p.bank == kGmDrumBank : (p.bank == 0 && p.program == program)) {
+            return &p;
+        }
+    }
+    return bank == kGmDrumBank || m_view.presets.empty() ? nullptr : &m_view.presets.front();
 }
 
 void GmInstrument::refreshLayer(GmLayer& layer, float cents) noexcept {
@@ -165,9 +184,9 @@ void GmInstrument::startLayer(GmLayer& layer, const BankZone& zone, const graph:
                               float velocity, float tune) const noexcept {
     const auto rate = static_cast<float>(sampleRate());
     layer.zone = &zone;
-    layer.sample = &m_bank->samples[zone.sample];
+    layer.sample = m_view.samples[zone.sample];
     layer.position = static_cast<double>(zone.start);
-    layer.rateRatio = static_cast<double>(layer.sample->rate) / static_cast<double>(sampleRate());
+    layer.rateRatio = static_cast<double>(layer.sample.rate) / static_cast<double>(sampleRate());
     layer.baseCents =
         ((static_cast<float>(voice.pitch) - static_cast<float>(zone.rootKey)) * zone.scaleTuning) +
         zone.tune + tune;
@@ -204,7 +223,7 @@ void GmInstrument::startLayer(GmLayer& layer, const BankZone& zone, const graph:
     } else {
         layer.filtered = false;
     }
-    layer.active = !layer.sample->data.empty() && zone.end > zone.start;
+    layer.active = layer.sample.frames > 0 && zone.end > zone.start;
 }
 
 void GmInstrument::startVoice(graph::Voice& voice, const graph::BlockEvent& /*event*/,
@@ -216,24 +235,21 @@ void GmInstrument::startVoice(graph::Voice& voice, const graph::BlockEvent& /*ev
     state.exclusiveClass = 0;
     state.velocity = std::clamp(render.param(idx(P::Velocity)), 0.0F, 1.0F);
     voice.level = 0.0F;
-    if (m_bank == nullptr) {
-        return;
-    }
     const bool drums = render.param(idx(P::Drums)) >= 0.5F;
-    const auto bank = static_cast<std::uint16_t>(drums ? format::soundfont::Bank::kDrumBank
+    const auto bank = static_cast<std::uint16_t>(drums ? kGmDrumBank
                                                        : (choice(render, P::BankMsb, 127) * 128) +
                                                              choice(render, P::BankLsb, 127));
     const auto program = static_cast<std::uint8_t>(choice(render, P::Program, 127));
-    const format::soundfont::BankPreset* preset = m_bank->find(bank, program);
+    const GmPresetView* preset = find(bank, program);
     if (preset == nullptr) {
         return;
     }
     const float tune = render.param(idx(P::Tune));
-    for (const BankZone& zone : preset->zones) {
+    for (const BankZone& zone : m_view.zones.subspan(preset->firstZone, preset->zoneCount)) {
         if (state.layerCount >= kGmLayers) {
             break;
         }
-        if (!zone.matches(voice.pitch, voice.velocity) || zone.sample >= m_bank->samples.size()) {
+        if (!zone.matches(voice.pitch, voice.velocity) || zone.sample >= m_view.samples.size()) {
             continue;
         }
         startLayer(state.layers[state.layerCount], zone, voice, state.velocity, tune);
@@ -289,7 +305,7 @@ bool GmInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
             continue;
         }
         const BankZone& zone = *layer.zone;
-        const std::vector<float>& data = layer.sample->data;
+        const std::span<const float> data{layer.sample.data, layer.sample.frames};
         const auto end = static_cast<double>(std::min<std::size_t>(zone.end, data.size()));
         const auto loopStart = static_cast<double>(zone.loopStart);
         const auto loopEnd = static_cast<double>(std::min<std::size_t>(zone.loopEnd, data.size()));

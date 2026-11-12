@@ -16,7 +16,7 @@
 #include "engine/format/adx/Writer.h"
 #include "engine/format/soundfont/Generators.h"
 #include "engine/format/soundfont/SoundFont.h"
-#include "engine/instruments/gm/GmInstrument.h"
+#include "engine/instruments/gm/GmSetup.h"
 #include "engine/project/Project.h"
 #include "engine/project/commands/CommandStack.h"
 #include "tests/cpp/Corpus.h"
@@ -55,7 +55,7 @@ std::shared_ptr<adx::instruments::GmInstrument> gmNode(const fs::path& bank,
     auto node = std::make_shared<adx::instruments::GmInstrument>(
         1, polyphony, adx::project::VoiceStealMode::OldestReleased);
     std::string error;
-    node->setBank(adx::instruments::GmBankCache::get(bank, error), bank);
+    adx::instruments::setGmBank(*node, adx::instruments::GmBankCache::get(bank, error), bank);
     node->prepare(adx::graph::PrepareInfo{.sampleRate = 48000, .maxBlockFrames = 2048});
     return node;
 }
@@ -284,7 +284,7 @@ TEST_CASE("gm_bank_shared", "[soundfont][gm]") {
         nodes.push_back(gmNode(banks() / "tiny_gm.sf2"));
     }
     for (const auto& node : nodes) {
-        CHECK(node->bank() == nodes.front()->bank());
+        CHECK(adx::instruments::gmBankOf(*node) == adx::instruments::gmBankOf(*nodes.front()));
     }
 }
 

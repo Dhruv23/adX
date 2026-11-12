@@ -20,14 +20,11 @@
 
 #include <array>
 #include <cstdint>
-#include <filesystem>
-#include <memory>
-#include <string>
+#include <span>
 
 #include "engine/dsp/SvFilter.h"
-#include "engine/format/soundfont/BankModel.h"
+#include "engine/format/soundfont/BankZone.h"
 #include "engine/instruments/Instrument.h"
-#include "engine/project/Channel.h"
 
 namespace adx::instruments {
 
@@ -73,19 +70,32 @@ static_assert(kGmParams.size() == static_cast<std::size_t>(GmParam::Count));
 
 inline constexpr std::size_t kGmLayers = 4;
 
-/// Banks by file, parsed once (main thread) and shared while any node holds one.
-class GmBankCache {
-public:
-    /// The bank at `path`, loading it if no node holds it. Null (with `error`) when it
-    /// cannot be read.
-    [[nodiscard]] static std::shared_ptr<const format::soundfont::Bank>
-    get(const std::filesystem::path& path, std::string& error);
+/// A bank as the audio thread reads it: flat, immutable views into what the node's
+/// pins keep alive (GmSetup.h builds them on the main thread).
+struct GmSampleView {
+    const float* data;
+    std::uint32_t frames;
+    std::uint32_t rate;
+};
+struct GmPresetView {
+    std::uint16_t bank;
+    std::uint8_t program;
+    std::uint32_t firstZone;
+    std::uint32_t zoneCount;
+};
+struct GmBankView {
+    std::span<const GmPresetView> presets;
+    std::span<const format::soundfont::BankZone> zones;
+    std::span<const GmSampleView> samples;
 };
 
-/// The file a channel's BANK= names: `system:gm.dls` and empty are the Windows bank;
-/// a relative path is relative to `base`. Empty when there is no such file.
-[[nodiscard]] std::filesystem::path gmBankPath(const std::string& written,
-                                               const std::filesystem::path& base);
+/// GM drum kits are bank 128.
+inline constexpr std::uint16_t kGmDrumBank = 128;
+
+/// What keeps the views' storage alive. Defined, created and destroyed in
+/// GmBankCache.cpp, on the main thread.
+struct GmPins;
+void destroyGmPins(GmPins* pins) noexcept;
 
 /// One volume or modulation envelope's running state.
 struct GmEnvelope {
@@ -97,7 +107,7 @@ struct GmEnvelope {
 
 struct GmLayer {
     const format::soundfont::BankZone* zone;
-    const format::soundfont::BankSample* sample;
+    GmSampleView sample;
     double position;
     double rateRatio;
     float baseCents;
@@ -128,7 +138,7 @@ struct GmVoice {
 class GmInstrument final : public Instrument<GmVoice> {
 public:
     using Instrument::Instrument;
-    ~GmInstrument() override = default;
+    ~GmInstrument() override;
     GmInstrument(const GmInstrument&) = delete;
     GmInstrument& operator=(const GmInstrument&) = delete;
     GmInstrument(GmInstrument&&) = delete;
@@ -138,14 +148,11 @@ public:
         return "gm";
     }
 
-    /// Main thread, before prepare(): the bank (null for none) and the path it came from.
-    void setBank(std::shared_ptr<const format::soundfont::Bank> bank,
-                 std::filesystem::path path) noexcept;
-    [[nodiscard]] const std::filesystem::path& bankPath() const noexcept {
-        return m_path;
-    }
-    [[nodiscard]] const format::soundfont::Bank* bank() const noexcept {
-        return m_bank.get();
+    /// Main thread, before prepare(): the bank's views (empty for none) and what keeps
+    /// them alive. Takes ownership of `pins`.
+    void setBank(const GmBankView& view, GmPins* pins) noexcept;
+    [[nodiscard]] const GmPins* pins() const noexcept {
+        return m_pins;
     }
 
 protected:
@@ -159,15 +166,10 @@ private:
                     const graph::Voice& voice, float velocity, float tune) const noexcept;
     static void refreshLayer(GmLayer& layer, float cents) noexcept;
 
-    std::shared_ptr<const format::soundfont::Bank> m_bank;
-    std::filesystem::path m_path;
-};
+    [[nodiscard]] const GmPresetView* find(std::uint16_t bank, std::uint8_t program) const noexcept;
 
-/// Builds the node's bank from the channel (main thread); a missing bank leaves the node
-/// silent and is reported by the caller's validation.
-void configureGm(GmInstrument& node, const project::Channel& channel,
-                 const std::filesystem::path& base);
-[[nodiscard]] bool gmMatches(const GmInstrument& node, const project::Channel& channel,
-                             const std::filesystem::path& base);
+    GmBankView m_view{};
+    GmPins* m_pins{nullptr};
+};
 
 } // namespace adx::instruments

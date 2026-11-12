@@ -10,7 +10,7 @@
 
 #include "engine/format/audio/SamplePool.h"
 #include "engine/instruments/Factory.h"
-#include "engine/instruments/gm/GmInstrument.h"
+#include "engine/instruments/gm/GmSetup.h"
 #include "engine/instruments/voice/VoiceInstrument.h"
 #include "engine/project/Channel.h"
 #include "engine/project/Resources.h"
@@ -216,7 +216,7 @@ std::shared_ptr<graph::ChannelNode> preparedInstrument(std::string_view type,
         const std::filesystem::path bank =
             std::filesystem::path(ADX_REPO_ROOT) / "tests" / "data" / "banks" / "tiny_gm.sf2";
         std::string error;
-        gm->setBank(instruments::GmBankCache::get(bank, error), bank);
+        instruments::setGmBank(*gm, instruments::GmBankCache::get(bank, error), bank);
     }
     giveVoiceClips(*node);
     node->prepare(graph::PrepareInfo{.sampleRate = 48000, .maxBlockFrames = 2048});

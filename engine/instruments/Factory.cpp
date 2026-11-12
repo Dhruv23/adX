@@ -8,7 +8,7 @@
 #include "engine/instruments/drumsynth/DrumSynth.h"
 #include "engine/instruments/dx7/Dx7Instrument.h"
 #include "engine/instruments/fm/FmInstrument.h"
-#include "engine/instruments/gm/GmInstrument.h"
+#include "engine/instruments/gm/GmSetup.h"
 #include "engine/instruments/granular/GranularInstrument.h"
 #include "engine/instruments/midiout/MidiOutInstrument.h"
 #include "engine/instruments/physical/PhysicalInstrument.h"

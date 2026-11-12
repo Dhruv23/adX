@@ -278,10 +278,29 @@ def measure(audio: np.ndarray, rate: int) -> dict[str, float]:
     return {"lufs": loudness["integrated"], "true_peak_db": true_peak_db(audio)}
 
 
+def write_png(path: Path, pixels: np.ndarray) -> None:
+    """An (height, width, 3) uint8 image as a PNG: zlib and the standard library only."""
+    import zlib
+
+    height, width, _ = pixels.shape
+    raw = b"".join(bytes([0]) + pixels[y].tobytes() for y in range(height))
+
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        crc = zlib.crc32(kind + body) & 0xFFFFFFFF
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", crc)
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(
+        bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(raw, 9))
+        + chunk(b"IEND", b"")
+    )
+
+
 def spectrum_png(audio: np.ndarray, rate: int, path: Path) -> None:
     """Average magnitude spectrum, 20 Hz - 20 kHz on a log axis, -100..0 dB."""
-    from PIL import Image, ImageDraw
-
     mono = audio.mean(axis=1) if audio.ndim == 2 else audio
     size = 4096
     window = np.hanning(size)
@@ -291,21 +310,24 @@ def spectrum_png(audio: np.ndarray, rate: int, path: Path) -> None:
     db = 10 * np.log10(power / (np.sum(window) ** 2 / 4) + 1e-20)
     freqs = np.fft.rfftfreq(size, 1 / rate)
     width, height = 640, 240
-    image = Image.new("RGB", (width, height), (24, 26, 30))
-    draw = ImageDraw.Draw(image)
+    image = np.empty((height, width, 3), dtype=np.uint8)
+    image[:] = (24, 26, 30)
     for hz in (100, 1000, 10000):
-        x = width * np.log10(hz / 20) / np.log10(1000)
-        draw.line([(x, 0), (x, height)], fill=(60, 64, 70))
-    points = []
+        x = round(width * np.log10(hz / 20) / np.log10(1000))
+        image[:, min(x, width - 1)] = (60, 64, 70)
+    # The curve: for each column, the loudest bin that falls in it, joined vertically.
+    columns = np.full(width, -100.0)
     for f, level in zip(freqs[1:], db[1:], strict=True):
         if 20 <= f <= 20000:
-            x = width * np.log10(f / 20) / np.log10(1000)
-            y = height * (min(0.0, max(-100.0, float(level))) / -100.0)
-            points.append((float(x), float(y)))
-    if len(points) > 1:
-        draw.line(points, fill=(120, 200, 255), width=2)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    image.save(path)
+            x = min(width - 1, int(width * np.log10(f / 20) / np.log10(1000)))
+            columns[x] = max(columns[x], float(level))
+    previous = None
+    for x in range(width):
+        y = round((height - 1) * min(0.0, max(-100.0, columns[x])) / -100.0)
+        top, bottom = (y, y) if previous is None else (min(y, previous), max(y, previous))
+        image[top : bottom + 2, x] = (120, 200, 255)
+        previous = y
+    write_png(path, image)
 
 
 def default_out() -> Path:
