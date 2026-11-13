@@ -27,6 +27,8 @@ struct NoteRecord {
     float cutoff;
     float resonance;
     std::uint8_t muted;
+    /// The MIDI channel, 0-15 (Note::part).
+    std::uint8_t part;
 };
 
 /// The numpy dtype of a NoteRecord row: adx_engine.NOTE_DTYPE.

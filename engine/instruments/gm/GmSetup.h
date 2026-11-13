@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "engine/format/soundfont/BankModel.h"
 #include "engine/instruments/gm/GmInstrument.h"
@@ -25,8 +26,13 @@ public:
     get(const std::filesystem::path& path, std::string& error);
 };
 
-/// The file a channel's BANK= names: `system:gm.dls` and empty are the Windows bank;
-/// a relative path is relative to `base`. Empty when there is no such file.
+/// The GM bank adX fetches into the library store (GeneralUser GS): what `system:gm.dls`
+/// plays on a machine that has no Windows bank.
+inline constexpr std::string_view kShippedGmBank = "lib://generaluser/GeneralUser-GS.sf2";
+
+/// The file a channel's BANK= names: `system:gm.dls` and empty are the Windows bank, or
+/// the shipped one without it; `lib://` is in the library store; a relative path is
+/// relative to `base`. Empty when there is no such file.
 [[nodiscard]] std::filesystem::path gmBankPath(const std::string& written,
                                                const std::filesystem::path& base);
 

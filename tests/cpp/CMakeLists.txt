@@ -23,6 +23,7 @@ adx_add_cpp_test(adx_tests
         instruments/test_instrument_cost.cpp
         instruments/test_sampler.cpp
         instruments/test_tranche_b.cpp
+        instruments/test_wavetable_extra.cpp
         instruments/test_va.cpp
         instruments/test_voice.cpp
         instruments/VoicebankFixture.cpp
@@ -32,6 +33,9 @@ adx_add_cpp_test(adx_tests
         modmatrix/test_modmatrix.cpp
         sfz/test_sfz.cpp
         soundfont/test_soundfont.cpp
+        gm/test_gm_parts.cpp
+        gm/test_gm_articulation.cpp
+        gm/test_gm_reference.cpp
         rt/test_alloc_guard.cpp
         rt/test_spsc_ring.cpp
         rt/test_overwrite_ring.cpp
@@ -151,6 +155,7 @@ target_compile_definitions(adx_tests PRIVATE ADX_REPO_ROOT="${CMAKE_SOURCE_DIR}"
 
 # Phase 11.5: unmodified upstream msfa, the dx7 port's bit-exactness oracle.
 target_link_libraries(adx_tests PRIVATE adx_msfa_upstream)
+target_link_libraries(adx_tests PRIVATE adx_tsf)
 
 # Phase 9: the sandbox child and the fixture plugins the plugin tests drive
 # (phase_9.md §4.8). Built before the tests, found by absolute path.

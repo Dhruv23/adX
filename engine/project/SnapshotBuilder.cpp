@@ -586,21 +586,22 @@ SnapshotBuilder::flatten(const std::vector<Placement>& placements, const Channel
             }
             const std::int64_t on = window.place(note.start.value);
             const std::int64_t off = window.place(localEnd);
-            events->events.push_back(
-                ScheduledEvent{.tick = on,
-                               .endTick = off,
-                               .noteId = note.id.value,
-                               .instance = item.id.value,
-                               .kind = EventKind::NoteOn,
-                               .pitch = note.pitch,
-                               .velocity = scaledVelocity(note.velocity, gain)});
+            events->events.push_back(ScheduledEvent{.tick = on,
+                                                    .endTick = off,
+                                                    .noteId = note.id.value,
+                                                    .instance = item.id.value,
+                                                    .kind = EventKind::NoteOn,
+                                                    .pitch = note.pitch,
+                                                    .velocity = scaledVelocity(note.velocity, gain),
+                                                    .part = note.part});
             events->events.push_back(ScheduledEvent{.tick = off,
                                                     .endTick = off,
                                                     .noteId = note.id.value,
                                                     .instance = item.id.value,
                                                     .kind = EventKind::NoteOff,
                                                     .pitch = note.pitch,
-                                                    .velocity = 0});
+                                                    .velocity = 0,
+                                                    .part = note.part});
             if (const NoteExtras* extras = placement.clip->extrasFor(note.id)) {
                 appendNoteExtras(events->events, events->lyricText, *extras, on, off, note.id.value,
                                  item.id.value);

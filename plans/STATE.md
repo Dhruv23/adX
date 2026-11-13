@@ -121,7 +121,7 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 11 — Live performance | L | **Done** 2026-11-08 (CI green, run 42530467288; full check green, run 42530469039 on tag `phase-11-r2`) |
 | 11.5 — M-Vave FM-1 | XL | **Done** 2026-11-09 (hardware deferred: every hardware half `[~]`; CI green, run 42587701796; full check green, run 42592502730 on tag `phase-11.5-r2`) |
 | 11.6 — Editor polish | S | **Done** 2026-11-08 (CI green, run 42549504391; full check green, run 42554232881 on tag `phase-11.6`) |
-| 12 — Sound-design foundation | XL | Not started |
+| 12 — Sound-design foundation | XL | **Done** 2026-11-13 (CI PENDING_RUN; full check PENDING_FULL on tag `phase-12`; human gate closed by the user) |
 | 13 — Core Drums & Machines | M | Not started |
 | 14 — Hyperpop | L | Not started |
 | 15 — Hardcore | L | Not started |
@@ -1549,15 +1549,15 @@ No inherited issues: 11.6 has no predecessor in this ledger (it was added beside
 
 ---
 
-## [ ] Phase 12 — Sound-design foundation · XL
+## [x] Phase 12 — Sound-design foundation · XL
 
 | | |
 |---|---|
 | **Plan** | [phase_12.md](phase_12.md) |
 | **Entry** | Phase 11 §6 complete; the post-Phase-11 golden set recorded as the baseline |
 | **Done when** | [phase_12.md](phase_12.md) §6, including its human gate |
-| **Status** | In progress: easy tranche-B pieces first (see Progress) |
-| **Completed** | — |
+| **Status** | Done (2026-11-13) |
+| **Completed** | 2026-11-13 |
 
 > Tranches A (format/model), B (DSP), C (tooling). Phase 13 may start once
 > phase_12.md §8's handoff items are done.
@@ -1576,14 +1576,128 @@ No inherited issues: 11.6 has no predecessor in this ledger (it was added beside
   `tape_declares_its_delay_as_latency`, `ensemble_width_zero_is_mono`,
   `rotary_fast_modulates_faster_than_slow`). `effect_no_alloc_in_process` covers them
   through the catalog. Corrections in phase_12.md §11.
-- Still to do in §4.6: Shaper, Multiband upward (OTT), Hall, PitchCorrect.
+- §4.6 finished 2026-11-10: Shaper, OTT (its own type), Hall, PitchCorrect (`000ea1e`).
 - §4.10 generators done: `tools/packs/gen_wavetables.py` (10 tables) and
   `tools/packs/gen_irs.py` (14 IRs), output committed in `docs/examples/generated/`,
   checked by `test_pack_tools.py` and `generated_assets_decode`.
 
+**Progress (2026-11-10 to 11-12):** commits `0cd44f0`..`345cabd` built macros, racks,
+the modulation layer on va/wavetable/fm/additive/physical, mono/legato, sampler
+keyswitches/release zones/crossfades/choke groups, SFZ import, `lib://` with fallback,
+`physical` (pluck, bow, modal, tube), SF2/DLS and the `gm` player, the pack tools
+(audition, taxonomy, import_sfz, render_multisample, kick_lab, licence_report), the
+browser's Sounds section, the Macros panel and `docs/sound-design.md`. On 2026-11-12
+(uncommitted, observed locally in Debug):
+
+- `gm` 16-part mode (`part=1`, `p1.program` .. `p16.drums`), a note's MIDI channel
+  (`ch=1..16`), and File > Import MIDI on one GM channel (program changes and
+  CC0/7/10/11 as stepped lanes, sustain applied to note lengths). Tests
+  `gm_16part_midi_import` (sample-identical to 16 single-part channels),
+  `gm_drums_channel10`, `gm_no_alloc`, `gm_parts_follow_their_channel`,
+  `gm_exclusive_class_is_per_part`, `gm_parts_import_controllers`, `note_part_roundtrips`,
+  `test_midi_import_on_one_gm_channel`. phase_12.md §11 corrections 19 and 24.
+- The shipped GM bank: GeneralUser GS pinned in the library store (`generaluser`,
+  manifest committed, 40 files verified); `system:gm.dls` falls back to it, `lib://`
+  banks resolve. `gm_shipped_bank` sounds all 128 programs (library-tagged).
+- `physical`: bowed and blown voices were cut off at the end of their envelope (a click
+  on every bowed note) and, once that was fixed, were never freed, because the pluck and
+  strike counters only run down in their own models. Both fixed; goldens unchanged.
+- `tools/packs/check_demo_set.py`, the agent's half of the §6 human gate: 11/11 pass
+  (each sound renders with no `adx glitch` finding and is listed in the browser; G7's
+  `violin-section-ks.adxpreset` imported from VSCO; G8's WannaCry `.mid` on one 16-part
+  `gm` channel, rendered on `gm.dls` and on GeneralUser GS, local only). Demo levels set
+  near their category targets.
+
+Local evidence for the 2026-11-12 work: Debug ctest (all but `[.slow]`) green;
+`golden_unchanged_by_phase12` green in Debug, Release and RelWithDebInfo; clang-tidy over
+the changed files clean in Debug and Release; clang-format, ruff, mypy and `lint.py
+rules/headers/plans` clean; pytest -n auto green except `test_bidirectional` (a callback
+deadline missed under the parallel load; passes serially) and the two `test_perf_frames`
+GPU tests, which hang in their driver. They hung the same way on 2026-11-11, before this
+work. `check_launcher.py`: 27 panels, played and quit cleanly.
+
+- **Human gate closed 2026-11-12**, from the user's own listening notes
+  (`build/phase12-listening/listening_notes.json`, written by `tools/packs/listen_gui.py`).
+  Overall verdict: "ready overall, some need work" (set to *ready for pack building*).
+  Per sound: kick good ("solid kick to start. need more variations"); hoover, marimba
+  ("only heard two notes"), OTT lead, violin ("better than cello"), WannaCry on gm.dls
+  good; pluck guitar "not my favorite but fine"; WannaCry on GeneralUser GS "seems same as
+  previous" (it is a different bank; the transcription is two piano channels on program
+  0). Needs work: the bowed cello ("doesnt sound like a cello at all") and the 808
+  cowbell ("not an 808 and not quite a cowbell"), so the cowbell melody too.
+**Completed (2026-11-13), the rest of §6:**
+
+- `sf2_default_modulators` and `gm_live_controllers`: a new `Controller` block event
+  carries live program change and CC0/1/7/10/11/120/121/123 to the channel; `gm` keeps
+  them per part; CC1 is SF2's default modulator (up to 50 cents of vibrato), `modWheel`
+  and `pN.modWheel` the same as parameters (correction 19).
+- `sf2_matches_reference` against TinySoundFont (fetched, tests only): pitch within a cent
+  on four keys, attack, hold, sustain and the kit within 0.5 dB, the release slope to the
+  two players' 96:80 dB law (correction 25).
+- `zone_articulation_dahdsr` / `_inert` on a hand-built bank. The inert test found two
+  silent samples at every note start on a zone without delay or attack; fixed. `gm`'s
+  golden hash moved for it (`instrument/gm`, new this phase, not in the Phase 11
+  baseline; `golden_unchanged_by_phase12` still green).
+- Wavetable's §4.3 extension, appended after the modulation block (correction 7);
+  `wavetable_osc2_sub_noise`, `_filter_types_and_envelope`, `_warp_modes`.
+- `mode_tables_match_references` (tests/python, local): six tables measured from VCSL
+  by `tools/packs/measure_modes.py` (correction 26).
+- `sfz_import_aria_gm`: a folder of SFZ programs loads as a `gm` bank (`SfzBank.cpp`);
+  all 235 ARIA files import with no unknown opcode; every program's keys match
+  `gm.dls`'s; eg06's dive and lfo07's vibrato are heard (correction 17).
+- `effects_no_alloc_new`: 60 s of each Phase 12 effect under the allocator hook (a
+  `[.slow]` case). `gm_exclusive_class` renamed `sf2_exclusive_class`, §5's name.
+- File > Get sound libraries (correction 23), `test_library_dialog.py`.
+- Library fetch on this machine: `fetch_libraries.py verify` - vsco2ce 3273, vcsl 4469,
+  salamander 668, generaluser 40 files, 0 mismatches; one render each, no glitches
+  (VSCO's keyswitched violin section, VCSL's keyswitched xylophone, Salamander V3). The
+  SFZ import now clamps an envelope to the sampler's range (VCSL's 15 s release).
+- Local evidence: ctest 642/642 in Debug, Release and RelWithDebInfo; Debug `[.slow]`
+  16/16 (`ADX_FULL_EVIDENCE=1`); `golden_unchanged_by_phase12` green in all three;
+  clang-tidy over every file in Debug and Release clean (the dependency list changed,
+  so the check covered all 448); clang-format, ruff, mypy, `lint.py headers/rules/plans`
+  clean; pytest -n auto green but `test_bidirectional` (a deadline under the parallel
+  load, green serially) and the GPU tests (P12-1); `check_demo_set.py --wannacry` 11/11;
+  `check_launcher.py`: 27 panels, played and quit cleanly.
+- CI: per-push run PENDING_RUN; full check PENDING_FULL on tag `phase-12`.
+
+**Inherited issues, at completion:**
+
+- **P10.5-2** · Closed: the CLAP flush fix has been through CI since Phase 11 (run
+  42530467288).
+- **P11-12** · Closed: `crlf_parses_like_lf` - every `.adx` in tests/ and docs/ (22)
+  parses to the same model with CRLF endings; the parser had been fixed since.
+- **P11-13** · Closed: `@pytest.mark.long(seconds)` gives a test its own watchdog and
+  moves pytest's stack dump to that limit; the 20-minute set is `long(1800)`.
+- P11-9, P11-10, P11-11, P11-15 and P10.5-3 are re-carried below.
+
 **Open issues for Phase 13:**
 
-- _to be filled in by the agent that completes this phase_
+- **P12-1** · The GPU frame-time tests (`test_perf_frames_gpu`, `test_perf_mixer_gpu`)
+  hang: the driver uses ~1 s of CPU and then waits, 133 threads, no frame rendered. It
+  draws on the second monitor (`ADX_SCREEN=secondary`), which was asleep overnight; Qt
+  Quick renders nothing without a vsync, so this is most likely the display, not adX.
+  Unmeasured this phase. Fixed when: both pass with the monitor on (Final review if
+  not before).
+- **P12-2** · The bowed cello demo does not read as a cello (the user's notes). Carried
+  to Phase 16 (Classical), which builds the solo strings and tunes `physical`'s bow by
+  ear. Fixed when: the user hears it as a bowed cello.
+- **P12-3** · The 808 cowbell is "not an 808 and not quite a cowbell". Carried to Phase 13,
+  which builds the 808 kit: the voice is two squares at 540/800 Hz through a band-pass,
+  so it is the envelope and filter that need the user's ear. Fixed when: the user hears
+  it as the 808 cowbell.
+- **P12-4** · The user wants kick variations. Phase 13's kick sets.
+- **P11-9** · `CARRIED` · Session cells hold no audio clips; playlist-to-session drag is
+  not built. A DAW feature outside the sound phases' scope. Fixed when: as written under
+  Phase 11.
+- **P11-10** · `CARRIED` · Phase seeding follows the placement, so a recorded performance
+  is not sample-identical. Changing the seed moves every VA and DrumSynth golden hash,
+  which the sound phases' golden discipline forbids; it waits for a phase that
+  re-baselines (the Final review). Fixed when: as written under Phase 11.
+- **P11-11** · `CARRIED` · Accepted: bit identity only without rate changes.
+- **P11-15** · `CARRIED` · Render helpers wake for every piece (~2.8 cores idle on the
+  stand-in). Performance work, no dropouts. Fixed when: as written under Phase 11.
+- **P10.5-3** · `CARRIED` · Two fresh launches can tab the docks differently.
 
 ---
 

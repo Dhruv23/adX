@@ -39,6 +39,10 @@ struct Note {
     /// A muted note stays in the clip and in the file but does not sound - the
     /// piano roll's Mute tool (phase_5.md §4.7), which silences without deleting.
     bool muted{false};
+    /// The MIDI channel the note plays on, 0-15 (`ch=1..16` in the file). Only a 16-part
+    /// `gm` channel reads it: each part has its own program, volume and pan
+    /// (phase_12.md §4.7.5). Every other instrument ignores it.
+    std::uint8_t part{0};
 
     /// The per-note lanes FINAL_PLAN §5.1 asks for, each an offset from the
     /// channel's value: pan in -1..1, cutoff in octaves, resonance in 0..1.

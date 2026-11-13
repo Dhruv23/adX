@@ -97,6 +97,7 @@ bool MidiOutInstrument::renderWhole(const graph::ProcessContext& context, std::s
             break;
         case graph::BlockEventKind::PitchGlide:
         case graph::BlockEventKind::Lyric:
+        case graph::BlockEventKind::Controller:
             break;
         }
     }

@@ -6,8 +6,12 @@
 // corpus and against ten thousand fuzzer-generated inputs.
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <random>
 #include <string>
 #include <vector>
@@ -273,4 +277,44 @@ TEST_CASE("document_preserves_unknown", "[format][roundtrip]") {
         }
     }
     CHECK(sawSection);
+}
+
+TEST_CASE("crlf_parses_like_lf", "[format][roundtrip]") {
+    // P11-12: a file saved with Windows line endings is the same project. Every .adx in
+    // tests/ and docs/, read with CRLF, writes back what the LF copy does.
+    std::vector<std::filesystem::path> files;
+    for (const auto* folder : {"tests", "docs"}) {
+        for (const auto& entry :
+             std::filesystem::recursive_directory_iterator(adx::tests::repoRoot() / folder)) {
+            if (entry.path().extension() == ".adx") {
+                files.push_back(entry.path());
+            }
+        }
+    }
+    REQUIRE(files.size() > 8);
+    for (const auto& path : files) {
+        INFO(path.filename().string());
+        std::ifstream in(path, std::ios::binary);
+        std::string lf((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        std::erase(lf, '\r');
+        std::string crlf;
+        for (const char c : lf) {
+            if (c == '\n') {
+                crlf += '\r';
+            }
+            crlf += c;
+        }
+        const auto load = [](const std::string& text, adx::format::DiagnosticList& diagnostics) {
+            adx::project::Project project;
+            adx::project::CommandStack stack;
+            adx::format::load(text, project, stack, diagnostics);
+            return adx::format::write(project);
+        };
+        adx::format::DiagnosticList a;
+        adx::format::DiagnosticList b;
+        const std::string fromLf = load(lf, a);
+        const std::string fromCrlf = load(crlf, b);
+        CHECK(fromCrlf == fromLf);
+        CHECK(b.size() == a.size());
+    }
 }

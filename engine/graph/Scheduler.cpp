@@ -297,6 +297,7 @@ std::uint32_t Scheduler::fill(SchedulerStats& stats, const transport::TimeSource
         block.kind = blockKindOf(event.kind);
         block.pitch = event.pitch;
         block.velocity = event.velocity;
+        block.part = event.part;
         block.value = event.value;
         block.duration = 0;
         if (event.kind == project::EventKind::PitchGlide && event.endTick > event.tick) {
@@ -389,7 +390,8 @@ EventView Scheduler::eventsFor(const NodeStep& step, project::Snapshot& snapshot
                                        .duration = 0,
                                        .kind = BlockEventKind::ReleaseAll,
                                        .pitch = 0,
-                                       .velocity = 0};
+                                       .velocity = 0,
+                                       .part = 0};
     }
     if (wrapped) {
         events[written++] = BlockEvent{.offset = 0,
@@ -401,7 +403,8 @@ EventView Scheduler::eventsFor(const NodeStep& step, project::Snapshot& snapshot
                                        .duration = 0,
                                        .kind = BlockEventKind::LoopWrap,
                                        .pitch = 0,
-                                       .velocity = 0};
+                                       .velocity = 0,
+                                       .part = 0};
     }
     const std::uint32_t specials = written;
     if (step.eventTrack < snapshot.eventTracks.size()) {
@@ -467,7 +470,8 @@ std::uint32_t Scheduler::fillLane(SchedulerStats& stats, transport::TransportSet
                                        .duration = 0,
                                        .kind = kind,
                                        .pitch = 0,
-                                       .velocity = 0};
+                                       .velocity = 0,
+                                       .part = 0};
     };
     if (lane.source < m_releasePending.size() && m_releasePending[lane.source]) {
         own(BlockEventKind::ReleaseAll, 0, 0);

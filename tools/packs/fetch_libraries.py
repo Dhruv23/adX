@@ -79,6 +79,19 @@ LIBRARIES: dict[str, Library] = {
             1.9,
             "Alexander Holm",
         ),
+        # The GM bank the gm instrument plays where Windows has no gm.dls (phase_12.md
+        # 4.7.5). Its licence lets software use and repackage it, but the author can't
+        # vouch for every sample's origin, so it stays fetched, never bundled.
+        Library(
+            "generaluser",
+            "GeneralUser GS (SoundFont)",
+            "https://github.com/mrbumpy409/GeneralUser-GS",
+            "684543d5e5efaef08d02be50dcda8d552478fa60",
+            "GeneralUser-GS-2.0",
+            False,
+            0.04,
+            "S. Christian Collins",
+        ),
     )
 }
 

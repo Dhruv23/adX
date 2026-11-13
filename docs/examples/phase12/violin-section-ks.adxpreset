@@ -1,0 +1,147 @@
+# G7: VSCO 2 CE's violin section with its keyswitches (C2 sustain, C#2..D#2 the other
+# articulations), imported from ViolinEns-KS.sfz by tools/packs/import_sfz.py.
+[PRESET]
+NAME="Violin Section KS"
+TYPE=sampler
+PACK=demo
+CATEGORY=Strings
+TAGS=violin, strings, section, keyswitch, vsco
+FALLBACK="demo/Bowed Cello"
+
+[PARAMS]
+env.attack=0.001
+env.release=4
+gain=7
+
+[ZONES]
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_A2_v1.wav" key=56..57 root=57 vel=0..62 gain=20 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_A3_v1.wav" key=68..70 root=69 vel=0..62 gain=20 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_B2_v1.wav" key=58..60 root=59 vel=0..62 gain=20 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_B4_v1.wav" key=81..84 root=83 vel=0..62 gain=20 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_C4_v1.wav" key=71..73 root=72 vel=0..62 gain=20 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_D3_v1.wav" key=61..63 root=62 vel=0..62 gain=20 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_D5_v1.wav" key=85..86 root=86 vel=0..62 gain=20 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_E4_v1.wav" key=74..77 root=76 vel=0..62 gain=20 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_F#3_v1.wav" key=64..67 root=66 vel=0..62 gain=20 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_G2_v1.wav" key=55 root=55 vel=0..62 gain=20 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_G4_v1.wav" key=78..80 root=79 vel=0..62 gain=20 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_A2_v2.wav" key=56..57 root=57 vel=63..127 gain=7 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_A3_v2.wav" key=68..70 root=69 vel=63..127 gain=7 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_B2_v2.wav" key=58..60 root=59 vel=63..127 gain=7 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_B4_v2.wav" key=81..84 root=83 vel=63..127 gain=7 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_C4_v2.wav" key=71..73 root=72 vel=63..127 gain=7 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_D3_v2.wav" key=61..63 root=62 vel=63..127 gain=7 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_D5_v2.wav" key=85..86 root=86 vel=63..127 gain=7 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_E4_v2.wav" key=74..77 root=76 vel=63..127 gain=7 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_F#3_v2.wav" key=64..67 root=66 vel=63..127 gain=7 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_G2_v2.wav" key=55 root=55 vel=63..127 gain=7 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/susVib/VlnEns_susVib_G4_v2.wav" key=78..80 root=79 vel=63..127 gain=7 sw=36..39:36
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_A2_v1.wav" key=56..57 root=57 vel=0..62 gain=20 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_A3_v1.wav" key=68..70 root=69 vel=0..62 gain=20 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_B2_v1.wav" key=58..60 root=59 vel=0..62 gain=20 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_B4_v1.wav" key=81..84 root=83 vel=0..62 gain=20 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_C4_v1.wav" key=71..73 root=72 vel=0..62 gain=20 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_D3_v1.wav" key=61..63 root=62 vel=0..62 gain=20 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_D5_v1.wav" key=85..86 root=86 vel=0..62 gain=20 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_E4_v1.wav" key=74..77 root=76 vel=0..62 gain=20 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_F#3_v1.wav" key=64..67 root=66 vel=0..127 gain=13 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_G2_v1.wav" key=55 root=55 vel=0..62 gain=20 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_G4_v1.wav" key=78..80 root=79 vel=0..62 gain=20 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_A2_v2.wav" key=56..57 root=57 vel=63..127 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_A3_v2.wav" key=68..70 root=69 vel=63..127 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_B2_v2.wav" key=58..60 root=59 vel=63..127 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_B4_v2.wav" key=81..84 root=83 vel=63..127 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_C4_v2.wav" key=71..73 root=72 vel=63..127 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_D3_v2.wav" key=61..63 root=62 vel=63..127 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_D5_v2.wav" key=85..86 root=86 vel=63..127 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_E4_v2.wav" key=74..77 root=76 vel=63..127 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_G2_v2.wav" key=55 root=55 vel=63..127 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Trem/VlnEns_Trem_G4_v2.wav" key=78..80 root=79 vel=63..127 sw=36..39:37
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_A2_v1_rr1.wav" key=56..57 root=57 vel=0..62 gain=17 rr=1:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_A3_v1_rr1.wav" key=68..70 root=69 vel=0..62 gain=17 rr=2:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_B2_v1_rr1.wav" key=58..60 root=59 vel=0..62 gain=17 rr=3:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_B4_v1_rr1.wav" key=81..84 root=83 vel=0..62 gain=17 rr=4:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_C4_v1_rr1.wav" key=71..73 root=72 vel=0..62 gain=17 rr=5:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_D3_v1_rr1.wav" key=61..63 root=62 vel=0..62 gain=17 rr=6:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_D5_v1_rr1.wav" key=85..86 root=86 vel=0..62 gain=17 rr=7:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_E4_v1_rr1.wav" key=74..77 root=76 vel=0..62 gain=17 rr=8:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_F#3_v1_rr1.wav" key=64..67 root=66 vel=0..62 gain=17 rr=9:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_G2_v1_rr1.wav" key=55 root=55 vel=0..62 gain=17 rr=10:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_G4_v1_rr1.wav" key=78..80 root=79 vel=0..62 gain=17 rr=11:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_A2_v2_rr1.wav" key=56..57 root=57 vel=63..127 gain=6 rr=12:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_A3_v2_rr1.wav" key=68..70 root=69 vel=63..127 gain=6 rr=13:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_B2_v2_rr1.wav" key=58..60 root=59 vel=63..127 gain=6 rr=14:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_B4_v2_rr1.wav" key=81..84 root=83 vel=63..127 gain=6 rr=15:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_C4_v2_rr1.wav" key=71..73 root=72 vel=63..127 gain=6 rr=16:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_D3_v2_rr1.wav" key=61..63 root=62 vel=63..127 gain=6 rr=17:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_D5_v2_rr1.wav" key=85..86 root=86 vel=63..127 gain=6 rr=18:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_E4_v2_rr1.wav" key=74..77 root=76 vel=63..127 gain=6 rr=19:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_F#3_v2_rr1.wav" key=64..67 root=66 vel=63..127 gain=6 rr=20:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_G2_v2_rr1.wav" key=55 root=55 vel=63..127 gain=6 rr=21:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_G4_v2_rr1.wav" key=78..80 root=79 vel=63..127 gain=6 rr=22:0 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_A2_v1_rr2.wav" key=56..57 root=57 vel=0..62 gain=17 rr=1:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_A3_v1_rr2.wav" key=68..70 root=69 vel=0..62 gain=17 rr=2:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_B2_v1_rr2.wav" key=58..60 root=59 vel=0..62 gain=17 rr=3:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_B4_v1_rr2.wav" key=81..84 root=83 vel=0..62 gain=17 rr=4:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_C4_v1_rr2.wav" key=71..73 root=72 vel=0..62 gain=17 rr=5:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_D3_v1_rr2.wav" key=61..63 root=62 vel=0..62 gain=17 rr=6:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_D5_v1_rr2.wav" key=85..86 root=86 vel=0..62 gain=17 rr=7:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_E4_v1_rr2.wav" key=74..77 root=76 vel=0..62 gain=17 rr=8:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_F#3_v1_rr2.wav" key=64..67 root=66 vel=0..62 gain=17 rr=9:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_G2_v1_rr2.wav" key=55 root=55 vel=0..62 gain=17 rr=10:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_G4_v1_rr2.wav" key=78..80 root=79 vel=0..62 gain=17 rr=11:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_A2_v2_rr2.wav" key=56..57 root=57 vel=63..127 gain=6 rr=12:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_A3_v2_rr2.wav" key=68..70 root=69 vel=63..127 gain=6 rr=13:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_B2_v2_rr2.wav" key=58..60 root=59 vel=63..127 gain=6 rr=14:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_B4_v2_rr2.wav" key=81..84 root=83 vel=63..127 gain=6 rr=15:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_C4_v2_rr2.wav" key=71..73 root=72 vel=63..127 gain=6 rr=16:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_D3_v2_rr2.wav" key=61..63 root=62 vel=63..127 gain=6 rr=17:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_D5_v2_rr2.wav" key=85..86 root=86 vel=63..127 gain=6 rr=18:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_E4_v2_rr2.wav" key=74..77 root=76 vel=63..127 gain=6 rr=19:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_F#3_v2_rr2.wav" key=64..67 root=66 vel=63..127 gain=6 rr=20:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_G2_v2_rr2.wav" key=55 root=55 vel=63..127 gain=6 rr=21:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Spic/VlnEns_Spic_G4_v2_rr2.wav" key=78..80 root=79 vel=63..127 gain=6 rr=22:1 sw=36..39:38
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_A2_v1_rr1.wav" key=56..57 root=57 vel=0..62 gain=17 rr=23:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_A3_v1_rr1.wav" key=68..70 root=69 vel=0..62 gain=17 rr=24:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_B2_v1_rr1.wav" key=58..60 root=59 vel=0..62 gain=17 rr=25:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_B4_v1_rr1.wav" key=81..84 root=83 vel=0..62 gain=17 rr=26:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_C4_v1_rr1.wav" key=71..73 root=72 vel=0..62 gain=17 rr=27:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_D3_v1_rr1.wav" key=61..63 root=62 vel=0..62 gain=17 rr=28:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_D5_v1_rr1.wav" key=85..86 root=86 vel=0..62 gain=17 rr=29:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_E4_v1_rr1.wav" key=74..77 root=76 vel=0..62 gain=17 rr=30:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_F#3_v1_rr1.wav" key=64..67 root=66 vel=0..62 gain=17 rr=31:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_G2_v1_rr1.wav" key=55 root=55 vel=0..62 gain=17 rr=32:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_G4_v1_rr1.wav" key=78..80 root=79 vel=0..62 gain=17 rr=33:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_A2_v2_rr1.wav" key=56..57 root=57 vel=63..127 gain=6 rr=34:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_A3_v2_rr1.wav" key=68..70 root=69 vel=63..127 gain=6 rr=35:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_B2_v2_rr1.wav" key=58..60 root=59 vel=63..127 gain=6 rr=36:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_B4_v2_rr1.wav" key=81..84 root=83 vel=63..127 gain=6 rr=37:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_C4_v2_rr1.wav" key=71..73 root=72 vel=63..127 gain=6 rr=38:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_D3_v2_rr1.wav" key=61..63 root=62 vel=63..127 gain=6 rr=39:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_D5_v2_rr1.wav" key=85..86 root=86 vel=63..127 gain=6 rr=40:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_E4_v2_rr1.wav" key=74..77 root=76 vel=63..127 gain=6 rr=41:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_F#3_v2_rr1.wav" key=64..67 root=66 vel=63..127 gain=6 rr=42:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_G2_v2_rr1.wav" key=55 root=55 vel=63..127 gain=6 rr=43:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_G4_v2_rr1.wav" key=78..80 root=79 vel=63..127 gain=6 rr=44:0 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_A2_v1_rr2.wav" key=56..57 root=57 vel=0..62 gain=17 rr=23:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_A3_v1_rr2.wav" key=68..70 root=69 vel=0..62 gain=17 rr=24:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_B2_v1_rr2.wav" key=58..60 root=59 vel=0..62 gain=17 rr=25:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_B4_v1_rr2.wav" key=81..84 root=83 vel=0..62 gain=17 rr=26:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_C4_v1_rr2.wav" key=71..73 root=72 vel=0..62 gain=17 rr=27:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_D3_v1_rr2.wav" key=61..63 root=62 vel=0..62 gain=17 rr=28:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_D5_v1_rr2.wav" key=85..86 root=86 vel=0..62 gain=17 rr=29:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_E4_v1_rr2.wav" key=74..77 root=76 vel=0..62 gain=17 rr=30:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_F#3_v1_rr2.wav" key=64..67 root=66 vel=0..62 gain=17 rr=31:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_G2_v1_rr2.wav" key=55 root=55 vel=0..62 gain=17 rr=32:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_G4_v1_rr2.wav" key=78..80 root=79 vel=0..62 gain=17 rr=33:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_A2_v2_rr2.wav" key=56..57 root=57 vel=63..127 gain=6 rr=34:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_A3_v2_rr2.wav" key=68..70 root=69 vel=63..127 gain=6 rr=35:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_B2_v2_rr2.wav" key=58..60 root=59 vel=63..127 gain=6 rr=36:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_B4_v2_rr2.wav" key=81..84 root=83 vel=63..127 gain=6 rr=37:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_C4_v2_rr2.wav" key=71..73 root=72 vel=63..127 gain=6 rr=38:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_D3_v2_rr2.wav" key=61..63 root=62 vel=63..127 gain=6 rr=39:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_D5_v2_rr2.wav" key=85..86 root=86 vel=63..127 gain=6 rr=40:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_E4_v2_rr2.wav" key=74..77 root=76 vel=63..127 gain=6 rr=41:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_F#3_v2_rr2.wav" key=64..67 root=66 vel=63..127 gain=6 rr=42:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_G2_v2_rr2.wav" key=55 root=55 vel=63..127 gain=6 rr=43:1 sw=36..39:39
+ZONE "lib://vsco2ce/Strings/Violin Section/Pizz/VlnEns_Pizz_G4_v2_rr2.wav" key=78..80 root=79 vel=63..127 gain=6 rr=44:1 sw=36..39:39

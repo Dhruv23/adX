@@ -110,6 +110,7 @@ class MainWindow(QMainWindow):
         self._maximized: DockPanel | None = None
         self._before_maximize = QByteArray()
         self._quickstart: QDialog | None = None
+        self._libraries: QDialog | None = None
         self.setWindowTitle("adX")
         self.setObjectName("window")
         #: The agent's control channel, when the launch asked for one (application.run).
@@ -885,6 +886,17 @@ class MainWindow(QMainWindow):
             self._quickstart = QuickStart(self)
         self._quickstart.show()
         self._quickstart.raise_()
+
+    def show_libraries(self) -> None:
+        """File > Get sound libraries: fetch and verify the sample libraries."""
+        from adx.panels.library.dialog import LibraryDialog
+
+        if self._libraries is None:
+            self._libraries = LibraryDialog(self)
+        if isinstance(self._libraries, LibraryDialog):
+            self._libraries.refresh()
+        self._libraries.show()
+        self._libraries.raise_()
 
     def maybe_show_quickstart(self) -> None:
         """The quick start, the first time adX opens on this machine."""

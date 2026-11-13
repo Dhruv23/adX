@@ -56,7 +56,8 @@ graph::BlockEvent makeEvent(graph::BlockEventKind kind, std::uint32_t offset, st
                              .duration = duration,
                              .kind = kind,
                              .pitch = pitch,
-                             .velocity = velocity};
+                             .velocity = velocity,
+                             .part = 0};
 }
 
 } // namespace

@@ -2,8 +2,10 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <optional>
+#include <system_error>
 #include <vector>
 
 #include "engine/dsp/Math.h"
@@ -449,6 +451,10 @@ bool parseSf2(std::span<const std::byte> file, Bank& out, std::string& error) {
 }
 
 bool loadBank(const std::filesystem::path& path, Bank& out, std::string& error) {
+    std::error_code folder;
+    if (std::filesystem::is_directory(path, folder)) {
+        return loadSfzFolder(path, out, error);
+    }
     std::ifstream in(path, std::ios::binary);
     if (!in) {
         error = "cannot read " + path.string();

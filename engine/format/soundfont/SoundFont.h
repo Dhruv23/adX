@@ -31,6 +31,11 @@ namespace adx::format::soundfont {
 /// Reads a file and picks the parser by its RIFF form type ('sfbk' or 'DLS ').
 [[nodiscard]] bool loadBank(const std::filesystem::path& path, Bank& out, std::string& error);
 
+/// A folder of SFZ programs as a bank: `NNN/PPP_Name.sfz`, NNN the bank (128 the kits)
+/// and PPP the program (SfzBank.cpp). loadBank reads a folder through this.
+[[nodiscard]] bool loadSfzFolder(const std::filesystem::path& folder, Bank& out,
+                                 std::string& error);
+
 /// The Windows GS Wavetable bank, `%SystemRoot%\System32\drivers\gm.dls`; empty when the
 /// file is not there. Read in place: it is Microsoft's and is never copied.
 [[nodiscard]] std::filesystem::path systemGmBank();

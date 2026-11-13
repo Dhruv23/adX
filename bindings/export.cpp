@@ -196,7 +196,7 @@ void registerExportBindings(py::module_& m) {
     // GIL: trivial - a MIDI file parses in well under a millisecond; then one command
     m.def(
         "import_midi",
-        [](adx::bindings::ProjectHandle& project, const std::string& path) {
+        [](adx::bindings::ProjectHandle& project, const std::string& path, bool gmParts) {
             std::string error;
             const std::optional<adx::format::midi::MidiSong> song =
                 adx::format::midi::readMidiFile(path, error);
@@ -205,15 +205,19 @@ void registerExportBindings(py::module_& m) {
             }
             const std::string stem = std::filesystem::path(path).stem().string();
             py::dict out;
-            out["pattern"] = adx::format::midi::importSong(*song, project.project, project.stack,
-                                                           stem.empty() ? "MIDI" : stem);
+            out["pattern"] = adx::format::midi::importSong(
+                *song, project.project, project.stack, stem.empty() ? "MIDI" : stem,
+                gmParts ? adx::format::midi::ImportLayout::GmParts
+                        : adx::format::midi::ImportLayout::PerTrack);
             out["tracks"] = song->tracks.size();
             out["division"] = song->division;
             return out;
         },
-        py::arg("project"), py::arg("path"),
+        py::arg("project"), py::arg("path"), py::arg("gm_parts") = false,
         "Import a Standard MIDI File into `project` as one undo step: a channel per track, "
-        "one pattern of their notes placed at the start, its tempo, meter and markers.");
+        "one pattern of their notes placed at the start, its tempo, meter and markers. "
+        "With gm_parts, one 16-part `gm` channel plays every track, each MIDI channel a part "
+        "with its programs and controllers (Play on one GM channel).");
     // GIL: trivial - builds a song from Python lists, then the import's commands
     m.def(
         "import_song",

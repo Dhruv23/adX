@@ -11,4 +11,8 @@ browser, or render one with `python tools/packs/audition.py <file>`.
 | G5 | `ott-lead.adxrack` | a clipped supersaw through OTT into a shimmer Hall |
 | G6 | `cowbell-808.adxpreset`, `cowbell-melody.adx` | DrumSynth's 808 cowbell, played as a melody |
 | G7 | `violin-section-ks.adxpreset` | VSCO 2's keyswitched violin section, imported from its SFZ (needs `fetch_libraries.py fetch vsco2ce`) |
-| G8 | — | the General MIDI player is not built yet (STATE.md, Phase 12 open issues) |
+| G8 | (made locally) | the WannaCry transcription exported as a `.mid`, imported onto one 16-part `gm` channel (File > Import MIDI on one GM channel), and played once on the Windows `gm.dls` and once on GeneralUser GS from the library store (`fetch_libraries.py fetch generaluser`). The song is the user's own corpus and is never committed: `check_demo_set.py --wannacry` builds both projects under `build/phase12-demo/wannacry/` |
+
+`python tools/packs/check_demo_set.py [--wannacry]` checks the set before anyone listens:
+each sound loads, renders with no `adx glitch` findings and is listed in the browser's
+Sounds section. Its report is `build/phase12-demo/report.json`.

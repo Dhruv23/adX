@@ -171,6 +171,9 @@ protected:
     /// the voice as it is.
     virtual void retriggerVoice(Voice& voice, const BlockEvent& event,
                                 const VoiceRender& render) noexcept;
+    /// A live controller or program change (BlockEventKind::Controller). The default
+    /// ignores it.
+    virtual void controller(const BlockEvent& event, const VoiceRender& render) noexcept;
 
     /// The slot of `voice` in the pool's storage: the index an instrument's parallel
     /// per-voice state array is read at (P3-6).

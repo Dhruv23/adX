@@ -4,6 +4,9 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <string>
+
+#include "engine/project/TypeCatalog.h"
 
 namespace adx::preset {
 namespace {
@@ -43,11 +46,29 @@ Preset presetFromSfz(format::sfz::Import& import, const SfzPresetOptions& option
     const auto envelope = [&](const char* opcode, const char* param, float Region::* field) {
         const Common common = mostCommon(import.regions, field);
         if (common.value >= 0.0F) {
-            preset.params.push_back(project::ParamValue{
-                .name = param,
-                .value = std::round(static_cast<double>(common.value) * 1e6) / 1e6,
-                .hasCurve = false,
-                .curve = {}});
+            // The sampler's range: VCSL's xylophone asks for a 15 s release, which loads as
+            // an out-of-range warning. Clamped here, and said so.
+            auto value = static_cast<double>(common.value);
+            const project::TypeInfo* sampler = project::findInstrumentType("sampler");
+            const project::ParamDescriptor* descriptor =
+                sampler != nullptr ? project::findParam(*sampler, param) : nullptr;
+            if (descriptor != nullptr &&
+                (value < descriptor->minimum || value > descriptor->maximum)) {
+                const double clamped = std::clamp(value, static_cast<double>(descriptor->minimum),
+                                                  static_cast<double>(descriptor->maximum));
+                import.notes.push_back(
+                    format::sfz::Note{.kind = format::sfz::NoteKind::Approximated,
+                                      .opcode = opcode,
+                                      .detail = std::to_string(value) + " is outside " + param +
+                                                "'s range; " + std::to_string(clamped) + " instead",
+                                      .line = 0,
+                                      .column = 0});
+                value = clamped;
+            }
+            preset.params.push_back(project::ParamValue{.name = param,
+                                                        .value = std::round(value * 1e6) / 1e6,
+                                                        .hasCurve = false,
+                                                        .curve = {}});
         }
         if (common.others > 0) {
             import.notes.push_back(

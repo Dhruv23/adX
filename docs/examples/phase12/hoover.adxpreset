@@ -30,4 +30,4 @@ lfo1.delay=0.5
 lfo1.fade=0.4
 voice.mode=2
 glide=0.12
-level=-8
+level=-1

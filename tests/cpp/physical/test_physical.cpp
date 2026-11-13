@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "engine/instruments/physical/ModeTables.h"
 #include "engine/instruments/physical/PhysicalInstrument.h"
 #include "tests/cpp/instruments/InstrumentHarness.h"
 
@@ -174,14 +175,16 @@ TEST_CASE("physical_models_sound", "[physical]") {
 }
 
 TEST_CASE("physical_modal_partials", "[physical]") {
-    // The marimba table: its second mode at 3.9 times the first.
+    // The marimba table: its second mode where the table puts it (about 4, measured).
     const auto run = runInstrument(*preparedInstrument("physical"), {noteOn(0, 1, 60)}, 24000,
                                    physicalParams({{"model", 2.0F},
                                                    {"modes.table", 2.0F},
                                                    {"modes.decay", 2.0F},
                                                    {"modes.decayTilt", 0.0F}}));
     const double f = hzOf(60);
-    CHECK(levelDb(run.left, 2400, 8192, f * 3.9) > levelDb(run.left, 2400, 8192, f * 3.0) + 20.0);
+    const double second = adx::instruments::kModeTables[2].ratio[1];
+    CHECK(levelDb(run.left, 2400, 8192, f * second) >
+          levelDb(run.left, 2400, 8192, f * 3.0) + 20.0);
     CHECK(levelDb(run.left, 2400, 8192, f) > levelDb(run.left, 2400, 8192, f * 1.5) + 20.0);
 }
 

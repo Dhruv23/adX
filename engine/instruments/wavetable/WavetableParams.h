@@ -82,9 +82,93 @@ inline constexpr auto kWavetableOwnParams = std::to_array<project::ParamDescript
 
 static_assert(kWavetableOwnParams.size() == static_cast<std::size_t>(WavetableParam::Count));
 
-/// The table: the wavetable's own parameters, then the modulation layer's.
-inline constexpr auto kWavetableParams = withModParams(kWavetableOwnParams);
 inline constexpr ModLayout kWavetableMod =
     ModLayout::appendedTo(static_cast<std::uint32_t>(WavetableParam::Count));
+
+/// The modern shape (phase_12.md §4.3): a second oscillator, a sub, noise, the VA's
+/// filter types with an envelope, and warp. After the modulation block, so nothing
+/// before it moved; every default is off, so a patch without them renders as before.
+enum class WavetableExtra : std::uint32_t {
+    Osc2Table,
+    Osc2Position,
+    Osc2Semi,
+    Osc2Fine,
+    Osc2Level,
+    SubLevel,
+    NoiseLevel,
+    FilterType,
+    FilterEnvAmount,
+    FilterEnvAttack,
+    FilterEnvDecay,
+    FilterEnvSustain,
+    FilterEnvRelease,
+    WarpMode,
+    WarpAmount,
+    Count,
+};
+
+/// filter.type: low-pass first, so the default is the filter the wavetable always had.
+enum class WavetableFilter : std::uint8_t { LowPass, Ladder, BandPass, HighPass, Notch };
+inline constexpr std::uint8_t kWavetableFilterCount = 5;
+
+/// warp.mode: how the read phase is bent before the table is read.
+enum class WavetableWarp : std::uint8_t {
+    None,
+    Sync,
+    BendPlus,
+    BendMinus,
+    Pwm,
+    Asym,
+    FmFromOsc2,
+    Mirror,
+    Quantise,
+};
+inline constexpr std::uint8_t kWavetableWarpCount = 9;
+
+inline constexpr auto kWavetableExtraParams = std::to_array<project::ParamDescriptor>({
+    detail::wt("osc2.table", 0, kWavetableBankCount - 1, 0, project::Unit::Count,
+               project::ScaleKind::Stepped),
+    detail::wt("osc2.position", 0, 1, 0, project::Unit::Normalized),
+    detail::wt("osc2.semi", -24, 24, 0, project::Unit::Semitones, project::ScaleKind::Stepped),
+    detail::wt("osc2.fine", -100, 100, 0, project::Unit::Cents),
+    // 0 is off: osc2 is not read at all.
+    detail::wt("osc2.level", 0, 1, 0, project::Unit::Normalized),
+    // A sine an octave below the note.
+    detail::wt("sub.level", 0, 1, 0, project::Unit::Normalized),
+    detail::wt("noise.level", 0, 1, 0, project::Unit::Normalized),
+    detail::wt("filter.type", 0, kWavetableFilterCount - 1, 0, project::Unit::Count,
+               project::ScaleKind::Stepped),
+    // Octaves at full envelope, as the VA's.
+    detail::wt("filter.envAmount", -8, 8, 0, project::Unit::Count),
+    detail::wt("filterEnv.attack", 0, 10, 0.005F, project::Unit::Seconds,
+               project::ScaleKind::Logarithmic),
+    detail::wt("filterEnv.decay", 0, 10, 0.3F, project::Unit::Seconds,
+               project::ScaleKind::Logarithmic),
+    detail::wt("filterEnv.sustain", 0, 1, 0.3F, project::Unit::Normalized),
+    detail::wt("filterEnv.release", 0, 10, 0.3F, project::Unit::Seconds,
+               project::ScaleKind::Logarithmic),
+    detail::wt("warp.mode", 0, kWavetableWarpCount - 1, 0, project::Unit::Count,
+               project::ScaleKind::Stepped),
+    detail::wt("warp.amount", 0, 1, 0, project::Unit::Normalized),
+});
+static_assert(kWavetableExtraParams.size() == static_cast<std::size_t>(WavetableExtra::Count));
+
+/// Where the extra block starts: after the own parameters and the modulation layer.
+inline constexpr std::uint32_t kWavetableExtraBase =
+    static_cast<std::uint32_t>(WavetableParam::Count) + kModParamCount;
+
+/// The table: the wavetable's own parameters, the modulation layer's, then the extra.
+inline constexpr auto kWavetableParams = [] {
+    constexpr auto withMod = withModParams(kWavetableOwnParams);
+    std::array<project::ParamDescriptor, withMod.size() + kWavetableExtraParams.size()> table{};
+    for (std::size_t i = 0; i < withMod.size(); ++i) {
+        table[i] = withMod[i];
+    }
+    for (std::size_t i = 0; i < kWavetableExtraParams.size(); ++i) {
+        table[withMod.size() + i] = kWavetableExtraParams[i];
+    }
+    return table;
+}();
+static_assert(kWavetableParams.size() == kWavetableExtraBase + kWavetableExtraParams.size());
 
 } // namespace adx::instruments

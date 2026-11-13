@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Not started |
+| **Status** | Done (2026-11-13) |
 | **Governs** | rack presets and macros, per-voice modulation, the `physical` instrument, new DrumSynth models, eleven new effects, sampler keyswitch/release zones, SFZ import, SF2/DLS import and the `gm` General MIDI player, the sample-library pipeline, pack tooling and audition |
 | **FINAL_PLAN refs** | §4 (a new `[MACRO]` entity), §5.3, §5.4, §5.9 (preset packs), §5.12 (the sound library — added with this phase), §7 Phase 12, §9 |
 | **Entry criteria** | [phase_11.md](phase_11.md) §6 complete. Every golden hash recorded at the end of Phase 11 is the baseline this phase must not move. |
@@ -731,9 +731,9 @@ library store still has every synthesized preset complete.
 
 ## 6. Definition of done
 
-- [ ] `golden_unchanged_by_phase12` passes on Debug, RelWithDebInfo and Release.
-- [ ] Every test in §5 passes locally and in CI (library-tagged ones in the full check).
-- [ ] **The demonstration rack set exists, one per gap**, each rendered and
+- [x] `golden_unchanged_by_phase12` passes on Debug, RelWithDebInfo and Release.
+- [x] Every test in §5 passes locally and in CI (library-tagged ones in the full check).
+- [x] **The demonstration rack set exists, one per gap**, each rendered and
       listened to: G1 a 3-layer kick rack with chain and ducked send; G2 the same
       with two macros; G3 a hoover-style patch with a pitch dive and late
       vibrato; G4 a plucked guitar, a marimba and a bowed cello; G5 an OTT'd
@@ -741,14 +741,14 @@ library store still has every synthesized preset complete.
       keyswitched VSCO violin section from SFZ; G8 the WannaCry `.mid` imported
       onto one 16-part `gm` channel, played once on the system `gm.dls` and once
       on the shipped GM bank.
-- [ ] `docs/sound-design.md` written; `docs/adx-format-v2.md` covers `[MACRO]`, `.adxrack`, `pack.adxpack`, `lib://`.
-- [ ] Library fetch verified for VSCO 2 CE, VCSL and Salamander, run by the agent on
+- [x] `docs/sound-design.md` written; `docs/adx-format-v2.md` covers `[MACRO]`, `.adxrack`, `pack.adxpack`, `lib://`.
+- [x] Library fetch verified for VSCO 2 CE, VCSL and Salamander, run by the agent on
       this machine (fetch, hash check, and one keyswitched render per library).
-- [ ] **Human gate:** the user plays the demonstration set in adX and says it is
+- [x] **Human gate** (2026-11-12, see STATE.md): the user plays the demonstration set in adX and says it is
       ready for pack building, recorded in their own words. (judgement) Before the
       user is asked, an agent has checked that every rack loads, renders without
       `adx glitch` findings, and appears in the browser (FINAL_PLAN §9).
-- [ ] FINAL_PLAN §10 row and STATE.md updated; launcher rebuilt and checked.
+- [x] FINAL_PLAN §10 row and STATE.md updated; launcher rebuilt and checked.
 
 ---
 
@@ -854,7 +854,11 @@ Where the build differs from the plan above, and why. Recorded as the work lands
    and `TempoLfo.h` are that one file and `dsp/ModMatrix.h`. Two extra sources (the
    wheel and pressure) are parameters, `mod.wheel` and `mod.pressure`, so they are
    learnable and automatable without a new event kind. Wavetable's §4.3 extension
-   (osc2, sub, noise, warp, filter types and envelope) is **not built**: open issue.
+   (osc2, sub, noise, warp, filter types and envelope) is built after the modulation
+   block (`WavetableExtra`), so no earlier index moved; every part is skipped when off.
+   `filter.type` puts low-pass first (the filter it always had), then the VA's ladder,
+   band-pass, high-pass and notch. Tests: `wavetable_osc2_sub_noise`,
+   `wavetable_filter_types_and_envelope`, `wavetable_warp_modes`.
 8. **A synced LFO reads the tempo map, not a rate.** Each control interval's phase step
    is the beats the interval spans (GrossBeat's `beatsAt`) over the LFO's length, so it
    stays on the beat through a ramp (`lfo_sync_tempo_change`: the minimum of a
@@ -900,21 +904,39 @@ Where the build differs from the plan above, and why. Recorded as the work lands
     filter and LFOs per zone are in the `gm` instrument's own voice (`GmInstrument`),
     which is where SF2 and DLS banks play. An SFZ's per-region envelope therefore plays
     as the instrument's (the import takes the value most regions use and reports the
-    rest), and ARIA's `egNN`/`lfoNN` are reported as approximated: `sfz_import_aria_gm`'s
-    audible eg06/lfo07 half is an open issue. `zone_articulation_inert` holds trivially:
-    no zone carries one.
+    rest), and ARIA's `egNN`/`lfoNN` are reported as approximated *for the sampler*. A folder of
+    SFZ programs loads as a `gm` bank instead (`loadSfzFolder`, below), where they play:
+    `sfz_import_aria_gm` hears eg06's pitch dive on the Reed Organ and lfo07's vibrato on
+    the Viola (the Reed Organ has no lfo07 depth; §5's wording assumed one).
+    `zone_articulation_dahdsr` and `zone_articulation_inert` test the `gm` voice on a
+    hand-built bank. Writing the inert test found that an empty delay, attack or hold
+    cost a silent sample each at note start; empty stages now pass straight through.
 18. **`physical`'s body is three resonances per type, not a commuted IR (§4.4.1).** Loading
     an IR file into an instrument node is a pipeline the instrument path does not have;
     three two-pole resonances per body cost nothing per voice. The modal model has eight
     modes and no per-mode overrides (`mode.1..24.*`); the tables are the textbook ratios,
     not yet measured against library samples (`mode_tables_match_references` is open).
-19. **`gm` is single-part (§4.7.5).** A channel plays one program (`program`, `bankMsb`,
-    `bankLsb`, `drums`), read at each note so an automation step is a program change.
-    The 16-part mode, per-note MIDI channels and the "play on one GM channel" MIDI import
-    option are not built: a `.mid` imports as the existing per-channel split, onto `gm`
-    channels. The bank is `BANK=` (stored where `VOICEBANK` is); empty or
-    `system:gm.dls` is the Windows bank, read in place. The ARIAConverted folder-as-bank
-    path is not built, since DLS landed first.
+19. **`gm`'s parts are parameters (§4.7.5).** Single mode plays one program (`program`,
+    `bankMsb`, `bankLsb`, `drums`), read at each note so an automation step is a program
+    change. `part=1` is the 16-part mode: a note carries its MIDI channel (`Note::part`,
+    `ch=1..16` in the file, omitted on 1; a live message's own channel), and each part has
+    `pN.program`, `pN.bankMsb`, `pN.volume`, `pN.expression`, `pN.pan` and `pN.drums`
+    (p10's on by default). Program changes and CC0/7/10/11 are therefore automation lanes,
+    stepped, not a new event kind; volume 100 and expression 127 are unity, so a part left
+    alone is exactly as loud as a single-part channel (`gm_16part_midi_import` compares the
+    two sample for sample). "Import MIDI on one GM channel" (File menu,
+    `import_midi(gm_parts=True)`) reads each channel's program changes and those
+    controllers: the value at a part's first note becomes its parameter, later changes a
+    lane; a held sustain pedal lengthens the notes it holds, since nothing downstream reads
+    CC64. Live MIDI reaches `gm` as a new block event, `Controller`: program change, CC0,
+    CC1 (SF2's default modulator, up to 50 cents of vibrato; `modWheel`, `pN.modWheel`),
+    CC7, CC10, CC11, CC120, CC121 and CC123, kept per part in fixed arrays. Pitch bend
+    is a pitch glide, its range from RPN 0 (EngineCore already tracked it). Tests:
+    `sf2_default_modulators`, `gm_live_controllers`. The bank is `BANK=` (stored where
+    `VOICEBANK` is); empty or `system:gm.dls` is the Windows bank, read in place, or
+    GeneralUser GS from the library store where Windows has none; `lib://` banks resolve
+    in the store. A folder of SFZ programs is a bank
+    too: `NNN/PPP_Name.sfz`, NNN the bank, the layout of ARIAConverted/ (`SfzBank.cpp`).
 20. **SF2's bank modulators are reported, not mapped.** The default set (velocity to
     attenuation and cutoff, the pitch wheel) is applied; any `pmod`/`imod` entry outside
     it is counted in the report. CC-driven modulation (CC1 vibrato, CC7/10/11) needs
@@ -925,6 +947,28 @@ Where the build differs from the plan above, and why. Recorded as the work lands
 22. **The demonstration set is in `docs/examples/phase12/`, not a pack.** The per-preset
     golden test requires every shipped preset to sound in CI, where `lib://` presets are
     silent; the demo is examples, shipped with the installer, without that constraint.
-23. **The library dialog is a command, not yet a dialog.** `fetch_libraries.py` is what
-    "Get sound libraries" runs; the Qt dialog is an open issue. The browser shows a
-    rack that needs a missing library as "(needs library)".
+23. **The library dialog runs the fetch tool (§4.8).** File > Get sound libraries lists
+    each library (size, licence, fetched or not) and runs `fetch_libraries.py fetch` or
+    `verify` as a child process, its output streaming into the dialog, which is not
+    modal: a fetch can take an hour. A copy of adX without `tools/packs` says so. The
+    browser shows a rack that needs a missing library as "(needs library)".
+24. **The shipped GM bank is GeneralUser GS, not FluidR3 (§4.7.5).** FluidR3_GM has no
+    upstream git repository to pin; GeneralUser GS is its author's own
+    (mrbumpy409/GeneralUser-GS, pinned at 684543d5e5ef, 30.8 MB). Its licence (v2.0) allows
+    use in software and repackaging; the author can't vouch for every sample's origin, so
+    the store marks it `redistributable=False` and it is fetched, never bundled.
+    `gm_shipped_bank` plays C4 on all 128 programs through it.
+25. **gm's decay and release fall 96 dB per stage time; TinySoundFont's fall 80 dB**
+    (§5 `sf2_matches_reference`). TinySoundFont's amp-envelope constant is ln 10^4, which
+    its own source calls a "mystery slope"; gm keeps SF2's 960 cB full scale, as
+    FluidSynth does. The test holds pitch (1 cent), attack, hold, sustain and the kit
+    within 0.5 dB, and the release slopes to that 96:80 ratio within 5 %.
+26. **The mode tables are measured, not textbook (§4.4.3).** `tools/packs/measure_modes.py`
+    reads each table's reference instrument in VCSL (marimba, xylophone, vibraphone,
+    glockenspiel, timpani, kalimba), each mode the strongest peak near its textbook
+    ratio, median over the instrument's notes; the tables hold those values and
+    `mode_tables_match_references` (tests/python, local: it needs VCSL) holds them within
+    2 %. The marimba is 1 : 4.00 : 10.07, as a tuned bar should be; VCSL's xylophone and
+    glockenspiel sit below the textbook ratios (2.73, 2.59). Tubular bell and glass have
+    no usable reference (a bell's sounding pitch is not its first mode; VCSL's glasses
+    are bowed) and the others none in any fetched library: they keep their cited ratios.

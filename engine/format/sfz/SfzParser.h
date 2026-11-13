@@ -23,6 +23,7 @@
 #include <functional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "engine/project/SampleZone.h"
@@ -43,6 +44,9 @@ struct Region {
     float velocityTrack{-1.0F};
     bool oneShot{false};
     std::uint32_t line{0};
+    /// ARIA's flex EGs and LFOs (egNN_*, lfoNN_*), as the file wrote them. The sampler
+    /// does not play them (each is an approximated note); a gm bank read from SFZ does.
+    std::vector<std::pair<std::string, double>> modulation;
 };
 
 enum class NoteKind : std::uint8_t { Unknown, Ignored, Approximated };

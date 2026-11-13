@@ -52,6 +52,17 @@ struct MidiNote {
     [[nodiscard]] friend bool operator==(const MidiNote&, const MidiNote&) noexcept = default;
 };
 
+/// A program change or one of the controllers a General MIDI part keeps (bank select
+/// CC0, volume CC7, pan CC10, expression CC11, sustain CC64), in adX ticks. Read on
+/// import for the 16-part `gm` channel (phase_12.md §4.7.5); export writes none.
+struct MidiControl {
+    /// The controller number, or kMidiProgram for a program change.
+    static constexpr std::uint8_t kMidiProgram = 0xFF;
+    std::int64_t at{0};
+    std::uint8_t control{0};
+    std::uint8_t value{0};
+};
+
 struct MidiTrack {
     /// The track-name meta event, or "MIDI Ch N".
     std::string name;
@@ -62,6 +73,8 @@ struct MidiTrack {
     /// note - so each note bends alone. Set by export for a track with bent notes, and
     /// by import for a track that configured a zone.
     bool mpe{false};
+    /// The channel's program changes and part controllers, in file order.
+    std::vector<MidiControl> controls{};
 
     [[nodiscard]] bool percussion() const noexcept {
         return channel == 9;

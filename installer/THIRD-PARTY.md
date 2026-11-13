@@ -28,6 +28,7 @@ files needed to relink adX against a modified shine are provided.
 | VST 3 public SDK | v3.8.0_build_66 | MIT | plugin hosting |
 | ONNX Runtime | 1.27.1 | MIT | optional melody extractor |
 | Basic Pitch model | 0.4.0 | Apache-2.0 | optional melody extractor |
+| TinySoundFont | 853a0a171759f1ddba0de1442133a75912bbeffa | MIT | tests only, not shipped |
 | msfa (music-synthesizer-for-android) | f67d41d313b7dc85f6fb99e79e515cc9d208cfff | Apache-2.0 | the dx7 instrument (ported); its test oracle |
 
 ## Runtime (Python)
@@ -48,3 +49,4 @@ Fetched by `tools/packs/fetch_libraries.py` into the user's library store at a p
 | VSCO 2 Community Edition (SFZ) | 6dd651d55dde | CC0-1.0 | Versilian Studios |
 | Versilian Community Sample Library (SFZ) | dfcf4a491877 | CC0-1.0 | Versilian Studios |
 | Salamander Grand Piano V3 | 3382bf9496bb | CC-BY-3.0 | Alexander Holm |
+| GeneralUser GS (SoundFont) | 684543d5e5ef | GeneralUser-GS-2.0 | S. Christian Collins |

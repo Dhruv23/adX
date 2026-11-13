@@ -258,6 +258,27 @@ def test_midi_round_trip_through_the_window(studio: MainWindow, tmp_path: pathli
     assert "Imported chords.mid" in studio.statusBar().currentMessage()
 
 
+def test_midi_import_on_one_gm_channel(studio: MainWindow, tmp_path: pathlib.Path) -> None:
+    """File > Import MIDI on one GM channel: every track on one 16-part gm channel."""
+    from adx.engine_bridge import export_midi
+
+    repo = pathlib.Path(__file__).resolve().parents[3]
+    source, _ = Project.load(str(repo / "tests" / "golden" / "chord_steal.adx"))
+    midi = tmp_path / "chords.mid"
+    export_midi(source, str(midi))
+    notes = int(source.info()["notes"])
+    studio.new_project()
+    project = studio.project
+    assert project is not None
+    before = set(project.channels())
+    studio.delivery.import_midi(str(midi), gm_parts=True)
+    added = [c for c in project.channels() if c not in before]
+    assert added == ["GM"]
+    assert project.channel_info("GM")["instrument"] == "gm"
+    assert int(project.info()["notes"]) == notes
+    assert studio.registry.spec("file.import_midi_gm").menu == "&File"
+
+
 def test_collect_and_save(studio: MainWindow, tmp_path: pathlib.Path) -> None:
     """Collect saves first, then bundles the samples and zips."""
     _open_with_clip(studio, tmp_path)

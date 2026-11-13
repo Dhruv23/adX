@@ -18,7 +18,7 @@ PARAM unison.voices=8
 PARAM unison.detune=35
 PARAM filter.cutoff=9000
 PARAM env.release=0.25
-PARAM level=-10
+PARAM level=-3
 
 [CHAIN]
 SLOT Clipper mode=0 drive=9

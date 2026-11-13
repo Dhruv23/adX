@@ -2239,9 +2239,10 @@ class ExportJob:
 
 
 @_ffi
-def import_midi(project: Project, path: str) -> dict[str, Any]:
-    """A Standard MIDI File into ``project``, one undo step: pattern, tracks, division."""
-    return dict(_native.import_midi(project.native, path))
+def import_midi(project: Project, path: str, gm_parts: bool = False) -> dict[str, Any]:
+    """A Standard MIDI File into ``project``, one undo step: pattern, tracks, division.
+    ``gm_parts`` puts every track on one 16-part ``gm`` channel (Play on one GM channel)."""
+    return dict(_native.import_midi(project.native, path, gm_parts=gm_parts))
 
 
 @_ffi

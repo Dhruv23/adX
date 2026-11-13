@@ -287,3 +287,20 @@ TEST_CASE("effect_no_alloc_in_process", "[effects][rt]") {
         CHECK(run.violations == 0);
     }
 }
+
+TEST_CASE("effects_no_alloc_new", "[effects][rt][.slow]") {
+    // Phase 12's effects, 60 s each of noise under the allocator hook (phase_12.md §5).
+    // effect_no_alloc_in_process covers every effect for a second on every push.
+    if (!adx::rt::allocGuardCompiledIn()) {
+        SUCCEED("allocator hook not compiled in (Release)");
+        return;
+    }
+    const StereoSignal in = adx::tests::noise(12U, 0.5F, std::size_t{48000} * 60);
+    for (const std::string_view type :
+         {"Clipper", "Shaper", "Filter", "Resonator", "OTT", "Ensemble", "Tape", "Hall", "Rotary",
+          "PitchCorrect", "VolumeShaper"}) {
+        INFO(type);
+        const EffectRun run = runEffect(*preparedEffect(type), in, slotParams(type), 256);
+        CHECK(run.violations == 0);
+    }
+}

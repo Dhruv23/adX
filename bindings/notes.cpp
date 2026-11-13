@@ -58,6 +58,7 @@ py::dtype makeNoteDtype() {
     field("cutoff", "<f4", offsetof(NoteRecord, cutoff));
     field("resonance", "<f4", offsetof(NoteRecord, resonance));
     field("muted", "u1", offsetof(NoteRecord, muted));
+    field("part", "u1", offsetof(NoteRecord, part));
     return {names, formats, offsets, static_cast<py::ssize_t>(sizeof(NoteRecord))};
 }
 
@@ -92,7 +93,8 @@ using NoteArray = py::object;
                       .pan = note.pan,
                       .cutoff = note.cutoff,
                       .resonance = note.resonance,
-                      .muted = static_cast<std::uint8_t>(note.muted ? 1 : 0)};
+                      .muted = static_cast<std::uint8_t>(note.muted ? 1 : 0),
+                      .part = note.part};
 }
 
 [[nodiscard]] adx::project::Note fromRecord(const NoteRecord& record) noexcept {
@@ -108,6 +110,7 @@ using NoteArray = py::object;
     note.cutoff = record.cutoff;
     note.resonance = record.resonance;
     note.muted = record.muted != 0;
+    note.part = std::min<std::uint8_t>(record.part, 15);
     return note;
 }
 

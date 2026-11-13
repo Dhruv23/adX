@@ -13,4 +13,4 @@ modes.decay=1.4
 modes.decayTilt=1.5
 exciter.hardness=0.4
 env.release=0.8
-level=-6
+level=-13

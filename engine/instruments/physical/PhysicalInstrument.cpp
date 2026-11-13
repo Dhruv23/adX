@@ -18,6 +18,7 @@ constexpr double kLowestHz = 20.0;
 /// A voice this quiet for this long has finished ringing.
 constexpr float kQuiet = 1e-6F;
 constexpr std::uint32_t kQuietFrames = 4800;
+constexpr float kRungOut = 1e-4F;
 
 [[nodiscard]] constexpr std::uint32_t idx(P param) noexcept {
     return static_cast<std::uint32_t>(param);
@@ -515,13 +516,22 @@ bool PhysicalInstrument::renderVoice(graph::Voice& voice, std::span<float> left,
         left[i] = l;
         right[i] = r;
 
-        // Done: the envelope's release is over, or the string has stopped ringing.
-        state.quietFrames = std::abs(y) < kQuiet ? state.quietFrames + 1 : 0;
+        // Done: the envelope's release is over, or the string has stopped ringing. A bow
+        // or breath's envelope drives the exciter, not the output: when it ends the string
+        // or bore still rings out, and only falling quiet ends the voice. Cutting it at
+        // the envelope's end was a click on every bowed note (check_demo_set.py).
         const bool sustained =
             state.model == PhysicalModel::Bow || state.model == PhysicalModel::Tube;
-        if (state.env.finished() ||
+        // Its exciter gone, a bowed or blown voice is let go 80 dB down: inaudible, and too
+        // small a step to click, where waiting for 120 dB holds a voice for seconds more.
+        const float quiet = sustained && state.env.finished() ? kRungOut : kQuiet;
+        state.quietFrames = std::abs(y) < quiet ? state.quietFrames + 1 : 0;
+        if ((state.env.finished() && !sustained) ||
             (state.quietFrames > kQuietFrames && (!sustained || state.released) &&
-             state.exciteLeft == 0 && state.strikeLeft == 0)) {
+             // The pick's burst and the mallet's strike are counted down only by the
+             // models that use them.
+             (state.model != PhysicalModel::Pluck || state.exciteLeft == 0) &&
+             (state.model != PhysicalModel::Modal || state.strikeLeft == 0))) {
             alive = false;
         }
     }

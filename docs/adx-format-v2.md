@@ -373,6 +373,7 @@ labelling it v1 would send the next load through the v1 shim.
 |---|---|---|
 | `INSTRUMENT` | ident | `additive` |
 | `VOICEBANK` | string: a folder, resolved like a sample path | none; `voice` channels only |
+| `BANK` | string: an `.sf2`, a `.dls` or a folder of SFZ programs (`NNN/PPP_Name.sfz`, NNN the bank: the layout of a converted bank such as ARIAConverted/), resolved like a sample path; `lib://<id>/<path>`; or `system:gm.dls`, the Windows bank, read in place and never copied (on a machine without it, `lib://generaluser/GeneralUser-GS.sf2`) | `system:gm.dls`; `gm` channels only |
 | `OUTPUT` | reference | `master` |
 | `POLYPHONY` | integer 1..256 | `16` |
 | `STEAL` | `oldest-released` \| `oldest` \| `quietest` \| `none` | `oldest-released` |
@@ -502,6 +503,7 @@ note-line   = note-name , hspace , position , hspace , duration ,
               hspace , integer , { hspace , note-kv } ;
 note-kv     = "pan" "=" number | "cutoff" "=" number | "res" "=" number
             | "fine" "=" integer | "rel" "=" integer | "mute" "=" boolean
+            | "ch" "=" integer   (* 1..16 *)
             | "slide" "=" slide | "bend" "=" bend | "lyric" "=" string ;
 slide       = pitch-amount , "@" , duration , "+" , duration , [ "~" , curve ] ;
 bend        = bend-point , { "|" , bend-point } ;
@@ -536,6 +538,10 @@ breakpoint  = position , hspace , number , [ hspace , curve ] ;
   not written, so a file without extensions round-trips byte for byte.
 - `mute=yes` keeps a note in the clip and the file but silences it (the piano roll's
   Mute tool, phase_5.md §4.7). Absent means `no`, and `no` is never written.
+- `ch=` is the MIDI channel the note plays on, 1..16. Only a 16-part `gm` channel reads
+  it (each part has its own program, volume and pan, `p1.program` ... `p16.drums`); every
+  other instrument ignores it. Absent means 1, and 1 is never written. "Import MIDI on
+  one GM channel" writes it for each note from the file's channels.
 - `MINI` carries mini-notation source, one or more indented lines, each stored
   with its indentation and any trailing comment removed. The lines are joined by
   one space and compiled as one pattern ([mininotation.md](mininotation.md)); a
@@ -1206,6 +1212,7 @@ any machine that has the library.
 | `vsco2ce` | VSCO 2 Community Edition, SFZ branch | CC0-1.0 |
 | `vcsl` | Versilian Community Sample Library, SFZ branch | CC0-1.0 |
 | `salamander` | Salamander Grand Piano V3 | CC-BY-3.0 (credit Alexander Holm) |
+| `generaluser` | GeneralUser GS, the GM bank `gm` plays without `gm.dls` | GeneralUser GS License v2.0 (credit S. Christian Collins); fetched, not bundled |
 
 ### 13.3 Packs: `pack.adxpack`
 

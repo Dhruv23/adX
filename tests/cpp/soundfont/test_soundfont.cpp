@@ -241,7 +241,7 @@ TEST_CASE("gm_plays_in_tune_with_its_envelope", "[soundfont][gm]") {
     }
 }
 
-TEST_CASE("gm_exclusive_class", "[soundfont][gm]") {
+TEST_CASE("sf2_exclusive_class", "[soundfont][gm]") {
     // The closed hat (42) cuts the ringing open hat (46) within a block.
     const auto node = gmNode(banks() / "tiny_gm.sf2");
     const auto params = gmParams({{"drums", 1.0F}});

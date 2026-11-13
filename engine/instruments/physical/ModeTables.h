@@ -27,22 +27,24 @@ inline constexpr std::array<ModeTable, 16> kModeTables{{
     {"sine", 1, {1}, {1}},
     // 1: Euler-Bernoulli free-free bar: 1, 2.756, 5.404, 8.933.
     {"free bar", 4, {1, 2.756F, 5.404F, 8.933F}, {1, 0.5F, 0.25F, 0.12F}},
-    // 2: marimba: bars undercut so the overtones sit near 4 and 10 (CCRMA percussion
-    //    notes; Rossing, The Science of Percussion Instruments, ch. 3).
-    {"marimba", 3, {1, 3.9F, 9.2F}, {1, 0.35F, 0.12F}},
-    // 3: xylophone: undercut to the twelfth, 3, then near 6.
-    {"xylophone", 3, {1, 3.0F, 6.0F}, {1, 0.5F, 0.2F}},
-    // 4: vibraphone: as the marimba, aluminium, 1 : 4 : 10.
-    {"vibraphone", 3, {1, 4.0F, 10.0F}, {1, 0.3F, 0.1F}},
-    // 5: glockenspiel: steel bars, near free-free.
-    {"glockenspiel", 3, {1, 2.76F, 5.40F}, {1, 0.6F, 0.35F}},
+    // 2-5, 7, 14 are measured (tools/packs/measure_modes.py: the median over a VCSL
+    // instrument's samples), and mode_tables_match_references holds them to it.
+    // 2: marimba: bars undercut so the overtones sit near 4 and 10 (Rossing, The Science
+    //    of Percussion Instruments, ch. 3); VCSL's Marimba, medium dynamic.
+    {"marimba", 3, {1, 4.001F, 10.072F}, {1, 0.35F, 0.12F}},
+    // 3: xylophone: undercut, but VCSL's sits below the textbook twelfth (Medium Mallets).
+    {"xylophone", 3, {1, 2.730F, 5.839F}, {1, 0.5F, 0.2F}},
+    // 4: vibraphone: as the marimba, aluminium, near 1 : 4 : 10 (Hard Mallets).
+    {"vibraphone", 3, {1, 3.999F, 9.898F}, {1, 0.3F, 0.1F}},
+    // 5: glockenspiel: steel bars, near free-free (VCSL's Glockenspiel).
+    {"glockenspiel", 3, {1, 2.591F, 5.604F}, {1, 0.6F, 0.35F}},
     // 6: tubular bell: the struck tone is heard from modes 4-6, near 2 : 3 : 4 (Hibberts).
     {"tubular bell",
      6,
      {1, 2.76F, 5.40F, 8.93F, 13.34F, 18.64F},
      {0.3F, 0.5F, 0.8F, 1, 0.9F, 0.6F}},
-    // 7: timpani: the air-loaded membrane's near-harmonic set (CCRMA).
-    {"timpani", 5, {1, 1.5F, 1.98F, 2.44F, 2.94F}, {1, 0.8F, 0.6F, 0.4F, 0.3F}},
+    // 7: timpani: the air-loaded membrane's near-harmonic set (VCSL's Timpani 1, hits).
+    {"timpani", 5, {1, 1.480F, 1.943F, 2.542F, 2.739F}, {1, 0.8F, 0.6F, 0.4F, 0.3F}},
     // 8: steel pan: tuned to octave and twelfth (Rossing & Hansen).
     {"steel pan", 4, {1, 2.0F, 3.0F, 4.0F}, {1, 0.6F, 0.3F, 0.15F}},
     // 9: handpan: the same practice, spread a few cents.
@@ -58,8 +60,8 @@ inline constexpr std::array<ModeTable, 16> kModeTables{{
     {"reed", 3, {1, 6.27F, 17.55F}, {1, 0.3F, 0.1F}},
     // 13: circular plate / gong: (0,1), (1,1), (2,1), (0,2), (3,1), (1,2).
     {"plate", 6, {1, 1.59F, 2.14F, 2.30F, 2.65F, 2.92F}, {1, 0.8F, 0.7F, 0.6F, 0.5F, 0.4F}},
-    // 14: kalimba / mbira: plucked cantilever tine.
-    {"kalimba", 3, {1, 5.4F, 13.5F}, {1, 0.2F, 0.06F}},
+    // 14: kalimba / mbira: plucked cantilever tine (VCSL's Kalimba, Kenya).
+    {"kalimba", 3, {1, 5.875F, 13.101F}, {1, 0.2F, 0.06F}},
     // 15: wine glass bending modes.
     {"glass", 3, {1, 2.32F, 4.25F}, {1, 0.4F, 0.15F}},
 }};

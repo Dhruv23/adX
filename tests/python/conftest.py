@@ -193,19 +193,37 @@ def _hung(nodeid: str) -> None:
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_protocol(item: pytest.Item, nextitem: pytest.Item | None) -> Iterator[None]:
-    """Run each test (setup, call and teardown) under the watchdog."""
+    """Run each test (setup, call and teardown) under the watchdog. A test marked
+    long(seconds) gets that limit, and pytest's stack dump is moved to it as well (P11-13:
+    the 20-minute set used to print every thread's stack at 240 s)."""
+    long = item.get_closest_marker("long")
+    limit = float(long.args[0]) if long is not None and long.args else _TEST_TIMEOUT
     if _TEST_TIMEOUT <= 0:
         yield
         return
     import threading
 
-    timer = threading.Timer(_TEST_TIMEOUT, _hung, args=(item.nodeid,))
+    timer = threading.Timer(limit + 60.0 if long is not None else limit, _hung, args=(item.nodeid,))
     timer.daemon = True
     timer.start()
     try:
         yield
     finally:
         timer.cancel()
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item: pytest.Item) -> None:
+    """Move pytest's stack dump to a long(seconds) test's own limit. Its faulthandler
+    plugin arms the dump in the innermost runtest wrapper, so this runs inside that and
+    re-arms it; the plugin's teardown cancels whichever is pending."""
+    long = item.get_closest_marker("long")
+    if long is not None and long.args:
+        import faulthandler
+        import sys
+
+        stream = sys.__stderr__ if sys.__stderr__ is not None else sys.stderr
+        faulthandler.dump_traceback_later(float(long.args[0]), file=stream)
 
 
 @pytest.fixture(autouse=True)

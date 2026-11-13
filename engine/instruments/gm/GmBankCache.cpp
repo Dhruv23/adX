@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "engine/format/audio/LibraryPaths.h"
 #include "engine/format/soundfont/SoundFont.h"
 #include "engine/instruments/gm/GmSetup.h"
 
@@ -68,15 +69,30 @@ std::shared_ptr<const format::soundfont::Bank> GmBankCache::get(const std::files
 }
 
 std::filesystem::path gmBankPath(const std::string& written, const std::filesystem::path& base) {
+    std::error_code error;
     if (written.empty() || written == "system:gm.dls") {
-        return format::soundfont::systemGmBank();
+        // The Windows GS bank; on a machine without one, the GM bank adX fetches into
+        // its library store (phase_12.md §4.7.5).
+        std::filesystem::path system = format::soundfont::systemGmBank();
+        if (!system.empty()) {
+            return system;
+        }
+        const std::filesystem::path shipped = format::resolveLibraryPath(kShippedGmBank);
+        return std::filesystem::is_regular_file(shipped, error) ? shipped : std::filesystem::path{};
+    }
+    if (format::isLibraryPath(written)) {
+        const std::filesystem::path stored = format::resolveLibraryPath(written);
+        return std::filesystem::is_regular_file(stored, error) ? stored : std::filesystem::path{};
     }
     std::filesystem::path path(written);
     if (path.is_relative() && !base.empty()) {
         path = base / path;
     }
-    std::error_code error;
-    return std::filesystem::is_regular_file(path, error) ? path : std::filesystem::path{};
+    // A file (.sf2, .dls) or a folder of SFZ programs (ARIAConverted/).
+    return std::filesystem::is_regular_file(path, error) ||
+                   std::filesystem::is_directory(path, error)
+               ? path
+               : std::filesystem::path{};
 }
 
 void setGmBank(GmInstrument& node, std::shared_ptr<const format::soundfont::Bank> bank,

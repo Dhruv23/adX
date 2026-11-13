@@ -57,7 +57,7 @@ Sample libraries are data, not dependencies. Fetch them once:
 
 ```
 python tools/packs/fetch_libraries.py list
-python tools/packs/fetch_libraries.py fetch vsco2ce vcsl salamander
+python tools/packs/fetch_libraries.py fetch vsco2ce vcsl salamander generaluser
 ```
 
 Each is pinned to a commit and checked file by file against

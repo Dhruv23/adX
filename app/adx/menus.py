@@ -62,22 +62,7 @@ def register_actions(window: MainWindow, registry: ActionRegistry) -> None:
             separator=True,
             tooltip="Export audio: any format, stems, range, normalize (Ctrl+E)",
         ),
-        ActionSpec(
-            "file.export_midi",
-            "Export &MIDI…",
-            w.delivery.export_midi_dialog,
-            "&File",
-            "",
-            has_project,
-        ),
-        ActionSpec(
-            "file.import_midi",
-            "&Import MIDI…",
-            w.delivery.import_midi_dialog,
-            "&File",
-            "",
-            has_project,
-        ),
+        *_midi_specs(w, has_project),
         ActionSpec(
             "file.collect",
             "&Collect and save…",
@@ -191,6 +176,44 @@ def register_actions(window: MainWindow, registry: ActionRegistry) -> None:
     for action in registry.scoped("playlist"):
         w.playlist.addAction(action)
     _attach_piano_roll(w, registry)
+
+
+def _midi_specs(w: MainWindow, has_project: Callable[[], bool]) -> list[ActionSpec]:
+    """File > Export MIDI, Import MIDI, Get sound libraries, and Import MIDI on one GM
+    channel."""
+    return [
+        ActionSpec(
+            "file.export_midi",
+            "Export &MIDI…",
+            w.delivery.export_midi_dialog,
+            "&File",
+            "",
+            has_project,
+        ),
+        ActionSpec(
+            "file.import_midi",
+            "&Import MIDI…",
+            w.delivery.import_midi_dialog,
+            "&File",
+            "",
+            has_project,
+        ),
+        ActionSpec(
+            "file.get_libraries",
+            "Get sound &libraries…",
+            w.show_libraries,
+            "&File",
+            "",
+        ),
+        ActionSpec(
+            "file.import_midi_gm",
+            "Import MIDI on one &GM channel…",
+            lambda: w.delivery.import_midi_dialog(gm_parts=True),
+            "&File",
+            "",
+            has_project,
+        ),
+    ]
 
 
 def _piano_roll_specs(w: MainWindow) -> list[ActionSpec]:

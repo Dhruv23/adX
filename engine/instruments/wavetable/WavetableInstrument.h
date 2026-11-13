@@ -17,6 +17,7 @@
 #include <cstdint>
 
 #include "engine/dsp/Envelope.h"
+#include "engine/dsp/LadderFilter.h"
 #include "engine/dsp/Lfo.h"
 #include "engine/dsp/SvFilter.h"
 #include "engine/dsp/WaveTable.h"
@@ -61,6 +62,17 @@ struct WavetableVoice {
     float velocity;
     bool released;
     ModVoice mod;
+    // The extra block: osc2 and the sub follow their own phases; the filter envelope
+    // and the ladder are used only when switched on.
+    std::array<float, kWavetableMaxUnison> phase2;
+    float subPhase;
+    std::uint32_t noise;
+    dsp::Envelope filterEnv;
+    dsp::EnvelopeShape filterShape;
+    std::array<dsp::LadderFilter, 2> ladder;
+    dsp::LadderCoefficients ladderCoefficients;
+    std::uint8_t filterType;
+    bool filterEnvOn;
 };
 
 class WavetableInstrument final : public Instrument<WavetableVoice> {

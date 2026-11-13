@@ -44,7 +44,14 @@ enum class BlockEventKind : std::uint8_t {
     /// `endTick` is the lyric's index in the snapshot's table, for the note that
     /// follows with the same (noteId, instance).
     Lyric,
+    /// A live MIDI controller or program change on MIDI channel `part`: `pitch` is the
+    /// controller number (kProgramChange for a program change), `velocity` its value.
+    /// Only `gm` reads it (phase_12.md §4.7.5); MIDI learn handles the rest.
+    Controller,
 };
+
+/// BlockEvent::pitch of a Controller event that is a program change.
+inline constexpr std::uint8_t kProgramChange = 0xFF;
 
 /// One event, positioned in the block. Built on the audio thread from the snapshot's
 /// ScheduledEvents; the conversion from ticks to an offset has already happened.
@@ -66,6 +73,9 @@ struct BlockEvent {
     BlockEventKind kind;
     std::uint8_t pitch;
     std::uint8_t velocity;
+    /// NoteOn: the MIDI channel, 0-15 - a note's `ch=`, or a live message's channel.
+    /// Only a 16-part `gm` reads it.
+    std::uint8_t part;
 };
 
 /// Sorted by offset. Dispatch is one advancing index over this, never a rescan.

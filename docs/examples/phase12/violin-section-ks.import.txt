@@ -1,0 +1,25 @@
+C:\Users\dhruv\AppData\Local\adX\libraries\vsco2ce@6dd651d55dde\ViolinEns-KS.sfz
+131 regions, 0 samples missing, 0 unknown, 17 ignored, 5 approximated
+
+6:1 ignored sw_default - the lowest switch key is the default
+10:1 ignored sw_label - a label
+14:1 ignored ampeg_dynamic - the envelope is read at the note-on
+246:1 ignored sw_label - a label
+250:1 ignored ampeg_dynamic - the envelope is read at the note-on
+472:1 ignored sw_label - a label
+476:1 ignored ampeg_dynamic - the envelope is read at the note-on
+481:1 ignored group_label - a label
+708:1 ignored sw_label - a label
+712:1 ignored ampeg_dynamic - the envelope is read at the note-on
+717:1 ignored group_label - a label
+948:1 ignored sw_label - a label
+952:1 ignored ampeg_dynamic - the envelope is read at the note-on
+955:1 approximated lorand - random selection plays as a round robin
+955:12 approximated hirand - random selection plays as a round robin
+956:1 ignored group_label - a label
+1184:1 ignored sw_label - a label
+1188:1 ignored ampeg_dynamic - the envelope is read at the note-on
+1191:1 approximated lorand - random selection plays as a round robin
+1191:12 approximated hirand - random selection plays as a round robin
+1192:1 ignored group_label - a label
+0:0 approximated ampeg_release - 43 region(s) differ from the instrument's own env.release

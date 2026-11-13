@@ -119,7 +119,8 @@ def clicks(
         idx = np.arange(n)
         lo = np.clip(idx - half, 0, n)
         hi = np.clip(idx + half + 1, 0, n)
-        total = sq[hi] - sq[lo] - (d * d)
+        # A running sum's rounding can leave a hair below zero; NaN would hide a click.
+        total = np.maximum(sq[hi] - sq[lo] - (d * d), 0.0)
         count = (hi - lo - 1).clip(min=1)
         local = np.sqrt(total / count)
         # Isolated, too: the steps just around it (skipping the one after, which a

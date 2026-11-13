@@ -487,7 +487,8 @@ std::span<const AuditionEvent> EngineCore::gatherLive(std::span<const AuditionEv
                                                           .duration = 0,
                                                           .kind = BlockEventKind::PitchGlide,
                                                           .pitch = 0,
-                                                          .velocity = 0}};
+                                                          .velocity = 0,
+                                                          .part = 0}};
                 };
                 if (event.kind() == midi::MidiKind::PitchBend) {
                     // Every note this input channel holds on this target bends with it.
@@ -498,6 +499,29 @@ std::span<const AuditionEvent> EngineCore::gatherLive(std::span<const AuditionEv
                             glide(held.noteId, cents);
                         }
                     }
+                    continue;
+                }
+                if (event.kind() == midi::MidiKind::ControlChange ||
+                    event.kind() == midi::MidiKind::ProgramChange) {
+                    // Also the channel's own: a gm part's program, bank and mix.
+                    if (count >= m_live.size()) {
+                        m_liveOverflow.fetch_add(1, std::memory_order_acq_rel);
+                        continue;
+                    }
+                    const bool program = event.kind() == midi::MidiKind::ProgramChange;
+                    m_live.at(count++) = AuditionEvent{
+                        .channel = target,
+                        .event = BlockEvent{.offset = incoming.offset,
+                                            .noteId = 0,
+                                            .instance = 0,
+                                            .timeSource = kAuditionSource,
+                                            .endTick = 0,
+                                            .value = 0.0F,
+                                            .duration = 0,
+                                            .kind = BlockEventKind::Controller,
+                                            .pitch = program ? kProgramChange : event.data1,
+                                            .velocity = program ? event.data1 : event.data2,
+                                            .part = event.channel()}};
                     continue;
                 }
                 if (!event.isNoteOn() && !event.isNoteOff()) {
@@ -526,7 +550,8 @@ std::span<const AuditionEvent> EngineCore::gatherLive(std::span<const AuditionEv
                                    .duration = 0,
                                    .kind = on ? BlockEventKind::NoteOn : BlockEventKind::NoteOff,
                                    .pitch = event.data1,
-                                   .velocity = on ? event.data2 : std::uint8_t{0}}};
+                                   .velocity = on ? event.data2 : std::uint8_t{0},
+                                   .part = event.channel()}};
                 if (on) {
                     const auto free =
                         std::ranges::find_if(m_held, [](const HeldLive& h) { return !h.active; });

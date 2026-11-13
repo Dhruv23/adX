@@ -1548,6 +1548,12 @@ void V2Parser::parseNotesBlock(core::PatternId pattern, const BlockNode& node) {
                 note.fineTuneCents = static_cast<std::int16_t>(value);
             } else if (token.text == "rel") {
                 note.releaseVelocity = static_cast<std::uint16_t>(std::clamp(value, 0.0, 127.0));
+            } else if (token.text == "ch") {
+                if (value < 1.0 || value > 16.0) {
+                    m_diag.add(code::kValueOutOfRange, token.valueSpan,
+                               "a note's MIDI channel is 1..16; clamped");
+                }
+                note.part = static_cast<std::uint8_t>(std::clamp(value, 1.0, 16.0) - 1.0);
             } else {
                 m_diag.add(code::kUnknownInlineKey, token.span,
                            "unknown key '" + token.text + "' on a note");

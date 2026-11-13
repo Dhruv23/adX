@@ -58,7 +58,8 @@ struct ScheduledEvent {
     EventKind kind{EventKind::NoteOn};
     std::uint8_t pitch{0};
     std::uint8_t velocity{0};
-    std::uint8_t reserved{0};
+    /// NoteOn/NoteOff: the note's MIDI channel (Note::part), for a 16-part `gm`.
+    std::uint8_t part{0};
 };
 
 static_assert(std::is_trivially_copyable_v<ScheduledEvent>);

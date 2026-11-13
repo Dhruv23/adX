@@ -122,6 +122,8 @@ enum class NoteField : std::uint8_t {
     Resonance,
     /// 0 or 1.
     Muted,
+    /// The MIDI channel, 0-15.
+    Part,
 };
 
 class SetNoteValue final : public Command {

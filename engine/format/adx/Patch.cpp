@@ -517,6 +517,7 @@ std::unique_ptr<project::Command> singleNoteEdit(core::PatternId pattern, const 
     check(before->cutoff != after->cutoff, F::Cutoff, after->cutoff);
     check(before->resonance != after->resonance, F::Resonance, after->resonance);
     check(before->muted != after->muted, F::Muted, after->muted ? 1.0 : 0.0);
+    check(before->part != after->part, F::Part, after->part);
     if (changed.size() != 1) {
         return nullptr;
     }

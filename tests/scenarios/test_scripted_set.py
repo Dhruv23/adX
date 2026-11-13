@@ -77,6 +77,7 @@ def first_sound(audio: np.ndarray, threshold: float = 1e-4) -> int:
     return int(loud[0]) if len(loud) else 0
 
 
+@pytest.mark.long(1800)
 @pytest.mark.parametrize("material", MATERIAL)
 def test_scripted_set(material: str, evidence: pathlib.Path) -> None:
     if not any("loopmidi" in n.lower() for n in _ports()):

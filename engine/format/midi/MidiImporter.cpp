@@ -6,10 +6,14 @@
 #include <cmath>
 #include <fstream>
 #include <iterator>
+#include <limits>
+#include <string>
 #include <utility>
 
 #include "engine/core/Time.h"
+#include "engine/project/ParamRegistry.h"
 #include "engine/project/Project.h"
+#include "engine/project/commands/AutomationCommands.h"
 #include "engine/project/commands/ChannelCommands.h"
 #include "engine/project/commands/CommandStack.h"
 #include "engine/project/commands/NoteCommands.h"
@@ -129,6 +133,7 @@ void bendMessage(std::array<ChannelBend, 16>& bends, bool& mpe, int channel, std
 /// A parsed track's notes into the song: each lyric event onto the note it starts, then
 /// an MPE zone as one track, or one track per channel used.
 void finishTrack(std::array<std::vector<MidiNote>, 16>& notes,
+                 std::array<std::vector<MidiControl>, 16>& controls,
                  const std::vector<std::pair<std::int64_t, std::string>>& lyrics, bool mpe,
                  const std::string& name, MidiSong& song) {
     for (const auto& [at, text] : lyrics) {
@@ -172,16 +177,24 @@ void finishTrack(std::array<std::vector<MidiNote>, 16>& notes,
         }
         sortNotes(mine);
         track.notes = std::move(mine);
+        track.controls = std::move(controls.at(channel));
         song.tracks.push_back(std::move(track));
     }
 }
 
+/// Whether `control` is one a General MIDI part keeps.
+[[nodiscard]] bool partControl(std::uint8_t control) noexcept {
+    return control <= 1 || control == 7 || control == 10 || control == 11 || control == 64;
+}
+
 /// One MTrk chunk: its notes per channel, and the meta events the song keeps.
+// NOLINTNEXTLINE(readability-function-size) - one status byte's dispatch, read in order.
 void parseTrack(ByteReader& r, std::size_t end, std::uint16_t division, MidiSong& song) {
     std::string name;
     std::array<std::vector<MidiNote>, 16> notes;
     std::array<std::array<std::vector<Pending>, 128>, 16> pending;
     std::array<ChannelBend, 16> bends{};
+    std::array<std::vector<MidiControl>, 16> controls;
     /// Lyric meta events, (adX tick, text): each names the note that starts there.
     std::vector<std::pair<std::int64_t, std::string>> lyrics;
     /// An MPE zone configured on this track (RPN 6 on channel 1 or 16).
@@ -292,6 +305,16 @@ void parseTrack(ByteReader& r, std::size_t end, std::uint16_t division, MidiSong
                 close(channel, d1, tick);
             } else if (kind == 0xE0 || kind == 0xB0) {
                 bendMessage(bends, mpe, channel, kind, d1, d2, toAdx(tick, division));
+                if (kind == 0xB0 && partControl(d1)) {
+                    controls.at(static_cast<std::size_t>(channel))
+                        .push_back(
+                            MidiControl{.at = toAdx(tick, division), .control = d1, .value = d2});
+                }
+            } else if (kind == 0xC0) {
+                controls.at(static_cast<std::size_t>(channel))
+                    .push_back(MidiControl{.at = toAdx(tick, division),
+                                           .control = MidiControl::kMidiProgram,
+                                           .value = d1});
             }
         } else {
             // System common: essentially never in files. 0xF2 carries two data bytes,
@@ -316,7 +339,203 @@ void parseTrack(ByteReader& r, std::size_t end, std::uint16_t division, MidiSong
             }
         }
     }
-    finishTrack(notes, lyrics, mpe, name, song);
+    finishTrack(notes, controls, lyrics, mpe, name, song);
+}
+
+/// One GM part's parameter as the file moves it: its name, the controller, its reset
+/// value, and how a controller value becomes the parameter's.
+struct PartLane {
+    const char* name;
+    std::uint8_t control;
+    double reset;
+    double (*value)(std::uint8_t);
+};
+
+double direct(std::uint8_t v) {
+    return v;
+}
+double panOf(std::uint8_t v) {
+    return std::clamp((static_cast<double>(v) - 64.0) / 63.0, -1.0, 1.0);
+}
+
+constexpr std::array<PartLane, 6> kPartLanes{{
+    {.name = "program", .control = MidiControl::kMidiProgram, .reset = 0.0, .value = direct},
+    {.name = "bankMsb", .control = 0, .reset = 0.0, .value = direct},
+    {.name = "volume", .control = 7, .reset = 100.0, .value = direct},
+    {.name = "expression", .control = 11, .reset = 127.0, .value = direct},
+    {.name = "pan", .control = 10, .reset = 0.0, .value = panOf},
+    {.name = "modWheel", .control = 1, .reset = 0.0, .value = direct},
+}};
+
+/// A part's (tick, value) history for one lane: the value in effect when its first note
+/// starts, at tick 0, then every change after it. One point means it never changes.
+std::vector<std::pair<std::int64_t, double>> laneOf(const std::vector<MidiControl>& controls,
+                                                    const PartLane& lane, std::int64_t first) {
+    std::vector<std::pair<std::int64_t, double>> points{{0, lane.reset}};
+    for (const MidiControl& c : controls) {
+        if (c.control != lane.control) {
+            continue;
+        }
+        const double v = lane.value(c.value);
+        if (c.at <= first) {
+            points.front().second = v;
+        } else if (points.back().first == c.at) {
+            points.back().second = v;
+        } else if (points.back().second != v) {
+            points.emplace_back(c.at, v);
+        }
+    }
+    return points;
+}
+
+/// Each note released while the part's sustain pedal (CC64) is down sounds until the
+/// pedal lifts - or until the same key is struck again, which a GM player retriggers.
+void applySustain(std::vector<project::Note>& notes, const std::vector<MidiControl>& controls,
+                  std::int64_t songEnd) {
+    std::vector<std::pair<std::int64_t, std::int64_t>> held; // [down, up)
+    std::int64_t down = -1;
+    for (const MidiControl& c : controls) {
+        if (c.control != 64) {
+            continue;
+        }
+        if (c.value >= 64 && down < 0) {
+            down = c.at;
+        } else if (c.value < 64 && down >= 0) {
+            held.emplace_back(down, c.at);
+            down = -1;
+        }
+    }
+    if (down >= 0) {
+        held.emplace_back(down, songEnd);
+    }
+    if (held.empty()) {
+        return;
+    }
+    for (project::Note& note : notes) {
+        const std::int64_t end = note.end().value;
+        for (const auto& [from, to] : held) {
+            if (end < from || end >= to) {
+                continue;
+            }
+            std::int64_t stop = to;
+            for (const project::Note& other : notes) {
+                if (other.pitch == note.pitch && other.start.value > note.start.value &&
+                    other.start.value < stop) {
+                    stop = other.start.value;
+                }
+            }
+            note.length = core::Ticks{std::max(note.length.value, stop - note.start.value)};
+            break;
+        }
+    }
+}
+
+project::ParamValue paramValue(std::string name, double value) {
+    project::ParamValue out;
+    out.name = std::move(name);
+    out.value = value;
+    return out;
+}
+
+/// The GmParts layout: one 16-part `gm` channel holding every track's notes.
+// NOLINTNEXTLINE(readability-function-size) - gather, lay out the parts, add, automate.
+void importGmParts(const MidiSong& song, project::Project& project, project::CommandStack& stack,
+                   core::PatternId pattern, std::int64_t songEnd) {
+    std::array<std::vector<project::Note>, 16> notes;
+    std::array<std::vector<project::NoteExtras>, 16> extras;
+    std::array<std::vector<MidiControl>, 16> controls;
+    for (const MidiTrack& track : song.tracks) {
+        const auto part = static_cast<std::uint8_t>(track.mpe ? 0U : (track.channel & 0x0FU));
+        for (const MidiNote& note : track.notes) {
+            project::NoteExtras extra;
+            for (const MidiBend& point : note.bend) {
+                extra.pitchCurve.push_back(project::PitchPoint{
+                    .at = core::Ticks{point.at}, .cents = point.cents, .curve = {}});
+            }
+            extra.lyric = note.lyric;
+            project::Note value;
+            value.start = core::Ticks{note.start};
+            value.length = core::Ticks{note.length};
+            value.pitch = note.pitch;
+            value.velocity = note.velocity;
+            value.part = part;
+            notes.at(part).push_back(value);
+            extras.at(part).push_back(std::move(extra));
+        }
+        controls.at(part).insert(controls.at(part).end(), track.controls.begin(),
+                                 track.controls.end());
+    }
+
+    project::Channel channel;
+    channel.name = "GM";
+    channel.output = project.mixer.master;
+    channel.maxPolyphony = 64;
+    channel.instrument.type = "gm";
+    channel.instrument.params.push_back(paramValue("part", 1.0));
+    // Lanes that change are drawn once the channel exists, so their paths resolve.
+    std::vector<std::pair<std::string, std::vector<std::pair<std::int64_t, double>>>> moving;
+    for (std::size_t part = 0; part < 16; ++part) {
+        if (notes.at(part).empty()) {
+            continue;
+        }
+        std::ranges::stable_sort(controls.at(part), {}, &MidiControl::at);
+        std::int64_t first = std::numeric_limits<std::int64_t>::max();
+        for (const project::Note& note : notes.at(part)) {
+            first = std::min(first, note.start.value);
+        }
+        const std::string prefix = "p" + std::to_string(part + 1) + ".";
+        for (const PartLane& lane : kPartLanes) {
+            auto points = laneOf(controls.at(part), lane, first);
+            if (points.size() > 1) {
+                // Listed with its first value, so the lane's path resolves to it.
+                channel.instrument.params.push_back(
+                    paramValue(prefix + lane.name, points.front().second));
+                moving.emplace_back(prefix + lane.name, std::move(points));
+            } else if (points.front().second != lane.reset) {
+                channel.instrument.params.push_back(
+                    paramValue(prefix + lane.name, points.front().second));
+            }
+        }
+        applySustain(notes.at(part), controls.at(part), songEnd);
+    }
+    auto add = std::make_unique<project::AddChannel>(channel);
+    const project::AddChannel* raw = add.get();
+    stack.execute(std::move(add), project);
+    const core::ChannelId id = raw->created();
+
+    std::vector<project::Note> all;
+    std::vector<project::NoteExtrasAt> allExtras;
+    for (std::size_t part = 0; part < 16; ++part) {
+        for (std::size_t i = 0; i < notes.at(part).size(); ++i) {
+            if (!extras.at(part).at(i).empty()) {
+                allExtras.push_back(
+                    project::NoteExtrasAt{.index = all.size(), .extras = extras.at(part).at(i)});
+            }
+            all.push_back(notes.at(part).at(i));
+        }
+    }
+    stack.execute(
+        std::make_unique<project::AddNotes>(pattern, id, std::move(all), std::move(allExtras)),
+        project);
+
+    const project::Channel* made = project.find(id);
+    for (const auto& [param, points] : moving) {
+        project::AutomationClip clip;
+        clip.targetPath = "channel." + (made == nullptr ? channel.name : made->name) + "." + param;
+        const project::ParamResolution resolved =
+            project::ParamRegistry::resolve(clip.targetPath, project);
+        if (resolved.ok()) {
+            clip.target = resolved.ref;
+        }
+        core::Curve step;
+        step.kind = core::CurveKind::Step;
+        for (const auto& [at, value] : points) {
+            clip.points.push_back(project::Breakpoint{
+                .at = core::Ticks{at}, .value = static_cast<float>(value), .curve = step});
+        }
+        stack.execute(std::make_unique<project::AddAutomationClip>(pattern, std::move(clip)),
+                      project);
+    }
 }
 
 } // namespace
@@ -378,7 +597,8 @@ std::optional<MidiSong> readMidiFile(const std::filesystem::path& path, std::str
 }
 
 std::string importSong(const MidiSong& song, project::Project& project,
-                       project::CommandStack& stack, const std::string& patternName) {
+                       project::CommandStack& stack, const std::string& patternName,
+                       ImportLayout layout) {
     stack.beginGroup("Import MIDI");
     for (const MidiTempo& tempo : song.tempos) {
         stack.execute(
@@ -407,7 +627,13 @@ std::string importSong(const MidiSong& song, project::Project& project,
     const project::AddPattern* patternRaw = pattern.get();
     stack.execute(std::move(pattern), project);
 
+    if (layout == ImportLayout::GmParts) {
+        importGmParts(song, project, stack, patternRaw->created(), prototype.length.value);
+    }
     for (const MidiTrack& track : song.tracks) {
+        if (layout == ImportLayout::GmParts) {
+            break;
+        }
         project::Channel channel;
         channel.name = track.name;
         channel.output = project.mixer.master;

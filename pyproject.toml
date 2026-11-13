@@ -83,6 +83,9 @@ markers = [
     # Wall-clock or callback-deadline assertions: run alone, after the parallel pass
     # (pytest -n auto -m "not serial", then pytest -m serial).
     "serial: asserts a time budget, so it must not share the CPU with other tests",
+    # P11-13: a test that runs for minutes by design names its own limit, which both the
+    # stack dump and the watchdog use instead of the defaults above.
+    "long(seconds): runs this long by design; its own faulthandler and watchdog limit",
 ]
 
 [tool.ruff]

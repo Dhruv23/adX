@@ -174,8 +174,13 @@ void ChannelNode::apply(const BlockEvent& event, const VoiceRender& render) noex
     case BlockEventKind::LoopWrap:
         m_pool.releaseEndingAtOrAfter(event.timeSource, event.endTick);
         return;
+    case BlockEventKind::Controller:
+        controller(event, render);
+        return;
     }
 }
+
+void ChannelNode::controller(const BlockEvent& /*event*/, const VoiceRender& /*render*/) noexcept {}
 
 void ChannelNode::renderSegment(std::span<float> left, std::span<float> right,
                                 std::span<float> scratchLeft, std::span<float> scratchRight,

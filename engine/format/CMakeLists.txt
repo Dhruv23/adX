@@ -11,4 +11,5 @@ target_sources(adx_engine_static PRIVATE
     soundfont/Generators.cpp
     soundfont/Riff.cpp
     soundfont/Sf2Parser.cpp
+    soundfont/SfzBank.cpp
 )

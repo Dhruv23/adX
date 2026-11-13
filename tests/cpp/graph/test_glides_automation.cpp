@@ -65,7 +65,8 @@ BlockEvent event(BlockEventKind kind, std::uint32_t offset, std::uint32_t noteId
                       .duration = duration,
                       .kind = kind,
                       .pitch = pitch,
-                      .velocity = 100};
+                      .velocity = 100,
+                      .part = 0};
 }
 
 std::vector<float> channelParams() {

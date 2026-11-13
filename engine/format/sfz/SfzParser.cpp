@@ -165,6 +165,8 @@ constexpr auto kKnown = std::to_array<Known>({
     {"master_label", Handling::kIgnored, "a label"},
     {"global_label", Handling::kIgnored, "a label"},
     {"label_ccN", Handling::kIgnored, "a label"},
+    {"hint_load_method", Handling::kIgnored, "a player's loading hint"},
+    {"hint_ram_based", Handling::kIgnored, "a player's loading hint"},
     {"set_ccN", Handling::kIgnored, "a controller's power-on value"},
     {"set_hdccN", Handling::kIgnored, "a controller's power-on value"},
     {"curve_index", Handling::kIgnored, "a <curve> table"},
@@ -537,6 +539,9 @@ private:
         double n = 0.0;
         int key = 0;
         const bool numeric = number(value, n);
+        if (numeric && isAriaModulation(name)) {
+            region.modulation.emplace_back(name, n);
+        }
         if (name == "sample") {
             region.sample = value;
             std::ranges::replace(region.sample, '\\', '/');

@@ -24,6 +24,8 @@ constexpr std::uint8_t kDone = 6;
 /// A volume envelope's floor: 96 dB down is silence, as SF2 defines its times.
 constexpr float kFloor = 1.5848932e-5F;
 constexpr float kChokeSeconds = 0.002F;
+/// SF2 2.04 8.4.4: CC1 to vibrato LFO pitch depth, 50 cents at full.
+constexpr float kWheelVibratoCents = 50.0F;
 
 [[nodiscard]] constexpr std::uint32_t idx(P p) noexcept {
     return static_cast<std::uint32_t>(p);
@@ -31,6 +33,31 @@ constexpr float kChokeSeconds = 0.002F;
 
 [[nodiscard]] int choice(const graph::VoiceRender& render, P p, int highest) noexcept {
     return std::clamp(static_cast<int>(dsp::floorExact(render.param(idx(p)) + 0.5F)), 0, highest);
+}
+
+[[nodiscard]] int partChoice(const graph::VoiceRender& render, std::uint32_t part,
+                             GmPartParam which) noexcept {
+    return std::clamp(
+        static_cast<int>(dsp::floorExact(render.param(gmPartParam(part, which)) + 0.5F)), 0, 127);
+}
+
+/// A part's level and balance now: GM's square law on volume and expression, unity at
+/// volume 100 and expression 127; an equal-power balance, unity at the centre.
+struct PartMix {
+    float left;
+    float right;
+};
+[[nodiscard]] PartMix partMix(float volumeCc, float expressionCc, float panValue) noexcept {
+    const float volume = std::clamp(volumeCc, 0.0F, 127.0F) / 100.0F;
+    const float expression = std::clamp(expressionCc, 0.0F, 127.0F) / 127.0F;
+    const float level = volume * volume * expression * expression;
+    const float pan = std::clamp(panValue, -1.0F, 1.0F);
+    if (pan == 0.0F) {
+        return PartMix{.left = level, .right = level};
+    }
+    return PartMix{
+        .left = level * dsp::cosTurnsF((pan + 1.0F) * 0.125F) * std::numbers::sqrt2_v<float>,
+        .right = level * dsp::sinTurnsF((pan + 1.0F) * 0.125F) * std::numbers::sqrt2_v<float>};
 }
 
 [[nodiscard]] std::uint32_t frames(float seconds, float rate) noexcept {
@@ -50,8 +77,8 @@ constexpr float kChokeSeconds = 0.002F;
     return dsp::exp2F(-timecentsPerKey * (static_cast<float>(key) - 60.0F) / 1200.0F);
 }
 
-void enter(GmEnvelope& env, std::uint8_t stage, const BankEnvelope& shape, std::uint8_t key,
-           float rate, bool volume) noexcept {
+void enterOne(GmEnvelope& env, std::uint8_t stage, const BankEnvelope& shape, std::uint8_t key,
+              float rate, bool volume) noexcept {
     env.stage = stage;
     switch (stage) {
     case kDelay:
@@ -86,6 +113,16 @@ void enter(GmEnvelope& env, std::uint8_t stage, const BankEnvelope& shape, std::
         break;
     default:
         break;
+    }
+}
+
+/// Enters `stage`, then passes straight through any empty delay, attack or hold, so a
+/// zone with none starts at full level on its first sample (zone_articulation_inert).
+void enter(GmEnvelope& env, std::uint8_t stage, const BankEnvelope& shape, std::uint8_t key,
+           float rate, bool volume) noexcept {
+    enterOne(env, stage, shape, key, rate, volume);
+    while (env.left == 0 && env.stage < kDecay) {
+        enterOne(env, static_cast<std::uint8_t>(env.stage + 1), shape, key, rate, volume);
     }
 }
 
@@ -226,7 +263,7 @@ void GmInstrument::startLayer(GmLayer& layer, const BankZone& zone, const graph:
     layer.active = layer.sample.frames > 0 && zone.end > zone.start;
 }
 
-void GmInstrument::startVoice(graph::Voice& voice, const graph::BlockEvent& /*event*/,
+void GmInstrument::startVoice(graph::Voice& voice, const graph::BlockEvent& event,
                               const graph::VoiceRender& render) noexcept {
     GmVoice& state = stateOf(voice);
     state.layerCount = 0;
@@ -235,11 +272,35 @@ void GmInstrument::startVoice(graph::Voice& voice, const graph::BlockEvent& /*ev
     state.exclusiveClass = 0;
     state.velocity = std::clamp(render.param(idx(P::Velocity)), 0.0F, 1.0F);
     voice.level = 0.0F;
-    const bool drums = render.param(idx(P::Drums)) >= 0.5F;
-    const auto bank = static_cast<std::uint16_t>(drums ? kGmDrumBank
-                                                       : (choice(render, P::BankMsb, 127) * 128) +
-                                                             choice(render, P::BankLsb, 127));
-    const auto program = static_cast<std::uint8_t>(choice(render, P::Program, 127));
+    const bool parts = render.param(idx(P::Part)) >= 0.5F;
+    state.part = parts ? static_cast<std::uint8_t>(std::min<std::uint32_t>(event.part, 15)) : 0;
+    bool drums = false;
+    std::uint16_t bank = 0;
+    std::uint8_t program = 0;
+    const Live& live = m_live[state.part];
+    if (parts) {
+        drums = render.param(gmPartParam(state.part, GmPartParam::Drums)) >= 0.5F;
+        bank = static_cast<std::uint16_t>(
+            drums ? kGmDrumBank
+                  : (live.bank >= 0 ? live.bank
+                                    : partChoice(render, state.part, GmPartParam::BankMsb)) *
+                        128);
+        program = static_cast<std::uint8_t>(
+            live.program >= 0 ? live.program
+                              : partChoice(render, state.part, GmPartParam::Program));
+    } else {
+        drums = render.param(idx(P::Drums)) >= 0.5F;
+        if (drums) {
+            bank = kGmDrumBank;
+        } else if (live.bank >= 0) {
+            bank = static_cast<std::uint16_t>(live.bank * 128);
+        } else {
+            bank = static_cast<std::uint16_t>((choice(render, P::BankMsb, 127) * 128) +
+                                              choice(render, P::BankLsb, 127));
+        }
+        program = static_cast<std::uint8_t>(live.program >= 0 ? live.program
+                                                              : choice(render, P::Program, 127));
+    }
     const GmPresetView* preset = find(bank, program);
     if (preset == nullptr) {
         return;
@@ -261,11 +322,60 @@ void GmInstrument::startVoice(graph::Voice& voice, const graph::BlockEvent& /*ev
         for (graph::Voice& other : pool().voices()) {
             if (&other != &voice && other.phase != graph::VoicePhase::Free) {
                 GmVoice& them = stateOf(other);
-                if (them.exclusiveClass == state.exclusiveClass) {
+                if (them.exclusiveClass == state.exclusiveClass && them.part == state.part) {
                     them.cut = true;
                 }
             }
         }
+    }
+}
+
+void GmInstrument::controller(const graph::BlockEvent& event,
+                              const graph::VoiceRender& render) noexcept {
+    const bool parts = render.param(idx(P::Part)) >= 0.5F;
+    const std::uint8_t part = parts ? static_cast<std::uint8_t>(event.part & 0x0FU) : 0;
+    Live& live = m_live[part];
+    const auto value = static_cast<std::int16_t>(std::min<int>(event.velocity, 127));
+    if (event.pitch == graph::kProgramChange) {
+        live.program = value;
+        return;
+    }
+    const auto forEachVoice = [&](auto&& fn) {
+        for (graph::Voice& voice : pool().voices()) {
+            if (voice.phase != graph::VoicePhase::Free && stateOf(voice).part == part) {
+                fn(voice);
+            }
+        }
+    };
+    switch (event.pitch) {
+    case 0:
+        live.bank = value;
+        break;
+    case 1:
+        live.wheel = value;
+        break;
+    case 7:
+        live.volume = value;
+        break;
+    case 10:
+        live.pan = std::clamp((static_cast<float>(value) - 64.0F) / 63.0F, -1.0F, 1.0F);
+        live.panSet = true;
+        break;
+    case 11:
+        live.expression = value;
+        break;
+    case 120: // All Sound Off: cut, as an exclusive class does
+        forEachVoice([&](graph::Voice& voice) { stateOf(voice).cut = true; });
+        break;
+    case 121: // Reset All Controllers: the wheel and expression, not volume or pan (GM)
+        live.wheel = -1;
+        live.expression = -1;
+        break;
+    case 123: // All Notes Off: a release
+        forEachVoice([](graph::Voice& voice) { graph::VoicePool::release(voice); });
+        break;
+    default:
+        break;
     }
 }
 
@@ -296,6 +406,22 @@ bool GmInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
         state.cut = false;
     }
     const float gain = dsp::dbToGainF(render.param(idx(P::Gain)));
+    // The part's mix and mod wheel: live MIDI's if it set them, else the parameters
+    // (a single-part channel has only its wheel; its mix is the mixer's).
+    const bool parts = render.param(idx(P::Part)) >= 0.5F;
+    const Live& live = m_live[state.part];
+    const auto partParam = [&](GmPartParam which, float single) {
+        return parts ? render.param(gmPartParam(state.part, which)) : single;
+    };
+    const PartMix mix = partMix(live.volume >= 0 ? static_cast<float>(live.volume)
+                                                 : partParam(GmPartParam::Volume, 100.0F),
+                                live.expression >= 0 ? static_cast<float>(live.expression)
+                                                     : partParam(GmPartParam::Expression, 127.0F),
+                                live.panSet ? live.pan : partParam(GmPartParam::Pan, 0.0F));
+    const float wheel = live.wheel >= 0
+                            ? static_cast<float>(live.wheel)
+                            : partParam(GmPartParam::ModWheel, render.param(idx(P::ModWheel)));
+    const float wheelCents = kWheelVibratoCents * std::clamp(wheel, 0.0F, 127.0F) / 127.0F;
     const float inverseRate = 1.0F / rate;
     bool alive = false;
     float level = 0.0F;
@@ -329,7 +455,8 @@ bool GmInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
             if (control(voice, i)) {
                 const float cents = i < render.pitchCents.size() ? render.pitchCents[i] : 0.0F;
                 refreshLayer(layer, layer.baseCents + cents + (mod * zone.modToPitch) +
-                                        (vib * zone.vibrato.toPitch) + (lfo * zone.modLfo.toPitch));
+                                        (vib * (zone.vibrato.toPitch + wheelCents)) +
+                                        (lfo * zone.modLfo.toPitch));
                 if (layer.filtered && (zone.modToFilter != 0.0F || zone.modLfo.toFilter != 0.0F)) {
                     const float cutoff =
                         zone.filterHz *
@@ -367,8 +494,8 @@ bool GmInstrument::renderVoice(graph::Voice& voice, std::span<float> left, std::
             if (zone.modLfo.toVolume != 0.0F) {
                 amp *= dsp::dbToGainF(lfo * zone.modLfo.toVolume);
             }
-            left[i] += s * amp * layer.gainLeft;
-            right[i] += s * amp * layer.gainRight;
+            left[i] += s * amp * layer.gainLeft * mix.left;
+            right[i] += s * amp * layer.gainRight * mix.right;
             layer.position += static_cast<double>(layer.increment);
             if (layer.volume.stage == kDone) {
                 layer.active = false;

@@ -137,6 +137,7 @@ void Dx7Instrument::apply(const graph::BlockEvent& event) noexcept {
         break;
     case graph::BlockEventKind::PitchGlide:
     case graph::BlockEventKind::Lyric:
+    case graph::BlockEventKind::Controller:
         break; // slides and pitch curves: not on a dx7 (phase_11.5.md §9)
     }
 }

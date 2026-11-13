@@ -159,7 +159,8 @@ bool PluginInstrument::renderWhole(const graph::ProcessContext& context, std::sp
             break;
         }
         case graph::BlockEventKind::Lyric:
-            break; // lyrics are the Voice's
+        case graph::BlockEventKind::Controller:
+            break; // lyrics are the Voice's; controllers reach a plugin through MIDI learn
         }
     }
     // The channel's pitch offset applies to every note it holds.

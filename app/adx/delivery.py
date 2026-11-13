@@ -121,8 +121,9 @@ class Delivery:
 
     # --- MIDI files -----------------------------------------------------------------
 
-    def import_midi_dialog(self) -> None:
-        """Ask for a .mid (or a singing-voice project) and import it."""
+    def import_midi_dialog(self, gm_parts: bool = False) -> None:
+        """Ask for a .mid (or a singing-voice project) and import it. With ``gm_parts``,
+        a .mid lands on one 16-part General MIDI channel (Play on one GM channel)."""
         path, _filter = QFileDialog.getOpenFileName(
             self.window,
             "Import MIDI",
@@ -131,10 +132,12 @@ class Delivery:
             "UTAU, OpenUtau, Vocaloid (*.ust *.ustx *.vsqx)",
         )
         if path:
-            self.import_midi(path)
+            self.import_midi(path, gm_parts=gm_parts)
 
-    def import_midi(self, path: str) -> dict[str, Any]:
-        """A Standard MIDI File - or a UST, USTX or VSQX - into the project, one undo step."""
+    def import_midi(self, path: str, gm_parts: bool = False) -> dict[str, Any]:
+        """A Standard MIDI File - or a UST, USTX or VSQX - into the project, one undo step.
+        ``gm_parts`` puts a .mid's tracks on one 16-part ``gm`` channel, each MIDI channel
+        a part with its programs, on the Windows GS bank until BANK= says otherwise."""
         w = self.window
         if Path(path).suffix.lower() in (".ust", ".ustx", ".vsqx"):
             from adx.sung_import import import_sung
@@ -145,7 +148,7 @@ class Delivery:
                 w.status(f"Import: {error}")
                 return {}
         else:
-            result = engine_bridge.import_midi(w.session.require(), path)
+            result = engine_bridge.import_midi(w.session.require(), path, gm_parts=gm_parts)
         w.session.notify()
         w.status(f"Imported {Path(path).name}: {result['tracks']} track(s)")
         return result
