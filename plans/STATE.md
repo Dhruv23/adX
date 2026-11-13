@@ -121,7 +121,7 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 11 — Live performance | L | **Done** 2026-11-08 (CI green, run 42530467288; full check green, run 42530469039 on tag `phase-11-r2`) |
 | 11.5 — M-Vave FM-1 | XL | **Done** 2026-11-09 (hardware deferred: every hardware half `[~]`; CI green, run 42587701796; full check green, run 42592502730 on tag `phase-11.5-r2`) |
 | 11.6 — Editor polish | S | **Done** 2026-11-08 (CI green, run 42549504391; full check green, run 42554232881 on tag `phase-11.6`) |
-| 12 — Sound-design foundation | XL | **Done** 2026-11-13 (CI green, run 43405505161; full check PENDING_FULL on tag `phase-12`; human gate closed by the user) |
+| 12 — Sound-design foundation | XL | **Done** 2026-11-13 (CI green, run 43405505161; full check green, run 43411178051 on tag `phase-12`; human gate closed by the user) |
 | 13 — Core Drums & Machines | M | In progress 2026-11-13 (built; human gate pending) |
 | 14 — Hyperpop | L | Not started |
 | 15 — Hardcore | L | Not started |
@@ -1659,7 +1659,7 @@ work. `check_launcher.py`: 27 panels, played and quit cleanly.
   clean; pytest -n auto green but `test_bidirectional` (a deadline under the parallel
   load, green serially) and the GPU tests (P12-1); `check_demo_set.py --wannacry` 11/11;
   `check_launcher.py`: 27 panels, played and quit cleanly.
-- CI: per-push run 43405505161 green (on `5f7c1da`, after the dsp-math lint caught `std::pow` in the wavetable warp on 43395232303); full check PENDING_FULL on tag `phase-12`.
+- CI: per-push run 43405505161 green (on `5f7c1da`, after the dsp-math lint caught `std::pow` in the wavetable warp on 43395232303); full check green, run 43411178051 on tag `phase-12`.
 
 **Inherited issues, at completion:**
 
@@ -1733,6 +1733,8 @@ phase's); P11-9, P11-10, P11-11, P11-15, P10.5-3 re-carried (listed under Phase 
   (Hyper Kit, 1/16 at 174 BPM: 0.35 ms of a 5.33 ms block, 6.5 %, Release),
   `pack_core_demo_renders` (offline bit-identical to the realtime capture),
   `pattern_templates_parse` (each pastes as one undo step).
+- CI green, run 43422603557 (on `41dcd05`; run 43411253844 timed `pack_core_cpu` at 10.7 %
+  on the shared runner, now allowed 20 % there and 10 % locally).
 - Local evidence: Debug ctest 645/645; goldens green in Debug, Release, RelWithDebInfo;
   lints, ruff, mypy clean; pytest -n auto green but the timing-sensitive pair noted under
   Phase 12; launcher check clean.
