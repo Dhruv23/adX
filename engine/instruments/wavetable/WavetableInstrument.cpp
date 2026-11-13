@@ -27,6 +27,12 @@ using X = WavetableExtra;
     return x - dsp::floorExact(x);
 }
 
+/// p^k for a phase in [0, 1), through Math.h's exp2/log2 so it is the same in every
+/// build configuration (lint dsp-math).
+[[nodiscard]] float power(float p, float k) noexcept {
+    return p <= 0.0F ? 0.0F : dsp::exp2F(k * dsp::log2F(p));
+}
+
 /// The read phase bent by `mode` at `amount` (0..1); `fm` is osc2's output, for FM.
 [[nodiscard]] float warped(float p, WavetableWarp mode, float amount, float fm) noexcept {
     switch (mode) {
@@ -35,9 +41,9 @@ using X = WavetableExtra;
     case WavetableWarp::Sync: // a slave oscillator reset every master cycle
         return frac(p * (1.0F + (7.0F * amount)));
     case WavetableWarp::BendPlus:
-        return std::pow(p, 1.0F - (0.75F * amount));
+        return power(p, 1.0F - (0.75F * amount));
     case WavetableWarp::BendMinus:
-        return std::pow(p, 1.0F / (1.0F - (0.75F * amount)));
+        return power(p, 1.0F / (1.0F - (0.75F * amount)));
     case WavetableWarp::Pwm: {
         const float w = 0.5F * (1.0F - (0.98F * amount));
         return p < w ? 0.5F * p / w : 0.5F + (0.5F * (p - w) / (1.0F - w));
