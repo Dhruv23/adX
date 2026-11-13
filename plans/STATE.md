@@ -121,8 +121,8 @@ work — moving scope between phases is still a change to FINAL_PLAN.md first
 | 11 — Live performance | L | **Done** 2026-11-08 (CI green, run 42530467288; full check green, run 42530469039 on tag `phase-11-r2`) |
 | 11.5 — M-Vave FM-1 | XL | **Done** 2026-11-09 (hardware deferred: every hardware half `[~]`; CI green, run 42587701796; full check green, run 42592502730 on tag `phase-11.5-r2`) |
 | 11.6 — Editor polish | S | **Done** 2026-11-08 (CI green, run 42549504391; full check green, run 42554232881 on tag `phase-11.6`) |
-| 12 — Sound-design foundation | XL | **Done** 2026-11-13 (CI PENDING_RUN; full check PENDING_FULL on tag `phase-12`; human gate closed by the user) |
-| 13 — Core Drums & Machines | M | Not started |
+| 12 — Sound-design foundation | XL | **Done** 2026-11-13 (CI green, run 43405505161; full check PENDING_FULL on tag `phase-12`; human gate closed by the user) |
+| 13 — Core Drums & Machines | M | In progress 2026-11-13 (built; human gate pending) |
 | 14 — Hyperpop | L | Not started |
 | 15 — Hardcore | L | Not started |
 | 16 — Classical | XL | Not started |
@@ -1659,7 +1659,7 @@ work. `check_launcher.py`: 27 panels, played and quit cleanly.
   clean; pytest -n auto green but `test_bidirectional` (a deadline under the parallel
   load, green serially) and the GPU tests (P12-1); `check_demo_set.py --wannacry` 11/11;
   `check_launcher.py`: 27 panels, played and quit cleanly.
-- CI: per-push run PENDING_RUN; full check PENDING_FULL on tag `phase-12`.
+- CI: per-push run 43405505161 green (on `5f7c1da`, after the dsp-math lint caught `std::pow` in the wavetable warp on 43395232303); full check PENDING_FULL on tag `phase-12`.
 
 **Inherited issues, at completion:**
 
@@ -1708,8 +1708,39 @@ work. `check_launcher.py`: 27 panels, played and quit cleanly.
 | **Plan** | [phase_13.md](phase_13.md) |
 | **Entry** | phase_12.md §8 handoff items |
 | **Done when** | [phase_13.md](phase_13.md) §6 |
-| **Status** | Not started |
+| **Status** | In progress (2026-11-13): built and tested locally; the human gate is the user's |
 | **Completed** | — |
+
+**Inherits:** P12-1..P12-4 (P12-3 the 808 cowbell, P12-4 kick variations are this
+phase's); P11-9, P11-10, P11-11, P11-15, P10.5-3 re-carried (listed under Phase 12).
+
+**Progress (2026-11-13, local):**
+
+- `engine/preset/packs/core/`, written by `tools/packs/build_core.py` from its recipe
+  tables and calibrated onto the taxonomy's loudness targets: 44 presets (25 DrumSynth
+  voices, 12 VCSL-sampled drums with synthesized fallbacks, 7 VA 808s and FX), 20 racks
+  (7 GM-mapped kits, layered drums, 808 Distorted/Punchy/Reese, risers, impacts), 9
+  chains, 16 pattern templates. `docs/examples/core_demo.adx`, 32 bars from core alone
+  (`tools/packs/build_core_demo.py`). phase_13.md §9 corrections 1-9.
+- Engine: DrumSynth `hat.openDecay` / `hat.choke` (a kit's hats as one choking pair;
+  `drum_hat_pair`); presets take `ROOT_HINT` / `TEMPO_HINT`; `apply_preset` plays a
+  sampled preset's fallback when its library is missing (it went silent).
+- §5 tests: `pack_core_loads` (`preset_packs_load` and `test_pack_core_racks_insert`, all
+  29 racks), `pack_core_golden` (44 preset hashes in instruments.txt and
+  `golden_pack_racks`, tests/golden/racks.txt), `pack_loudness_window` (all 64 within
+  2 LU), `pack_core_fallbacks` (each sampled preset: one ADX3006, a core fallback),
+  `pack_core_kits_gm_map`, `pack_core_no_alloc` (`[.slow]`, 30 s each), `pack_core_cpu`
+  (Hyper Kit, 1/16 at 174 BPM: 0.35 ms of a 5.33 ms block, 6.5 %, Release),
+  `pack_core_demo_renders` (offline bit-identical to the realtime capture),
+  `pattern_templates_parse` (each pastes as one undo step).
+- Local evidence: Debug ctest 645/645; goldens green in Debug, Release, RelWithDebInfo;
+  lints, ruff, mypy clean; pytest -n auto green but the timing-sensitive pair noted under
+  Phase 12; launcher check clean.
+- **The human gate is next**: `build/phase13-listening/` holds every sound's audition,
+  one folder per category (`tools/packs/listening_pack.py core`), for
+  `tools/packs/listen_gui.py build/phase13-listening`. The user's verdict per category,
+  and the 808/909 kits against references they choose, close it; rejected presets are
+  retuned in build_core.py's tables or cut.
 
 **Open issues for Phase 14:**
 
