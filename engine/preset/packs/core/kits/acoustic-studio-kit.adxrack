@@ -1,0 +1,78 @@
+# phase_13.md 4: Acoustic Studio Kit.
+[RACK]
+NAME="Acoustic Studio Kit"
+PACK=core
+CATEGORY=Drums/Kit
+TAGS=acoustic, kit
+TEMPO_HINT=96
+ROOT_HINT=C2
+VERSION=1
+
+[LAYER kick]
+PRESET="core/Acoustic Kick"
+KEYS=35..36
+GAIN=4.66
+
+[LAYER snare]
+PRESET="core/Acoustic Snare"
+KEYS=37..38
+GAIN=4.66
+
+[LAYER clap]
+PRESET="core/Acoustic Clap"
+KEYS=39..39
+GAIN=4.66
+
+[LAYER hat]
+PRESET="core/Acoustic Hat"
+KEYS=42..46
+GAIN=4.66
+
+[LAYER tomfloor]
+PRESET="core/808 Tom Low"
+KEYS=41..41
+GAIN=4.66
+
+[LAYER tomfloorhigh]
+PRESET="core/808 Tom Low"
+KEYS=43..43
+GAIN=4.66
+
+[LAYER tomlow]
+PRESET="core/808 Tom Mid"
+KEYS=45..45
+GAIN=4.66
+
+[LAYER tommid]
+PRESET="core/808 Tom Mid"
+KEYS=47..48
+GAIN=4.66
+
+[LAYER tomhigh]
+PRESET="core/808 Tom High"
+KEYS=50..50
+GAIN=4.66
+
+[LAYER cymbal]
+PRESET="core/Crash"
+KEYS=49..49
+GAIN=4.66
+
+[LAYER ride]
+PRESET="core/Suspended Cymbal"
+KEYS=51..51
+GAIN=4.66
+
+[LAYER tambourine]
+PRESET="core/Tambourine"
+KEYS=54..54
+GAIN=4.66
+
+[CHAIN]
+SLOT Compressor threshold=-12 ratio=4 attack=10 release=80
+SLOT Saturation model=0 drive=4
+SLOT Clipper mode=0 drive=0 ceiling=-1
+
+[MACRO Drive]
+VALUE=0.5
+TARGET chain.2.drive range=0..12

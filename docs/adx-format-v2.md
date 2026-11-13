@@ -1180,6 +1180,7 @@ Two keys were added in Phase 12 (phase_12.md §4.7.3, §4.11):
 |---|---|
 | `CATEGORY` | the browser's category, from the fixed list in `app/adx/taxonomy.py` (`Lead`, `Drums/Kick`, ...). It fixes what the preset's macros mean and the loudness its audition is held to |
 | `FALLBACK` | `pack/name` of a synthesized preset to play when a sound library this preset's zones need is not installed |
+| `ROOT_HINT`, `TEMPO_HINT` | a note name and BPM: where and how fast the browser's audition plays the preset, as a rack's (a sampled drum lives on its General MIDI key) |
 
 ### 13.1 SFZ import
 

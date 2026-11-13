@@ -1,0 +1,15 @@
+# phase_13.md 4.1: 808 Hat Pair.
+[PRESET]
+NAME="808 Hat Pair"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Hat
+TAGS=808, hat, choke
+
+[PARAMS]
+level=9.30
+model=2
+decay=0.05
+tone=0.7
+hat.openDecay=0.45
+hat.choke=1

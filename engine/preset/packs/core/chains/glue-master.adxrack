@@ -1,0 +1,12 @@
+# phase_13.md 4.5: Glue Master, an effect-only rack.
+[RACK]
+NAME="Glue Master"
+PACK=core
+CATEGORY=Chain/Master
+TAGS=chain
+VERSION=1
+
+[CHAIN]
+SLOT Compressor threshold=-8 ratio=2 attack=30 release=200
+SLOT Clipper mode=0 drive=2
+SLOT Limiter ceiling=-0.3 truePeak=1

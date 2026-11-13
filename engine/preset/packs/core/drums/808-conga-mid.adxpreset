@@ -1,0 +1,11 @@
+# phase_13.md 4.1: 808 Conga Mid.
+[PRESET]
+NAME="808 Conga Mid"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Perc
+TAGS=808, conga
+
+[PARAMS]
+model=11
+tune=0

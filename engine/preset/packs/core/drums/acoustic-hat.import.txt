@@ -1,0 +1,4 @@
+C:\Users\dhruv\AppData\Local\adX\libraries\vcsl@dfcf4a491877\Idiophones\Struck Idiophones\Hi-Hat Cymbal.sfz
+15 regions, 0 samples missing, 0 unknown, 0 ignored, 1 approximated
+
+0:0 approximated ampeg_release - 30.000000 is outside env.release's range; 10.000000 instead

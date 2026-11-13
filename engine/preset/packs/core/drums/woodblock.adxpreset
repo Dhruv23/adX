@@ -1,0 +1,26 @@
+# phase_13.md 4.1: Woodblock, VCSL's Woodblock (CC0).
+[PRESET]
+NAME="Woodblock"
+TYPE=sampler
+CATEGORY=Drums/Perc
+ROOT_HINT=E5
+TAGS=acoustic, woodblock
+FALLBACK="core/808 Clave"
+PACK=core
+
+[PARAMS]
+gain=2.17
+env.attack=0.004
+env.release=10
+
+[ZONES]
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Woodblock/wood_click_pp_rr1.wav" key=76 root=76 vel=0..54 start=145 gain=19.123732 rr=1:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Woodblock/wood_click_pp_rr3.wav" key=76 root=76 vel=0..54 start=502 gain=14.9865 rr=1:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Woodblock/wood_click_pp_rr2.wav" key=76 root=76 vel=0..54 start=1345 gain=20.148577 rr=1:2
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Woodblock/wood_click_mp.wav" key=76 root=76 vel=55..83 start=899 gain=14.659738
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Woodblock/wood_click_f_rr1.wav" key=76 root=76 vel=84..106 start=51 gain=7.087696 rr=2:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Woodblock/wood_click_f_rr2.wav" key=76 root=76 vel=84..106 start=512 gain=7.973201 rr=2:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Woodblock/wood_click_ff.wav" key=76 root=76 vel=107..127 start=505 gain=1.937063
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Woodblock/wood_click2_mp.wav" key=77 root=77 vel=0..127 start=176 gain=10
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Woodblock/wood_click3_vl1.wav" key=78 root=78 vel=0..83 start=710 gain=11.269818
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Woodblock/wood_click3_vl2.wav" key=78 root=78 vel=84..127 start=435 gain=8.892363

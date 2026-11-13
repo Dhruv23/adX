@@ -1,0 +1,11 @@
+# phase_13.md 4.5: Lo-Fi Bus, an effect-only rack.
+[RACK]
+NAME="Lo-Fi Bus"
+PACK=core
+CATEGORY=Chain/Bus
+TAGS=chain
+VERSION=1
+
+[CHAIN]
+SLOT Tape age=0.6 hiss=0.1
+SLOT Bitcrush bits=12

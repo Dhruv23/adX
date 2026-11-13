@@ -1,0 +1,24 @@
+# phase_13.md 4: 808 Reese.
+[RACK]
+NAME="808 Reese"
+PACK=core
+CATEGORY=Bass/Reese
+TAGS=808, reese, bass
+ROOT_HINT=C1
+VERSION=1
+
+[LAYER 808]
+PRESET="core/808 Clean"
+KEYS=0..127
+GAIN=3.23
+
+[LAYER reese]
+TYPE=va
+KEYS=0..127
+GAIN=-6.77
+PARAM osc1.wave=1
+PARAM osc2.wave=1
+PARAM osc2.fine=12
+PARAM osc1.fine=-12
+PARAM filter.cutoff=400
+PARAM env.sustain=1

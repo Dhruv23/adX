@@ -1,0 +1,13 @@
+# phase_13.md 4.1: 808 Open Hat.
+[PRESET]
+NAME="808 Open Hat"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Hat
+TAGS=808, hat, open
+
+[PARAMS]
+level=-0.71
+model=2
+decay=0.45
+tone=0.7

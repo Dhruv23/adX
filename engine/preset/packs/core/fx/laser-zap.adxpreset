@@ -1,0 +1,18 @@
+# phase_13.md 4.3/4.4: Laser Zap.
+[PRESET]
+NAME="Laser Zap"
+TYPE=va
+PACK=core
+CATEGORY=FX/Impact
+TAGS=laser, zap
+
+[PARAMS]
+level=1.39
+osc1.wave=1
+osc2.level=0
+pitchEnv.amount=36
+pitchEnv.time=0.12
+env.attack=0.001
+env.decay=0.25
+env.sustain=0
+env.release=0.1

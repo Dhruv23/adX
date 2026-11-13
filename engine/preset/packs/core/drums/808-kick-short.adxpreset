@@ -1,0 +1,17 @@
+# phase_13.md 4.1: 808 Kick Short.
+[PRESET]
+NAME="808 Kick Short"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Kick
+TAGS=808, kick
+
+[PARAMS]
+level=5.54
+model=0
+character=0
+tune=-5
+decay=0.35
+pitchDrop=5
+pitchTime=0.06
+click=0.2

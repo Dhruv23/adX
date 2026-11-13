@@ -1,0 +1,24 @@
+# Golden hashes per shipped rack (tests/cpp/render/test_golden_racks.cpp): each rack
+# with layers in an empty project, a two-bar phrase over the kit's GM keys and a
+# melodic run, rendered offline with an empty library store (fallbacks play).
+# 48 kHz, 256-frame blocks, FNV-1a 128. Regenerate with ADX_UPDATE_GOLDEN=1.
+rack/core/707-machine-kit 3c444becb29529668a010c28321a6271
+rack/core/808-distorted 02f43442bf17c9fe52728e5631d6c5e5
+rack/core/808-kit a5143b64ab93a04ff84969750cd6e6cd
+rack/core/808-punchy e8ebea0b71d999e7ebd3a2ad69cae1a1
+rack/core/808-reese 56e71bab86e9af76ca3714269ba66801
+rack/core/909-kick-hard 19e8821cca87a7e43a3322b061b68439
+rack/core/909-kit e3307dc8f20fa319fda64d157703db25
+rack/core/acoustic-studio-kit c5cbfea3a072f57f5b2f610c23f5f36d
+rack/core/hyper-kit a5c7a90cd99598adb584593ec260fac1
+rack/core/impact 0a9ba22881cd7f0041652eb1d100e5b7
+rack/core/laser-delay 57d85db72ff4f248dbe0d8a95b9cc195
+rack/core/lo-fi-kit 761141ba49178c9e1b25284208cba6a5
+rack/core/noise-riser-16 5c2c355151dff91ee58e63367d8403c6
+rack/core/noise-riser-8 6466602d9597ea311fcedcfc88383425
+rack/core/stacked-clap 3d1a62c6192091acde7a99f6257b228c
+rack/core/techno-rumble-kick 649ef59be8e43b8699162943a8a289f5
+rack/core/trap-kit 1d4c92e3aa4600dd4d9677948c860b2d
+rack/core/trap-snare 5e9669088e134bab955b2544677a5d4d
+rack/core/uplifter d9510e0c154d11fab893ff0ce003a34d
+rack/core/white-noise-wash 30bbf64573259ed0c2d548363b13f979

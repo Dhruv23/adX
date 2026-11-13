@@ -59,7 +59,8 @@ function(adx_add_cpp_test name)
         "stems_sum_to_master"
         "golden_all_formats"
         "session_no_alloc"
-        "effects_no_alloc_new")
+        "effects_no_alloc_new"
+        "pack_core_no_alloc")
     set(_rest "[.slow]")
     if(name STREQUAL "adx_tests")
         foreach(_case IN LISTS _serial _parallel)

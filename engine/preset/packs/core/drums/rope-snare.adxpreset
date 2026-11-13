@@ -1,0 +1,48 @@
+# phase_13.md 4.1: Rope Snare, VCSL's Snare Drum, Rope Tension (CC0).
+[PRESET]
+NAME="Rope Snare"
+TYPE=sampler
+CATEGORY=Drums/Snare
+ROOT_HINT=D2
+TAGS=acoustic, snare, rope
+FALLBACK="core/808 Snare"
+PACK=core
+
+[PARAMS]
+gain=8.51
+env.attack=0.004
+env.release=10
+
+[ZONES]
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/RopeSnare_sidestick_Main_vl2_rr1.wav" key=33 root=33 vel=0..127 gain=13.907062 rr=1:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/RopeSnare_sidestick_Main_vl2_rr2.wav" key=33 root=33 vel=0..127 gain=16.250528 rr=1:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/RopeSnare_stick_Main_vl1_rr1.wav" key=34 root=34 vel=0..127 gain=14.396458 rr=2:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/RopeSnare_stick_Main_vl1_rr2.wav" key=34 root=34 vel=0..127 gain=15.648631 rr=2:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Hi/RopeSnare_hi_sn_Main_vl1_rr2.wav" key=35 root=35 vel=0..54 gain=30.498323 rr=3:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Hi/RopeSnare_hi_sn_Main_vl1_rr1.wav" key=35 root=35 vel=0..54 gain=30.998014 rr=3:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Hi/RopeSnare_hi_sn_Main_vl2_rr1.wav" key=35 root=35 vel=55..83 gain=20.410654 rr=4:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Hi/RopeSnare_hi_sn_Main_vl2_rr2.wav" key=35 root=35 vel=55..83 gain=19.97935 rr=4:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Hi/RopeSnare_hi_sn_Main_vl3_rr3.wav" key=35 root=35 vel=84..106 gain=13.988846 rr=5:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Hi/RopeSnare_hi_sn_Main_vl3_rr1.wav" key=35 root=35 vel=84..106 gain=12.65999 rr=5:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Hi/RopeSnare_hi_sn_Main_vl4_rr1.wav" key=35 root=35 vel=107..127 gain=9.726213 rr=6:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Hi/RopeSnare_hi_sn_Main_vl4_rr2.wav" key=35 root=35 vel=107..127 gain=7.744172 rr=6:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_ns_Main_vl1_rr3.wav" key=36 root=36 vel=0..65 gain=25.307972 rr=7:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_ns_Main_vl1_rr2.wav" key=36 root=36 vel=0..65 gain=24.581553 rr=7:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_ns_Main_vl2_rr1.wav" key=36 root=36 vel=66..99 gain=15.32412 rr=8:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_ns_Main_vl2_rr2.wav" key=36 root=36 vel=66..99 gain=16.82076 rr=8:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_ns_Main_vl3_rr2.wav" key=36 root=36 vel=100..127 gain=10.207446 rr=9:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_ns_Main_vl3_rr1.wav" key=36 root=36 vel=100..127 gain=9.645401 rr=9:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_sn_Main_vl1_rr2.wav" key=37 root=37 vel=0..65 gain=26.757193 rr=10:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_sn_Main_vl1_rr1.wav" key=37 root=37 vel=0..65 gain=27.080818 rr=10:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_sn_Main_vl2_rr1.wav" key=37 root=37 vel=66..99 gain=20.23957 rr=11:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_sn_Main_vl2_rr2.wav" key=37 root=37 vel=66..99 gain=19.887383 rr=11:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_sn_Main_vl3_rr3.wav" key=37 root=37 vel=100..127 gain=8.583144 rr=12:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_sn_Main_vl3_rr1.wav" key=37 root=37 vel=100..127 gain=7.83083 rr=12:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_tsn_Main_vl1_rr1.wav" key=38 root=38 vel=0..54 gain=30.60835 rr=13:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_tsn_Main_vl1_rr2.wav" key=38 root=38 vel=0..54 gain=30.272346 rr=13:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_tsn_Main_vl2_rr2.wav" key=38 root=38 vel=55..83 gain=17.138128 rr=14:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_tsn_Main_vl2_rr1.wav" key=38 root=38 vel=55..83 gain=17.50611 rr=14:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_tsn_Main_vl3_rr1.wav" key=38 root=38 vel=84..106 gain=13.115312 rr=15:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_tsn_Main_vl3_rr2.wav" key=38 root=38 vel=84..106 gain=12.087756 rr=15:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_tsn_Main_vl4_rr4.wav" key=38 root=38 vel=107..127 gain=10.961503 rr=16:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low/RopeSnare_low_tsn_Main_vl4_rr1.wav" key=38 root=38 vel=107..127 gain=9.433595 rr=16:1

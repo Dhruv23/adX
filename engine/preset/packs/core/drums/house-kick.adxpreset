@@ -1,0 +1,15 @@
+# phase_13.md 4.1: House Kick.
+[PRESET]
+NAME="House Kick"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Kick
+TAGS=house, kick
+
+[PARAMS]
+level=2.68
+model=0
+character=1
+decay=0.3
+tone=0.6
+sub=0.3

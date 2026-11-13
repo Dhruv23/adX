@@ -1,0 +1,27 @@
+# phase_13.md 4: Stacked Clap.
+[RACK]
+NAME="Stacked Clap"
+PACK=core
+CATEGORY=Drums/Clap
+TAGS=clap, layered
+FALLBACK="core/808 Clap"
+VERSION=1
+
+[LAYER synth]
+PRESET="core/808 Clap"
+KEYS=0..127
+GAIN=-1.30
+
+[LAYER real]
+PRESET="core/Acoustic Clap"
+KEYS=0..127
+GAIN=-4.30
+
+[LAYER snap]
+PRESET="core/Snap"
+KEYS=0..127
+GAIN=-7.30
+
+[SEND room]
+LEVEL=-16
+SLOT Hall size=0.3 decay=0.6

@@ -1,0 +1,22 @@
+# phase_13.md 4: 808 Distorted.
+[RACK]
+NAME="808 Distorted"
+PACK=core
+CATEGORY=Bass/808
+TAGS=808, bass, distorted
+ROOT_HINT=C1
+VERSION=1
+
+[LAYER 808]
+PRESET="core/808 Clean"
+KEYS=0..127
+GAIN=17.24
+
+[CHAIN]
+SLOT Overdrive drive=20 tone=3500
+SLOT Clipper mode=0 drive=6
+SLOT ParametricEq band1.type=3 band1.freq=25
+
+[MACRO Drive]
+VALUE=0.5
+TARGET chain.1.drive range=6..30

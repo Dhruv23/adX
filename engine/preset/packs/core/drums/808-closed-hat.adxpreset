@@ -1,0 +1,13 @@
+# phase_13.md 4.1: 808 Closed Hat.
+[PRESET]
+NAME="808 Closed Hat"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Hat
+TAGS=808, hat, closed
+
+[PARAMS]
+level=9.30
+model=2
+decay=0.05
+tone=0.7

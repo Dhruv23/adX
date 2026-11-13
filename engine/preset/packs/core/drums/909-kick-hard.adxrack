@@ -1,0 +1,16 @@
+# phase_13.md 4: 909 Kick Hard.
+[RACK]
+NAME="909 Kick Hard"
+PACK=core
+CATEGORY=Drums/Kick
+TAGS=909, kick, hard
+VERSION=1
+
+[LAYER kick]
+PRESET="core/909 Kick"
+KEYS=0..127
+GAIN=-10.47
+
+[CHAIN]
+SLOT Clipper mode=0 drive=9
+SLOT ParametricEq band1.type=1 band1.freq=60 band1.gain=3

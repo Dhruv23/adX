@@ -1,0 +1,19 @@
+# phase_13.md 4.1: 808 Kick Long.
+[PRESET]
+NAME="808 Kick Long"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Bass/808
+TAGS=808, kick, bass
+
+[PARAMS]
+level=1.58
+model=0
+character=0
+tune=-5
+decay=1.6
+pitchDrop=5
+pitchTime=0.06
+click=0.3
+keyTrack=1
+drive=3

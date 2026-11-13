@@ -62,6 +62,10 @@ struct Preset {
     /// `FALLBACK=pack/name`: a synthesized preset to play when a library this preset's
     /// zones name is not installed (phase_12.md §4.7.3).
     std::string fallback;
+    /// `ROOT_HINT=C2` and `TEMPO_HINT=120`: where and how fast the audition plays it, as
+    /// a rack's (phase_13.md: a sampled drum on its General MIDI key). Empty and 0 unset.
+    std::string rootHint;
+    double tempoHint{0.0};
     /// Where it was read from. Not serialised.
     std::filesystem::path source;
 

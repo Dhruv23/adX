@@ -1,0 +1,15 @@
+# phase_13.md 4.1: Trap Hat.
+[PRESET]
+NAME="Trap Hat"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Hat
+TAGS=trap, hat, rolls, choke
+
+[PARAMS]
+level=10.95
+model=2
+decay=0.035
+tone=0.85
+hat.openDecay=0.3
+hat.choke=1

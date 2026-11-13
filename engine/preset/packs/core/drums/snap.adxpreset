@@ -1,0 +1,13 @@
+# phase_13.md 4.1: Snap.
+[PRESET]
+NAME="Snap"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Clap
+TAGS=snap
+
+[PARAMS]
+level=7.76
+model=3
+decay=0.05
+tone=0.9

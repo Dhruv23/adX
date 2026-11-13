@@ -1,0 +1,17 @@
+# phase_13.md 4.1: 909 Kick.
+[PRESET]
+NAME="909 Kick"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Kick
+TAGS=909, kick
+
+[PARAMS]
+level=-2.33
+model=0
+character=1
+pitchDrop=24
+pitchTime=0.025
+click=0.7
+decay=0.45
+drive=2

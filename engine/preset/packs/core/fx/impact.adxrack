@@ -1,0 +1,28 @@
+# phase_13.md 4: Impact.
+[RACK]
+NAME="Impact"
+PACK=core
+CATEGORY=FX/Impact
+TAGS=impact, boom
+FALLBACK="core/Sub Drop"
+VERSION=1
+
+[LAYER drop]
+PRESET="core/Sub Drop"
+KEYS=0..127
+GAIN=1.30
+
+[LAYER burst]
+PRESET="core/Shaker"
+KEYS=0..127
+GAIN=-4.70
+PARAM decay=0.4
+
+[LAYER crash]
+PRESET="core/Crash"
+KEYS=0..127
+GAIN=-6.70
+
+[SEND space]
+LEVEL=-6
+SLOT Hall size=0.9 decay=6

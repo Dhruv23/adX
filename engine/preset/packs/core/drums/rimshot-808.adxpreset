@@ -1,0 +1,11 @@
+# phase_13.md 4.1: Rimshot 808.
+[PRESET]
+NAME="Rimshot 808"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Snare
+TAGS=808, rim
+
+[PARAMS]
+level=8.41
+model=8

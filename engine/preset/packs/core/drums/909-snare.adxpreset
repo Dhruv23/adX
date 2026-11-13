@@ -1,0 +1,15 @@
+# phase_13.md 4.1: 909 Snare.
+[PRESET]
+NAME="909 Snare"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Snare
+TAGS=909, snare
+
+[PARAMS]
+level=4.20
+model=1
+character=1
+tone=0.6
+noise=0.75
+decay=0.22

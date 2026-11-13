@@ -1,0 +1,53 @@
+# phase_13.md 4.1: Triangle, VCSL's Triangles (CC0).
+[PRESET]
+NAME="Triangle"
+TYPE=sampler
+CATEGORY=Drums/Perc
+ROOT_HINT=A5
+TAGS=acoustic, triangle
+FALLBACK="core/808 Cymbal"
+PACK=core
+
+[PARAMS]
+gain=5.99
+env.attack=0.004
+env.release=10
+
+[ZONES]
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle1_Hit_v1_rr1_Mid.wav" key=76 root=76 vel=0..83 start=184 gain=32.122646 rr=1:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle1_Hit_v1_rr2_Mid.wav" key=76 root=76 vel=0..83 start=184 gain=29.6621 rr=1:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle1_Hit_v2_rr1_Mid.wav" key=76 root=76 vel=84..127 start=189 gain=15.583062 rr=2:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle1_Hit_v2_rr2_Mid.wav" key=76 root=76 vel=84..127 start=184 gain=15.086122 rr=2:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle1_HitFM_v1_rr1_Mid.wav" key=77 root=77 vel=0..127 start=183 gain=20.014204 rr=3:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle1_HitFM_v1_rr2_Mid.wav" key=77 root=77 vel=0..127 start=187 gain=19.985819 rr=3:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle1_HitM_v1_rr2_Mid.wav" key=78 root=78 vel=0..127 start=187 gain=17.929535 rr=4:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle1_HitM_v1_rr4_Mid.wav" key=78 root=78 vel=0..127 start=183 gain=22.723795 rr=4:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle1_Roll_rr1_Mid.wav" key=79 root=79 vel=0..127 start=207 gain=20
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle1_hitFM_v2_rr1_Mid.wav" key=80 root=80 vel=0..127 start=181 gain=19.816896 rr=5:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle1_hitFM_v2_rr2_Mid.wav" key=80 root=80 vel=0..127 start=181 gain=20.187048 rr=5:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle3_Hit_v1_rr1_Mid.wav" key=81 root=81 vel=0..83 start=178 gain=25.707216 rr=6:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle3_Hit_v1_rr2_Mid.wav" key=81 root=81 vel=0..83 start=182 gain=24.981028 rr=6:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle3_Hit_v2_rr1_Mid.wav" key=81 root=81 vel=84..127 start=180 gain=15.756029 rr=7:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle3_Hit_v2_rr2_Mid.wav" key=81 root=81 vel=84..127 start=183 gain=17.801556 rr=7:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle3_HitFM_v1_rr1_Mid.wav" key=82 root=82 vel=0..83 start=182 gain=20.529 rr=8:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle3_HitFM_v1_rr2_Mid.wav" key=82 root=82 vel=0..83 start=187 gain=23.334478 rr=8:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle3_HitFM_v2_rr1_Mid.wav" key=82 root=82 vel=84..127 start=183 gain=17.893417 rr=9:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle3_HitFM_v2_rr2_Mid.wav" key=82 root=82 vel=84..127 start=186 gain=19.145222 rr=9:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle3_HitM_v1_rr1_Mid.wav" key=83 root=83 vel=0..83 start=186 gain=25.404612 rr=10:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle3_HitM_v1_rr2_Mid.wav" key=83 root=83 vel=0..83 start=177 gain=30.842302 rr=10:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle3_HitM_v2_rr1_Mid.wav" key=83 root=83 vel=84..127 start=188 gain=15.653878 rr=11:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle3_HitM_v2_rr2_Mid.wav" key=83 root=83 vel=84..127 start=184 gain=16.323635 rr=11:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle3_Roll_v2_rr1_Mid.wav" key=84 root=84 vel=0..127 start=200 gain=20
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle6_Hit_v1_rr1_Mid.wav" key=85 root=85 vel=0..83 start=183 gain=29.871626 rr=12:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle6_Hit_v1_rr2_Mid.wav" key=85 root=85 vel=0..83 start=178 gain=24.363667 rr=12:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle6_Hit_v2_rr1_Mid.wav" key=85 root=85 vel=84..127 start=189 gain=16.133991 rr=13:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle6_Hit_v2_rr2_Mid.wav" key=85 root=85 vel=84..127 start=188 gain=16.401232 rr=13:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle6_HitFM_v1_rr1_Mid.wav" key=86 root=86 vel=0..83 start=183 gain=19.290703 rr=14:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle6_HitFM_v1_rr2_Mid.wav" key=86 root=86 vel=0..83 start=193 gain=23.38742 rr=14:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle6_HitFM_v2_rr1_Mid.wav" key=86 root=86 vel=84..127 start=185 gain=18.561817 rr=15:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle6_HitFM_v2_rr2_Mid.wav" key=86 root=86 vel=84..127 start=184 gain=19.512129 rr=15:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle6_HitM_v1_rr1_Mid.wav" key=87 root=87 vel=0..83 start=184 gain=21.33663 rr=16:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle6_HitM_v1_rr2_Mid.wav" key=87 root=87 vel=0..83 start=184 gain=22.712482 rr=16:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle6_HitM_v2_rr1_Mid.wav" key=87 root=87 vel=84..127 start=183 gain=16.872004 rr=17:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle6_HitM_v2_rr2_Mid.wav" key=87 root=87 vel=84..127 start=184 gain=20.198994 rr=17:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Triangles/Triangle6_Roll_v2_rr1_Mid.wav" key=88 root=88 vel=0..127 start=190 gain=20

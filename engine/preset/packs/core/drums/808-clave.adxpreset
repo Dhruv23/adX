@@ -1,0 +1,11 @@
+# phase_13.md 4.1: 808 Clave.
+[PRESET]
+NAME="808 Clave"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Perc
+TAGS=808, clave
+
+[PARAMS]
+level=1.17
+model=9

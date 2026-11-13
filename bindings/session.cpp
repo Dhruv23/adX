@@ -545,9 +545,25 @@ void defineSession(py::class_<ProjectHandle>& project) {
             "apply_preset",
             [](ProjectHandle& handle, std::uint32_t channel, const std::string& path) {
                 adx::format::DiagnosticList diagnostics;
-                const adx::preset::Preset preset = loadOrThrow(path, diagnostics);
+                adx::preset::Preset preset = loadOrThrow(path, diagnostics);
                 {
                     const py::gil_scoped_release released;
+                    // A preset whose sound library is not installed plays its FALLBACK,
+                    // with one diagnostic saying so (phase_12.md §4.7.3), as one from the
+                    // browser's library does. The fallback is looked for among the packs
+                    // beside the preset's own.
+                    if (!adx::preset::missingLibraries(preset).empty()) {
+                        adx::preset::PresetLibrary library;
+                        for (std::filesystem::path dir = std::filesystem::path(path).parent_path();
+                             !dir.empty() && dir != dir.parent_path(); dir = dir.parent_path()) {
+                            if (std::filesystem::exists(dir / "pack.adxpack")) {
+                                adx::format::DiagnosticList scanned;
+                                static_cast<void>(library.scan(dir.parent_path(), scanned));
+                                break;
+                            }
+                        }
+                        preset = *library.playable(preset, diagnostics);
+                    }
                     grouped(handle, "Apply preset " + preset.name, [&] {
                         applyInstrumentPreset(handle, core::ChannelId{channel}, preset);
                     });

@@ -1,0 +1,26 @@
+# phase_13.md 4.1: Crash, VCSL's Clash Cymbals 1 (CC0).
+[PRESET]
+NAME="Crash"
+TYPE=sampler
+CATEGORY=Drums/Cymbal
+ROOT_HINT=C#3
+TAGS=acoustic, crash
+FALLBACK="core/808 Cymbal"
+PACK=core
+
+[PARAMS]
+gain=12.00
+env.attack=0.004
+env.release=10
+
+[ZONES]
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Clash Cymbals 1/cymbal_crash1_pp1.wav" key=49 root=49 vel=0..54 gain=11.769686 rr=1:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Clash Cymbals 1/cymbal_crash1_pp2.wav" key=49 root=49 vel=0..54 gain=14.817449 rr=1:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Clash Cymbals 1/cymbal_crash1_mp1.wav" key=49 root=49 vel=55..83 gain=6.55571 rr=2:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Clash Cymbals 1/cymbal_crash1_mp2.wav" key=49 root=49 vel=55..83 gain=5.843266 rr=2:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Clash Cymbals 1/cymbal_crash1_mf1.wav" key=49 root=49 vel=84..106 gain=2.373806 rr=3:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Clash Cymbals 1/cymbal_crash1_mf2.wav" key=49 root=49 vel=84..106 gain=0.594299 rr=3:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Clash Cymbals 1/cymbal_crash1_ff2.wav" key=49 root=49 vel=107..127 gain=-7.52616 rr=4:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Clash Cymbals 1/cymbal_crash1_ff3.wav" key=49 root=49 vel=107..127 gain=-7.982239 rr=4:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Clash Cymbals 1/cymbal_crash1_short1.wav" key=50 root=50 vel=0..127 start=25
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Clash Cymbals 1/cymbal_crash1_short2.wav" key=51 root=51 vel=0..127

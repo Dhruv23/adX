@@ -1,0 +1,38 @@
+# phase_13.md 4.1: Suspended Cymbal, VCSL's Suspended Cymbal 1 (CC0).
+[PRESET]
+NAME="Suspended Cymbal"
+TYPE=sampler
+CATEGORY=Drums/Cymbal
+ROOT_HINT=D#3
+TAGS=acoustic, cymbal, roll
+FALLBACK="core/808 Cymbal"
+PACK=core
+
+[PARAMS]
+gain=-3.85
+env.attack=0.004
+env.release=2
+
+[ZONES]
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_bow_13.wav" key=43 root=43 vel=0..127 start=5998 gain=15
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_bow_17.wav" key=44 root=44 vel=0..127 start=22047 gain=15
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_bow_20.wav" key=45 root=45 vel=0..127 start=17468 gain=15
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_bow_7.wav" key=46 root=46 vel=0..127 start=2142 gain=15
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_cresc_1.5s.wav" key=47 root=47 vel=0..127 start=3896 gain=15
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_cresc_2s.wav" key=48 root=48 vel=0..127 gain=15
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_cresc_4s.wav" key=49 root=49 vel=0..127 start=7169 gain=15
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_cresc_7.5s.wav" key=50 root=50 vel=0..127 start=1020 gain=15
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_hit_pp1.wav" key=51 root=51 vel=0..54 gain=33.583717
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_hit_mp1.wav" key=51 root=51 vel=55..83 gain=21.924355
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_hit_f1.wav" key=51 root=51 vel=84..106 start=107 gain=14.217464
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_hit_fff1.wav" key=51 root=51 vel=107..127 gain=7.625253
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_hit_bell_pp1.wav" key=52 root=52 vel=0..65 gain=22.69988
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_hit_bell_mf1.wav" key=52 root=52 vel=66..99 gain=18.547773
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_hit_bell_fff1.wav" key=52 root=52 vel=100..127 gain=9.319426
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_hit_stick_pp1.wav" key=53 root=53 vel=0..65 gain=21.976082
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_hit_stick_mp1.wav" key=53 root=53 vel=66..99 gain=15.240628
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_hit_stick_f1.wav" key=53 root=53 vel=100..127 gain=11.030114
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_roll_mp1_nloop.wav" key=54 root=54 vel=0..65 gain=22.527332
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_roll_f1_nloop.wav" key=54 root=54 vel=66..99 start=143 gain=13.679318
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_roll_ff2_nloop.wav" key=54 root=54 vel=100..127 gain=11.982349
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_scrape_1.wav" key=55 root=55 vel=0..127 gain=15

@@ -1,0 +1,12 @@
+# phase_13.md 4.1: Shaker.
+[PRESET]
+NAME="Shaker"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Perc
+TAGS=shaker
+
+[PARAMS]
+level=-7.94
+model=10
+tone=0.75

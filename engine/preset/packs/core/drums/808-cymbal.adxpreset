@@ -1,0 +1,12 @@
+# phase_13.md 4.1: 808 Cymbal.
+[PRESET]
+NAME="808 Cymbal"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Cymbal
+TAGS=808, cymbal
+
+[PARAMS]
+level=1.51
+model=7
+decay=2.5

@@ -1,0 +1,31 @@
+# phase_13.md 4.1: Acoustic Hat, VCSL's Hi-Hat Cymbal (CC0).
+[PRESET]
+NAME="Acoustic Hat"
+TYPE=sampler
+CATEGORY=Drums/Hat
+ROOT_HINT=F#2
+TAGS=acoustic, hat
+FALLBACK="core/808 Closed Hat"
+PACK=core
+
+[PARAMS]
+gain=-1.59
+env.attack=0.004
+env.release=10
+
+[ZONES]
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_Close_rr1_Mid.wav" key=44 root=44 vel=0..127 start=327 gain=8.918635 rr=1:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_Close_rr2_Mid.wav" key=44 root=44 vel=0..127 start=985 gain=11.235394 rr=1:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitC_v1_rr1_Mid.wav" key=42 root=42 vel=0..54 start=144 gain=36.40029 rr=2:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitC_v1_rr2_Mid.wav" key=42 root=42 vel=0..54 start=124 gain=35.805443 rr=2:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitC_v2_rr1_Mid.wav" key=42 root=42 vel=55..83 start=150 gain=28.626432 rr=3:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitC_v2_rr2_Mid.wav" key=42 root=42 vel=55..83 start=169 gain=28.02477 rr=3:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitC_v3_rr1_Mid.wav" key=42 root=42 vel=84..106 start=166 gain=10.05556 rr=4:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitC_v3_rr2_Mid.wav" key=42 root=42 vel=84..106 start=165 gain=15.57605 rr=4:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitC_v4_rr1_Mid.wav" key=42 root=42 vel=107..127 start=185 gain=5 rr=5:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitC_v4_rr2_Mid.wav" key=42 root=42 vel=107..127 start=179 gain=9 rr=5:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitLoose_rr1_Mid.wav" key=43 root=43 vel=0..127 start=185 gain=9.953157 rr=6:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitLoose_rr2_Mid.wav" key=43 root=43 vel=0..127 start=179 gain=10.047097 rr=6:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitO_rr1_Mid.wav" key=46 root=46 vel=0..127 start=194 gain=10.895746 rr=7:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitO_rr2_Mid.wav" key=46 root=46 vel=0..127 start=198 gain=9.188054 rr=7:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitOC_rr5_Mid.wav" key=45 root=45 vel=0..127 start=190 gain=10

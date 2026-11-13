@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Not started |
+| **Status** | In progress (2026-11-13) |
 | **Governs** | `engine/preset/packs/core/` — drum machines, acoustic kits, 808 basses, transitions FX, bus chains, drum pattern templates |
 | **FINAL_PLAN refs** | §5.9, §5.12, §7 Phase 13 |
 | **Entry criteria** | [phase_12.md](phase_12.md) §8 handoff items done (racks, macros, DrumSynth models, Clipper, Filter, VolumeShaper, Tape, audition, VCSL fetched) |
@@ -232,3 +232,50 @@ like any `.adx` clipboard fragment (Phase 6's clipboard is `.adx` text).
 [sequencer.de — handclaps](https://www.sequencer.de/synthesizer/threads/jomox-mod-brane-11-kann-das-claps.97691/) ·
 [TR-808 reference (scrapbox)](https://scrapbox.io/0b5vr/TR-808) ·
 [VCSL](https://github.com/sgossner/VCSL)
+
+---
+
+## 9. Corrections
+
+Where the build differs from the plan above, and why. Recorded as the work lands.
+
+1. **The pack is generated (§3).** `tools/packs/build_core.py` holds the recipes as
+   tables and writes every file under `engine/preset/packs/core/`; the output is
+   committed, so the browser and a reader need no build step. `--calibrate` auditions
+   each sound and moves its level (a preset's `level`/`gain`, a rack's layer `GAIN`)
+   onto its category's loudness target, up to five passes. Regenerating means
+   recalibrating.
+2. **A kit's hats are one DrumSynth voice (§4.2).** Choke groups exist only between a
+   sampler's zones, and a rack's layers are separate channels, so an open hat on one
+   layer could never be cut by a closed hat on another. DrumSynth gains two parameters,
+   inert by default: `hat.openDecay` (the open hat's own decay, GM key 46) and
+   `hat.choke` (a closed or pedal hit, 42/44, cuts a ringing open one in 4 ms). The kit
+   layer is `808 Hat Pair` / `909 Hat` / `Trap Hat` on 42..46. Test: `drum_hat_pair`.
+3. **Kit macros are the taxonomy's (§4.2).** Every Drums sound's eight macros mean the
+   same thing across packs (`taxonomy.MACRO_SLOTS`: Pitch, Decay, Punch, Drive, Tone,
+   Body, Space, Width); the plan's Tune/Room/Hat Length/... would have been core's
+   alone. The kits wire Pitch, Decay, Drive and Tone.
+4. **GM toms get a layer each.** General MIDI's toms (41, 43, 45, 47, 48, 50) sit between
+   its hats, so one tom layer over 41..50 would answer the hat keys too
+   (`pack_core_kits_gm_map` caught it).
+5. **Sampled voices move to their GM key.** VCSL maps its drums around C4; each sampled
+   preset's zones are shifted (roots with them, so pitch is kept) until the key most of
+   them use is the voice's GM key, and the preset says so with `ROOT_HINT`, which
+   presets now take as racks do (`docs/adx-format-v2.md` §13).
+6. **`apply_preset` plays the fallback.** Applying a sampled preset whose library is not
+   installed - the browser's drag - now plays its `FALLBACK` with one ADX3006, as the
+   library path already did; before, the channel went silent. `pack_core_fallbacks`.
+7. **Cut: Marching Snare and Marching Kit.** VSCO 2 CE's SFZ branch maps no marching
+   percussion (only raw WAVs). **Changed:** `808 Kick Long` is filed under Bass/808
+   (it is the 808 bass, and nearly all sub, which loudness weighting barely counts);
+   `Trap Snare` in the Trap Kit is two layers (909 Snare + 808 Clap), since a rack layer
+   names a preset, not another rack; `Tape Stop` is a chain (GrossBeat's tape stop);
+   `Reverse Crash`, `Reverse Swell` and
+   `Snare Roll Builder` wait on destructive-edit renders and pattern-carrying racks the
+   generator cannot write yet (the `roll_build` pattern template is there).
+8. **Pattern templates are notes, with the mini-notation as the source (§4.6).** A paste
+   takes a fragment's notes; a `MINI` line would paste nothing. Each template is
+   written from a step grid on the 808 Kit's GM keys.
+9. **Racks have golden hashes too.** `golden_pack_racks` renders every rack with layers
+   in an empty project, with the library store pointed at an empty folder so a sampled
+   layer plays its fallback on every machine; `tests/golden/racks.txt`.

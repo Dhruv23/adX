@@ -1,0 +1,11 @@
+# phase_13.md: drums, kits, 808s, transitions, chains and patterns every later pack builds on.
+[PACK]
+ID=core
+NAME="Core Drums & Machines"
+VERSION=1
+REQUIRES=adx>=0.1
+LIBRARIES=vcsl
+LICENCE=CC0-1.0
+
+[ASSETS]
+ASSET "lib://vcsl/" licence=CC0-1.0 redistributable=yes credit="Versilian Studios"

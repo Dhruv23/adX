@@ -24,6 +24,7 @@ adx_add_cpp_test(adx_tests
         instruments/test_sampler.cpp
         instruments/test_tranche_b.cpp
         instruments/test_wavetable_extra.cpp
+        instruments/test_drum_hats.cpp
         instruments/test_va.cpp
         instruments/test_voice.cpp
         instruments/VoicebankFixture.cpp
@@ -102,6 +103,7 @@ adx_add_cpp_test(adx_tests
         render/RenderFixtures.cpp
         render/test_bit_identity.cpp
         render/test_golden_units.cpp
+        render/test_golden_racks.cpp
         render/test_golden_gate.cpp
         render/test_corpus_render.cpp
         render/test_spectral_match.cpp

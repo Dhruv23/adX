@@ -1,0 +1,10 @@
+# phase_13.md 4.5: Kick Pump 1-8, an effect-only rack.
+[RACK]
+NAME="Kick Pump 1-8"
+PACK=core
+CATEGORY=Chain/Kick
+TAGS=chain
+VERSION=1
+
+[CHAIN]
+SLOT VolumeShaper length=0.5 shape=0 depth=0.8

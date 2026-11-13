@@ -1,0 +1,15 @@
+# phase_13.md 4: Laser Delay.
+[RACK]
+NAME="Laser Delay"
+PACK=core
+CATEGORY=FX/Impact
+TAGS=laser, delay
+VERSION=1
+
+[LAYER zap]
+PRESET="core/Laser Zap"
+KEYS=0..127
+GAIN=-0.57
+
+[CHAIN]
+SLOT Delay sync=1 timeMs=280 feedback=0.4

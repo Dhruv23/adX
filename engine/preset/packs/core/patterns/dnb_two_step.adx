@@ -1,0 +1,30 @@
+# phase_13.md 4.6: dnb_two_step. Paste it onto a kit channel; the keys are General MIDI's.
+[PROJECT]
+ADX_VERSION=2
+
+[TEMPO]
+0:0:0 174
+
+[CHANNEL Drums]
+INSTRUMENT=drumsynth
+PARAM model=5
+OUTPUT=insert.1
+
+[PATTERN dnb_two_step]
+LENGTH=1:0:0
+NOTES Drums
+  C2 0:0:0 0:0:480 110
+  C2 0:2:1920 0:0:480 90
+  D2 0:1:0 0:0:480 110
+  D2 0:3:0 0:0:480 110
+  F#2 0:0:0 0:0:480 110
+  F#2 0:0:1920 0:0:480 90
+  F#2 0:1:0 0:0:480 110
+  F#2 0:1:1920 0:0:480 90
+  F#2 0:2:0 0:0:480 110
+  F#2 0:2:1920 0:0:480 90
+  F#2 0:3:0 0:0:480 110
+  F#2 0:3:1920 0:0:480 90
+
+[MIXER]
+INSERT 1 name="Master"

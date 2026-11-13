@@ -1,0 +1,10 @@
+# phase_13.md 4.5: Room 0.6 s, an effect-only rack.
+[RACK]
+NAME="Room 0.6 s"
+PACK=core
+CATEGORY=Chain/Space
+TAGS=chain
+VERSION=1
+
+[CHAIN]
+SLOT Hall size=0.3 decay=0.6

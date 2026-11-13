@@ -1,0 +1,14 @@
+# phase_13.md 4.1: 808 Cowbell.
+[PRESET]
+NAME="808 Cowbell"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Perc
+TAGS=808, cowbell, phonk, melodic
+
+[PARAMS]
+level=1.82
+model=6
+character=0
+decay=0.25
+keyTrack=1

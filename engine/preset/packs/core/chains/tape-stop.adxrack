@@ -1,0 +1,10 @@
+# phase_13.md 4.5: Tape Stop, an effect-only rack.
+[RACK]
+NAME="Tape Stop"
+PACK=core
+CATEGORY=Chain/Bus
+TAGS=chain
+VERSION=1
+
+[CHAIN]
+SLOT GrossBeat pattern=4 length=3 depth=1

@@ -1,0 +1,28 @@
+# phase_13.md 4: Noise Riser 8.
+[RACK]
+NAME="Noise Riser 8"
+PACK=core
+CATEGORY=FX/Riser
+TAGS=riser, noise, 8 bars
+TEMPO_HINT=128
+VERSION=1
+
+[LAYER noise]
+TYPE=va
+KEYS=0..127
+GAIN=6.80
+PARAM osc1.level=0
+PARAM osc2.level=0
+PARAM noise.level=1
+PARAM filter.type=3
+PARAM filter.cutoff=200
+PARAM filter.envAmount=5.3
+PARAM filterEnv.attack=10
+PARAM filterEnv.sustain=1
+PARAM env.attack=2
+PARAM env.sustain=1
+PARAM env.release=1
+
+[SEND space]
+LEVEL=-8
+SLOT Hall size=0.8 decay=3

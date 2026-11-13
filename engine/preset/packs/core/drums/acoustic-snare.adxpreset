@@ -1,0 +1,45 @@
+# phase_13.md 4.1: Acoustic Snare, VCSL's Snare Drum, Modern 1 (CC0).
+[PRESET]
+NAME="Acoustic Snare"
+TYPE=sampler
+CATEGORY=Drums/Snare
+ROOT_HINT=D2
+TAGS=acoustic, snare
+FALLBACK="core/909 Snare"
+PACK=core
+
+[PARAMS]
+gain=7.18
+env.attack=0.004
+env.release=10
+
+[ZONES]
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitNS_v2_rr1_Mid.wav" key=37 root=37 vel=0..54 start=196 gain=24.166159 rr=1:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitNS_v2_rr2_Mid.wav" key=37 root=37 vel=0..54 start=201 gain=21.452387 rr=1:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitNS_v4_rr1_Mid.wav" key=37 root=37 vel=55..83 start=207 gain=13.478221 rr=2:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitNS_v4_rr2_Mid.wav" key=37 root=37 vel=55..83 start=209 gain=12.173549 rr=2:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitNS_v5_rr1_Mid.wav" key=37 root=37 vel=84..106 start=210 gain=7.876824 rr=3:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitNS_v5_rr2_Mid.wav" key=37 root=37 vel=84..106 start=208 gain=6.301873 rr=3:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitNS_v6_rr1_Mid.wav" key=37 root=37 vel=107..127 start=198 gain=6.175084 rr=4:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitNS_v6_rr2_Mid.wav" key=37 root=37 vel=107..127 start=203 gain=5.253379 rr=4:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitSN_v3_rr1_Mid.wav" key=38 root=38 vel=0..47 start=202 gain=28.202091 rr=5:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitSN_v3_rr2_Mid.wav" key=38 root=38 vel=0..47 gain=26.955214 rr=5:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitSN_v5_rr1_Mid.wav" key=38 root=38 vel=48..72 start=190 gain=18.522293 rr=6:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitSN_v5_rr2_Mid.wav" key=38 root=38 vel=48..72 start=210 gain=19.581848 rr=6:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitSN_v6_rr1_Mid.wav" key=38 root=38 vel=73..93 start=206 gain=12.992527 rr=7:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitSN_v6_rr2_Mid.wav" key=38 root=38 vel=73..93 start=207 gain=12.958442 rr=7:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitSN_v7_rr1_Mid.wav" key=38 root=38 vel=94..110 start=217 gain=6.269661 rr=8:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitSN_v7_rr2_Mid.wav" key=38 root=38 vel=94..110 start=213 gain=7.697267 rr=8:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitSN_v9_rr1_Mid.wav" key=38 root=38 vel=111..127 start=221 gain=1.844433 rr=9:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitSN_v9_rr2_Mid.wav" key=38 root=38 vel=111..127 start=221 gain=3.107743 rr=9:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_rollNS_v2_rr1_Mid.wav" key=39 root=39 vel=0..54 start=197 gain=22.322607
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_rollNS_v3_rr1_Mid.wav" key=39 root=39 vel=55..83 start=192 gain=15.474368
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_rollNS_v4_rr1_Mid.wav" key=39 root=39 vel=84..106 start=195 gain=8.79995
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_rollNS_v5_rr1_Mid.wav" key=39 root=39 vel=107..127 start=193 gain=3.649781
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_rollSN_v2_rr1_Mid.wav" key=40 root=40 vel=0..65 start=43 gain=20.214066
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_rollSN_v4_rr1_Mid.wav" key=40 root=40 vel=66..99 start=189 gain=8.790098
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_rollSN_v5_rr2_Mid.wav" key=40 root=40 vel=100..127 start=190 gain=6.238272
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_stick_v1_rr1_Mid.wav" key=41 root=41 vel=0..127 start=189 gain=9.26806 rr=10:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_stick_v1_rr2_Mid.wav" key=41 root=41 vel=0..127 start=191 gain=10.799342 rr=10:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_taps_v4_rr1_Mid.wav" key=42 root=42 vel=0..127 start=178 gain=9.862215 rr=11:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_taps_v4_rr2_Mid.wav" key=42 root=42 vel=0..127 start=177 gain=10.140006 rr=11:1

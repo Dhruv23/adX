@@ -1,0 +1,21 @@
+# phase_13.md 4.3/4.4: Sub Drop.
+[PRESET]
+NAME="Sub Drop"
+TYPE=va
+PACK=core
+CATEGORY=FX/Impact
+TAGS=sub, drop, impact
+
+[PARAMS]
+level=-3.45
+osc1.wave=0
+osc2.level=0
+pitchEnv.amount=24
+pitchEnv.time=1.5
+pitchEnv.curve=1
+osc1.octave=-2
+env.attack=0.002
+env.decay=1.5
+env.sustain=0
+env.release=0.3
+filter.cutoff=20000

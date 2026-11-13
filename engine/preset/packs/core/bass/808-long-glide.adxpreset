@@ -1,0 +1,21 @@
+# phase_13.md 4.3/4.4: 808 Long Glide.
+[PRESET]
+NAME="808 Long Glide"
+TYPE=va
+PACK=core
+CATEGORY=Bass/808
+TAGS=808, bass, glide, long
+
+[PARAMS]
+osc1.wave=0
+osc2.level=0
+env.attack=0.002
+env.decay=1.8
+env.sustain=0.7
+env.release=0.2
+pitchEnv.amount=7
+pitchEnv.time=0.05
+voice.mode=2
+glide=0.12
+glide.mode=0
+filter.cutoff=20000

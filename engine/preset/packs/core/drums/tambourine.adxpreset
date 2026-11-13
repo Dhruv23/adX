@@ -1,0 +1,23 @@
+# phase_13.md 4.1: Tambourine, VCSL's Tambourine 1 (CC0).
+[PRESET]
+NAME="Tambourine"
+TYPE=sampler
+CATEGORY=Drums/Perc
+ROOT_HINT=F#3
+TAGS=acoustic, tambourine
+FALLBACK="core/Shaker"
+PACK=core
+
+[PARAMS]
+gain=-3.85
+env.attack=0.004
+env.release=10
+
+[ZONES]
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Tambourine 1/Tamb1_Hit_v1_rr1_Mid.wav" key=53 root=53 vel=0..83 start=261 gain=25.98536
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Tambourine 1/Tamb1_Hit_v2_rr1_Mid.wav" key=53 root=53 vel=84..127 start=274 gain=16.489954
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Tambourine 1/Tamb1_Roll_v1_rr1_Mid.wav" key=54 root=54 vel=0..65 start=74 gain=41.1333
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Tambourine 1/Tamb1_Roll_v2_rr1_Mid.wav" key=54 root=54 vel=66..99 start=326 gain=21.643381
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Tambourine 1/Tamb1_Roll_v3_rr1_Mid.wav" key=54 root=54 vel=100..127 start=232 gain=13.619494
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Tambourine 1/Tamb1_Shake_rr1_Mid.wav" key=55 root=55 vel=0..127 start=3300 gain=21.293713 rr=1:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Tambourine 1/Tamb1_Shake_rr2_Mid.wav" key=55 root=55 vel=0..127 start=335 gain=18.874233 rr=1:1

@@ -1,0 +1,32 @@
+# phase_13.md 4.6: half_time. Paste it onto a kit channel; the keys are General MIDI's.
+[PROJECT]
+ADX_VERSION=2
+
+[TEMPO]
+0:0:0 140
+
+[CHANNEL Drums]
+INSTRUMENT=drumsynth
+PARAM model=5
+OUTPUT=insert.1
+
+[PATTERN half_time]
+LENGTH=2:0:0
+NOTES Drums
+  C2 0:0:0 0:0:480 110
+  C2 0:2:0 0:0:480 110
+  C2 1:0:0 0:0:480 110
+  C2 1:2:1920 0:0:480 90
+  D2 0:2:0 0:0:480 110
+  D2 1:2:0 0:0:480 110
+  F#2 0:0:0 0:0:480 110
+  F#2 0:1:0 0:0:480 110
+  F#2 0:2:0 0:0:480 110
+  F#2 0:3:0 0:0:480 110
+  F#2 1:0:0 0:0:480 110
+  F#2 1:1:0 0:0:480 110
+  F#2 1:2:0 0:0:480 110
+  F#2 1:3:0 0:0:480 110
+
+[MIXER]
+INSERT 1 name="Master"

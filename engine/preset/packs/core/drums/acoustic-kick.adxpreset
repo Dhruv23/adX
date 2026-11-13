@@ -1,0 +1,46 @@
+# phase_13.md 4.1: Acoustic Kick, VCSL's Bass Drum 2 (CC0).
+[PRESET]
+NAME="Acoustic Kick"
+TYPE=sampler
+CATEGORY=Drums/Kick
+ROOT_HINT=C2
+TAGS=acoustic, kick
+FALLBACK="core/909 Kick"
+PACK=core
+
+[PARAMS]
+gain=1.50
+env.attack=0.004
+env.release=2
+
+[ZONES]
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_cresc_med.wav" key=34 root=34 vel=0..127 start=37876 gain=9
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_cresc_short.wav" key=35 root=35 vel=0..127 start=45785 gain=10
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_hit_pp1.wav" key=36 root=36 vel=0..47 start=2477 gain=20.701792 rr=1:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_hit_pp2.wav" key=36 root=36 vel=0..47 start=1825 gain=20.922249 rr=1:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_hit_mp1.wav" key=36 root=36 vel=48..72 start=1930 gain=17.628073 rr=2:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_hit_mp2.wav" key=36 root=36 vel=48..72 start=3653 gain=17.880009 rr=2:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_hit_mf1.wav" key=36 root=36 vel=73..93 start=2180 gain=13.218842 rr=3:0
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_hit_mf2.wav" key=36 root=36 vel=73..93 start=2060 gain=14.496991 rr=3:1
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_hit_f.wav" key=36 root=36 vel=94..110 start=1011 gain=11.533501
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_hit_ff.wav" key=36 root=36 vel=111..127 gain=10.183017
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_roll_pp.wav" key=37 root=37 vel=0..54 start=1563 gain=30.144798
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_roll_mp.wav" key=37 root=37 vel=55..83 gain=18.674417
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_roll_mf.wav" key=37 root=37 vel=84..106 gain=12.196516
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_roll_ff.wav" key=37 root=37 vel=107..127 gain=9.947226
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_roll_fast_pp.wav" key=38 root=38 vel=0..54 gain=17.599352
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_roll_fast_mp.wav" key=38 root=38 vel=55..83 gain=17.357367
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_roll_fast_mf.wav" key=38 root=38 vel=84..106 gain=15.925822
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_roll_fast_f.wav" key=38 root=38 vel=107..127 gain=10.931566
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_roll_fast_pp_rel.wav" key=39 root=39 vel=0..54 gain=24.15014
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_roll_fast_mp_rel.wav" key=39 root=39 vel=55..83 gain=23.189661
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_roll_fast_mf_rel.wav" key=39 root=39 vel=84..106 gain=19.421612
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_roll_fast_f_rel.wav" key=39 root=39 vel=107..127 gain=16.284472
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_roll_pp_rel.wav" key=40 root=40 vel=0..54 gain=32.312748
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_roll_mp_rel.wav" key=40 root=40 vel=55..83 gain=23.181843
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_roll_mf_rel.wav" key=40 root=40 vel=84..106 gain=18.68591
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_roll_ff_rel.wav" key=40 root=40 vel=107..127 gain=14.419984
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_rub10.wav" key=41 root=41 vel=0..127 start=2659 gain=19
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_rub12.wav" key=42 root=42 vel=0..127 start=1187 gain=15
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_rub2.wav" key=43 root=43 vel=0..127 start=19 gain=30
+ZONE "lib://vcsl/Membranophones/Struck Membranophones/Bass Drum 2/bassdrum_rub7.wav" key=44 root=44 vel=0..127 start=28 gain=25

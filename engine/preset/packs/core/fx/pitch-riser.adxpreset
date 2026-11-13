@@ -1,0 +1,22 @@
+# phase_13.md 4.3/4.4: Pitch Riser.
+[PRESET]
+NAME="Pitch Riser"
+TYPE=va
+PACK=core
+CATEGORY=FX/Riser
+TAGS=riser, pitch, build
+
+[PARAMS]
+level=5.50
+osc1.wave=1
+unison.voices=8
+unison.detune=30
+pitchEnv.amount=-24
+pitchEnv.time=2
+pitchEnv.curve=1
+env.attack=0.5
+env.sustain=1
+env.release=0.5
+filter.type=2
+filter.cutoff=2500
+filter.keyTrack=1

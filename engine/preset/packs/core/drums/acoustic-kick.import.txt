@@ -1,0 +1,4 @@
+C:\Users\dhruv\AppData\Local\adX\libraries\vcsl@dfcf4a491877\Membranophones\Struck Membranophones\Bass Drum 2.sfz
+30 regions, 0 samples missing, 0 unknown, 0 ignored, 1 approximated
+
+0:0 approximated ampeg_release - 8 region(s) differ from the instrument's own env.release

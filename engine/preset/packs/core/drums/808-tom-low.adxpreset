@@ -1,0 +1,13 @@
+# phase_13.md 4.1: 808 Tom Low.
+[PRESET]
+NAME="808 Tom Low"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Perc
+TAGS=808, tom
+
+[PARAMS]
+level=-4.47
+model=4
+tune=-7
+decay=0.5

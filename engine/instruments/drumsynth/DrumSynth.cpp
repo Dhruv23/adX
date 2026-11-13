@@ -23,6 +23,9 @@ constexpr std::array<float, 3> kClapBursts{0.0F, 0.011F, 0.023F};
 constexpr float kSilence = 1e-4F;
 
 /// Per-sample multiplier that falls 60 dB in `seconds`.
+/// How fast a choked open hat falls silent.
+constexpr float kHatChokeSeconds = 0.004F;
+
 [[nodiscard]] float decayPerSample(float seconds, std::uint32_t rate) noexcept {
     const double samples = std::max(1.0, static_cast<double>(seconds) * rate);
     return static_cast<float>(dsp::exp(-6.907755278982137 / samples));
@@ -142,7 +145,24 @@ void DrumSynth::startVoice(graph::Voice& voice, const graph::BlockEvent& /*event
     const float ratio = dsp::exp2F(semitones / 12.0F);
     s.frequency = baseFrequency(s.model) * ratio;
 
-    const float decay = std::max(0.01F, render.param(idx(P::Decay)));
+    float decay = std::max(0.01F, render.param(idx(P::Decay)));
+    // A hat voice is a pair: its open key rings for its own time, and a closed or pedal
+    // hit cuts an open one still ringing (phase_13.md §4.2). Both off by default.
+    if (s.model == DrumModel::Hat) {
+        const float open = render.param(idx(P::HatOpenDecay));
+        if (open > 0.0F && voice.pitch == kOpenHatKey) {
+            decay = std::max(0.01F, open);
+        }
+        if (render.param(idx(P::HatChoke)) >= 0.5F &&
+            (voice.pitch == kClosedHatKey || voice.pitch == kPedalHatKey)) {
+            for (graph::Voice& other : pool().voices()) {
+                if (&other != &voice && other.phase != graph::VoicePhase::Free &&
+                    other.pitch == kOpenHatKey && stateOf(other).model == DrumModel::Hat) {
+                    stateOf(other).ampDecay = decayPerSample(kHatChokeSeconds, rate);
+                }
+            }
+        }
+    }
     const float tone = std::clamp(render.param(idx(P::Tone)), 0.0F, 1.0F);
     const float click = std::clamp(render.param(idx(P::Click)), 0.0F, 1.0F);
     const float noise = std::clamp(render.param(idx(P::Noise)), 0.0F, 1.0F);

@@ -1,0 +1,94 @@
+# phase_13.md 4: 808 Kit.
+[RACK]
+NAME="808 Kit"
+PACK=core
+CATEGORY=Drums/Kit
+TAGS=808, kit
+TEMPO_HINT=96
+ROOT_HINT=C2
+VERSION=1
+
+[LAYER kick]
+PRESET="core/808 Kick Short"
+KEYS=35..36
+
+[LAYER snare]
+PRESET="core/808 Snare"
+KEYS=37..38
+
+[LAYER clap]
+PRESET="core/808 Clap"
+KEYS=39..39
+
+[LAYER hat]
+PRESET="core/808 Hat Pair"
+KEYS=42..46
+
+[LAYER tomfloor]
+PRESET="core/808 Tom Low"
+KEYS=41..41
+
+[LAYER tomfloorhigh]
+PRESET="core/808 Tom Low"
+KEYS=43..43
+
+[LAYER tomlow]
+PRESET="core/808 Tom Mid"
+KEYS=45..45
+
+[LAYER tommid]
+PRESET="core/808 Tom Mid"
+KEYS=47..48
+
+[LAYER tomhigh]
+PRESET="core/808 Tom High"
+KEYS=50..50
+
+[LAYER cymbal]
+PRESET="core/808 Cymbal"
+KEYS=49..49
+
+[LAYER ride]
+PRESET="core/808 Cymbal"
+KEYS=51..51
+
+[LAYER cowbell]
+PRESET="core/808 Cowbell"
+KEYS=56..56
+
+[LAYER conga]
+PRESET="core/808 Conga Mid"
+KEYS=60..64
+
+[LAYER clave]
+PRESET="core/808 Clave"
+KEYS=75..77
+
+[CHAIN]
+SLOT Compressor threshold=-12 ratio=4 attack=10 release=80
+SLOT Saturation model=0 drive=4
+SLOT Clipper mode=0 drive=0 ceiling=-1
+
+[MACRO Pitch]
+VALUE=0.5
+TARGET layer.kick.tune range=-12..12
+TARGET layer.snare.tune range=-12..12
+TARGET layer.tomfloor.tune range=-12..12
+TARGET layer.tomfloorhigh.tune range=-12..12
+TARGET layer.tomlow.tune range=-12..12
+TARGET layer.tommid.tune range=-12..12
+TARGET layer.tomhigh.tune range=-12..12
+
+[MACRO Decay]
+VALUE=0.5
+TARGET layer.kick.decay range=0.05..1.2 curve=exponential(0.3)
+TARGET layer.snare.decay range=0.05..1.2 curve=exponential(0.3)
+
+[MACRO Drive]
+VALUE=0.5
+TARGET chain.2.drive range=0..12
+
+[MACRO Tone]
+VALUE=0.5
+TARGET layer.snare.tone range=0.2..0.95
+TARGET layer.hat.tone range=0.2..0.95

@@ -1,0 +1,16 @@
+# phase_13.md 4.1: 808 Snare.
+[PRESET]
+NAME="808 Snare"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Snare
+TAGS=808, snare
+
+[PARAMS]
+level=6.92
+model=1
+character=0
+tune=0
+tone=0.45
+noise=0.6
+decay=0.18

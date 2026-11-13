@@ -1,0 +1,26 @@
+# phase_13.md 4.1: Acoustic Clap, VCSL's Claps (CC0).
+[PRESET]
+NAME="Acoustic Clap"
+TYPE=sampler
+CATEGORY=Drums/Clap
+ROOT_HINT=D#2
+TAGS=acoustic, clap
+FALLBACK="core/808 Clap"
+PACK=core
+
+[PARAMS]
+gain=9.20
+env.attack=0.004
+env.release=2
+
+[ZONES]
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Claps/Clap_rr5.wav" key=39 root=39 vel=0..127 gain=0.841848 rr=1:0
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Claps/Clap_rr4.wav" key=39 root=39 vel=0..127 gain=3.052644 rr=1:1
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Claps/Clap_rr6.wav" key=39 root=39 vel=0..127 gain=-5.02455 rr=1:2
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Claps/Clap_rr3.wav" key=39 root=39 vel=0..127 gain=0.856101 rr=1:3
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Claps/Clap_rr2.wav" key=39 root=39 vel=0..127 gain=1.17845 rr=1:4
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Claps/Clap_rr1.wav" key=39 root=39 vel=0..127 gain=1.659081 rr=1:5
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Claps/SoloClap_vl1.wav" key=40 root=40 vel=0..54 start=1126 gain=4.810288
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Claps/SoloClap_vl2.wav" key=40 root=40 vel=55..83 start=2099 gain=-1.165774
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Claps/SoloClap_vl3.wav" key=40 root=40 vel=84..106 start=1483 gain=6.331266
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Claps/SoloClap_vl4.wav" key=40 root=40 vel=107..127 start=1770 gain=-5.101445

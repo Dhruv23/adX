@@ -127,6 +127,10 @@ Preset parsePreset(std::string_view text, format::DiagnosticList& diagnostics) {
                 out.pack = value;
             } else if (line.key == "FALLBACK") {
                 out.fallback = value;
+            } else if (line.key == "ROOT_HINT") {
+                out.rootHint = value;
+            } else if (line.key == "TEMPO_HINT") {
+                (void)format::parseDouble(value, line.valueSpan, diagnostics, out.tempoHint);
             } else if (line.key == "CATEGORY") {
                 out.category = value;
             } else if (line.key == "MIX") {
@@ -176,6 +180,12 @@ std::string writePreset(const Preset& preset) {
     }
     if (!preset.fallback.empty()) {
         out << "FALLBACK=" << format::quoteAlways(preset.fallback) << '\n';
+    }
+    if (!preset.rootHint.empty()) {
+        out << "ROOT_HINT=" << preset.rootHint << '\n';
+    }
+    if (preset.tempoHint > 0.0) {
+        out << "TEMPO_HINT=" << format::formatDouble(preset.tempoHint) << '\n';
     }
     if (!preset.tags.empty()) {
         out << "TAGS=";

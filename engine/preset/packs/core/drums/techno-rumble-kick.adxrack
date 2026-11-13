@@ -1,0 +1,19 @@
+# phase_13.md 4: Techno Rumble Kick.
+[RACK]
+NAME="Techno Rumble Kick"
+PACK=core
+CATEGORY=Drums/Kick
+TAGS=techno, kick, rumble
+TEMPO_HINT=132
+VERSION=1
+
+[LAYER kick]
+PRESET="core/909 Kick"
+KEYS=0..127
+GAIN=-0.57
+
+[SEND rumble]
+LEVEL=-6
+SLOT Hall size=0.6 decay=2.5
+SLOT Filter type=0 cutoff=180
+SLOT VolumeShaper length=1 shape=0 depth=0.9

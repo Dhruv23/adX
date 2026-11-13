@@ -1,0 +1,15 @@
+# phase_13.md 4.1: Trap Kick.
+[PRESET]
+NAME="Trap Kick"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Kick
+TAGS=trap, kick
+
+[PARAMS]
+level=-4.99
+model=0
+character=0
+decay=0.5
+click=0.6
+drive=3

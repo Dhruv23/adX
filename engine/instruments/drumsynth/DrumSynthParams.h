@@ -27,6 +27,11 @@ enum class DrumParam : std::uint32_t {
     Level,
     /// 0 808, 1 909, 2 707 (phase_12.md §4.5). Appended: existing values keep their place.
     Character,
+    /// The open hat's decay (GM key 46), so one hat voice is a closed and an open hat;
+    /// 0 keeps `decay` for both (phase_13.md §4.2).
+    HatOpenDecay,
+    /// 1: a closed or pedal hat (42, 44) cuts a ringing open one, as a real pair does.
+    HatChoke,
     Count,
 };
 
@@ -92,7 +97,14 @@ inline constexpr auto kDrumSynthParams = std::to_array<project::ParamDescriptor>
     // The voicing tables: 0 the 808 (every earlier sound), 1 a 909-ish kick (faster drop,
     // harder click) and snare (noisier), 2 a 707-ish (shorter, brighter).
     detail::drum("character", 0, 2, 0, project::Unit::Count, project::ScaleKind::Stepped),
+    detail::drum("hat.openDecay", 0, 4, 0, project::Unit::Seconds),
+    detail::drum("hat.choke", 0, 1, 0, project::Unit::Boolean, project::ScaleKind::Stepped),
 });
+
+/// GM's hi-hat keys: closed, pedal, open.
+inline constexpr std::uint8_t kClosedHatKey = 42;
+inline constexpr std::uint8_t kPedalHatKey = 44;
+inline constexpr std::uint8_t kOpenHatKey = 46;
 
 static_assert(kDrumSynthParams.size() == static_cast<std::size_t>(DrumParam::Count));
 

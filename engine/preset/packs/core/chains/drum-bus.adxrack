@@ -1,0 +1,12 @@
+# phase_13.md 4.5: Drum Bus, an effect-only rack.
+[RACK]
+NAME="Drum Bus"
+PACK=core
+CATEGORY=Chain/Bus
+TAGS=chain
+VERSION=1
+
+[CHAIN]
+SLOT Compressor threshold=-12 ratio=4 attack=10 release=80
+SLOT Saturation model=0 drive=4
+SLOT Clipper mode=0 drive=0 ceiling=-1

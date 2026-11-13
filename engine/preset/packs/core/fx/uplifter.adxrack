@@ -1,0 +1,23 @@
+# phase_13.md 4: Uplifter.
+[RACK]
+NAME="Uplifter"
+PACK=core
+CATEGORY=FX/Riser
+TAGS=uplifter, resonant
+VERSION=1
+
+[LAYER noise]
+TYPE=va
+KEYS=0..127
+GAIN=18.80
+PARAM osc1.level=0
+PARAM osc2.level=0
+PARAM noise.level=1
+PARAM env.attack=3
+PARAM env.sustain=1
+PARAM env.release=0.5
+
+[CHAIN]
+SLOT Resonator voices=3 note1=0 note2=7 note3=12 feedback=0.85
+SLOT Filter type=1 cutoff=400
+SLOT Saturation model=0 drive=0 output=12

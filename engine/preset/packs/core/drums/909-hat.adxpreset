@@ -1,0 +1,16 @@
+# phase_13.md 4.1: 909 Hat.
+[PRESET]
+NAME="909 Hat"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Hat
+TAGS=909, hat, choke
+
+[PARAMS]
+level=8.91
+model=2
+character=1
+decay=0.06
+tone=0.9
+hat.openDecay=0.35
+hat.choke=1

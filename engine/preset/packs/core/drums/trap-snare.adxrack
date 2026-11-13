@@ -1,0 +1,20 @@
+# phase_13.md 4: Trap Snare.
+[RACK]
+NAME="Trap Snare"
+PACK=core
+CATEGORY=Drums/Snare
+TAGS=trap, snare, layered
+VERSION=1
+
+[LAYER snare]
+PRESET="core/909 Snare"
+KEYS=0..127
+GAIN=-3.41
+
+[LAYER clap]
+PRESET="core/808 Clap"
+KEYS=0..127
+GAIN=-7.41
+
+[CHAIN]
+SLOT Clipper mode=0 drive=4

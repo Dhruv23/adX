@@ -1,0 +1,12 @@
+# phase_13.md 4.5: Parallel Crush, an effect-only rack.
+[RACK]
+NAME="Parallel Crush"
+PACK=core
+CATEGORY=Chain/Bus
+TAGS=chain
+VERSION=1
+
+[CHAIN]
+SLOT Distortion drive=12
+SLOT Compressor threshold=-20 ratio=10
+SLOT ParametricEq band1.type=3 band1.freq=100

@@ -1,0 +1,22 @@
+# phase_13.md 4.3/4.4: Downlifter.
+[PRESET]
+NAME="Downlifter"
+TYPE=va
+PACK=core
+CATEGORY=FX/Riser
+TAGS=downlifter, noise, sweep
+
+[PARAMS]
+level=2.18
+osc1.level=0
+osc2.level=0
+noise.level=1
+filter.cutoff=200
+filter.envAmount=5.3
+filterEnv.attack=0.001
+filterEnv.decay=4
+filterEnv.sustain=0
+env.attack=0.001
+env.decay=4
+env.sustain=0
+env.release=0.3

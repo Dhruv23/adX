@@ -50,3 +50,7 @@ Fetched by `tools/packs/fetch_libraries.py` into the user's library store at a p
 | Versilian Community Sample Library (SFZ) | dfcf4a491877 | CC0-1.0 | Versilian Studios |
 | Salamander Grand Piano V3 | 3382bf9496bb | CC-BY-3.0 | Alexander Holm |
 | GeneralUser GS (SoundFont) | 684543d5e5ef | GeneralUser-GS-2.0 | S. Christian Collins |
+
+| Pack | Asset | Licence | Shipped | Credit |
+|---|---|---|---|---|
+| core | `lib://vcsl/` | CC0-1.0 | yes | Versilian Studios |

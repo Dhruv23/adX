@@ -1,0 +1,10 @@
+# phase_13.md 4.5: Trance Gate 16, an effect-only rack.
+[RACK]
+NAME="Trance Gate 16"
+PACK=core
+CATEGORY=Chain/Bus
+TAGS=chain
+VERSION=1
+
+[CHAIN]
+SLOT VolumeShaper length=4 shape=0 steps=46517 depth=1

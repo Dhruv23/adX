@@ -1,0 +1,18 @@
+# phase_13.md 4: 808 Punchy.
+[RACK]
+NAME="808 Punchy"
+PACK=core
+CATEGORY=Bass/808
+TAGS=808, bass, punchy
+ROOT_HINT=C1
+VERSION=1
+
+[LAYER 808]
+PRESET="core/808 Kick Long"
+KEYS=0..127
+GAIN=11.02
+PARAM decay=1.2
+PARAM click=0.5
+
+[CHAIN]
+SLOT Saturation model=1 drive=6

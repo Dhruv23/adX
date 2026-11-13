@@ -1,0 +1,17 @@
+# phase_13.md 4.3/4.4: Sub Sine.
+[PRESET]
+NAME="Sub Sine"
+TYPE=va
+PACK=core
+CATEGORY=Bass/Sub
+TAGS=sub, sine, clean
+
+[PARAMS]
+level=-4.11
+osc1.wave=0
+osc2.level=0
+env.attack=0.005
+env.decay=0.3
+env.sustain=1
+env.release=0.08
+filter.cutoff=20000

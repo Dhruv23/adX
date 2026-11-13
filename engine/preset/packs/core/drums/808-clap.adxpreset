@@ -1,0 +1,13 @@
+# phase_13.md 4.1: 808 Clap.
+[PRESET]
+NAME="808 Clap"
+TYPE=drumsynth
+PACK=core
+CATEGORY=Drums/Clap
+TAGS=808, clap
+
+[PARAMS]
+level=7.69
+model=3
+character=0
+decay=0.3

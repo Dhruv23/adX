@@ -1,0 +1,20 @@
+# phase_13.md 4.3/4.4: 808 Clean.
+[PRESET]
+NAME="808 Clean"
+TYPE=va
+PACK=core
+CATEGORY=Bass/808
+TAGS=808, bass, glide
+
+[PARAMS]
+osc1.wave=0
+osc2.level=0
+env.attack=0.002
+env.decay=1.8
+env.sustain=0
+env.release=0.2
+pitchEnv.amount=7
+pitchEnv.time=0.05
+voice.mode=2
+glide=0.06
+filter.cutoff=20000

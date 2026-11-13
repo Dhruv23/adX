@@ -1,0 +1,25 @@
+# phase_13.md 4: White Noise Wash.
+[RACK]
+NAME="White Noise Wash"
+PACK=core
+CATEGORY=FX/Texture
+TAGS=noise, wash, breakdown
+VERSION=1
+
+[LAYER noise]
+TYPE=va
+KEYS=0..127
+GAIN=21.80
+PARAM osc1.level=0
+PARAM osc2.level=0
+PARAM noise.level=1
+PARAM env.attack=2
+PARAM env.sustain=1
+PARAM env.release=3
+
+[CHAIN]
+SLOT Filter type=2 cutoff=1200 lfo.rate=0.2 lfo.depth=0.6
+
+[SEND space]
+LEVEL=-4
+SLOT Hall size=1 decay=8

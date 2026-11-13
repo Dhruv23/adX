@@ -1,0 +1,21 @@
+# phase_13.md 4.1: Agogo, VCSL's Agogo Bells (CC0).
+[PRESET]
+NAME="Agogo"
+TYPE=sampler
+CATEGORY=Drums/Perc
+ROOT_HINT=G4
+TAGS=acoustic, agogo, bell
+FALLBACK="core/808 Cowbell"
+PACK=core
+
+[PARAMS]
+gain=9.56
+env.attack=0.004
+env.release=10
+
+[ZONES]
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Agogo Bells/Agogo_High_v1_rr1_Mid.wav" key=67 root=67 vel=0..65 start=186 gain=26.922981
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Agogo Bells/Agogo_High_v2_rr1_Mid.wav" key=67 root=67 vel=66..99 start=187 gain=15.4345
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Agogo Bells/Agogo_High_v3_rr1_Mid.wav" key=67 root=67 vel=100..127 start=189 gain=9.916934
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Agogo Bells/Agogo_Low_v1_rr1_Mid.wav" key=68 root=68 vel=0..83 start=200 gain=21.735235
+ZONE "lib://vcsl/Idiophones/Struck Idiophones/Agogo Bells/Agogo_Low_v2_rr1_Mid.wav" key=68 root=68 vel=84..127 start=200 gain=11.252457
