@@ -5,8 +5,8 @@
 namespace adx::project {
 namespace {
 
-constexpr std::array<const char*, kControllerKindCount> kKindNames = {
-    "lfo", "envelope", "peak", "formula", "keyboard", "xy"};
+constexpr std::array<const char*, kControllerKindCount> kKindNames = {"lfo",     "envelope", "peak",
+                                                                      "formula", "keyboard", "xy"};
 constexpr std::array<const char*, kLfoShapeCount> kShapeNames = {
     "sine", "triangle", "saw", "square", "saw-down", "random", "smooth-random"};
 constexpr std::array<const char*, kKeyboardInputCount> kInputNames = {"pitch", "velocity"};

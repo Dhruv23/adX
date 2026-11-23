@@ -43,6 +43,13 @@ std::optional<FormulaError> errorOf(std::string_view text) {
     return error;
 }
 
+/// The error compiling `text` gives; fails the test when it compiles.
+FormulaError mustFail(std::string_view text) {
+    const std::optional<FormulaError> error = errorOf(text);
+    REQUIRE(error.has_value());
+    return error.value_or(FormulaError{});
+}
+
 struct Loaded {
     Project project;
     CommandStack stack;
@@ -134,7 +141,8 @@ float chainAt(std::span<const Knot> knots, std::int64_t tick) {
         if (tick < knots[i].tick) {
             const Knot& a = knots[i - 1];
             const Knot& b = knots[i];
-            const double f = static_cast<double>(tick - a.tick) / static_cast<double>(b.tick - a.tick);
+            const double f =
+                static_cast<double>(tick - a.tick) / static_cast<double>(b.tick - a.tick);
             return static_cast<float>(a.value + ((b.value - a.value) * f));
         }
     }
@@ -191,28 +199,13 @@ TEST_CASE("formula_reads_its_inputs", "[controllers][formula]") {
 }
 
 TEST_CASE("formula_errors_say_where", "[controllers][formula]") {
-    {
-        const auto error = errorOf("1 + * 2");
-        REQUIRE(error);
-        CHECK(error->offset == 4);
-    }
-    {
-        const auto error = errorOf("sin(1, 2)");
-        REQUIRE(error);
-        CHECK(error->message.find("sin() takes 1 argument") != std::string::npos);
-    }
-    {
-        const auto error = errorOf("q + 1");
-        REQUIRE(error);
-        CHECK(error->offset == 0);
-        CHECK(error->length == 1);
-        CHECK(error->message.find("unknown name 'q'") != std::string::npos);
-    }
-    {
-        const auto error = errorOf("wobble(1)");
-        REQUIRE(error);
-        CHECK(error->message.find("unknown function") != std::string::npos);
-    }
+    CHECK(mustFail("1 + * 2").offset == 4);
+    CHECK(mustFail("sin(1, 2)").message.find("sin() takes 1 argument") != std::string::npos);
+    const FormulaError unknown = mustFail("q + 1");
+    CHECK(unknown.offset == 0);
+    CHECK(unknown.length == 1);
+    CHECK(unknown.message.find("unknown name 'q'") != std::string::npos);
+    CHECK(mustFail("wobble(1)").message.find("unknown function") != std::string::npos);
     CHECK(errorOf("(1 + 2"));
     CHECK(errorOf("1 ? 2"));
     CHECK(errorOf(""));
@@ -329,7 +322,9 @@ DEPTH=1
     const std::span<const Knot> knots = lanes[0]->knots;
     // pan is -1..1: C4 (60) is half way through 48..72, C5 is past the top, the C3+E3
     // chord is its highest key, E3 (52): 4/24 of the way.
-    const auto at = [&](double beats) { return chainAt(knots, static_cast<std::int64_t>(beats * kPpq)); };
+    const auto at = [&](double beats) {
+        return chainAt(knots, static_cast<std::int64_t>(beats * kPpq));
+    };
     CHECK(std::abs(at(0.5) - 0.0F) < 1e-5F);
     CHECK(std::abs(at(4.5) - 1.0F) < 1e-5F);
     CHECK(std::abs(at(8.5) - ((4.0F / 24.0F * 2.0F) - 1.0F)) < 1e-5F);
@@ -350,11 +345,13 @@ DEPTH=1
     const auto glided = lanesOn(*snapshot, pan);
     REQUIRE(glided.size() == 1);
     const std::span<const Knot> g = glided[0]->knots;
-    const auto vAt = [&](double beats) { return chainAt(g, static_cast<std::int64_t>(beats * kPpq)); };
+    const auto vAt = [&](double beats) {
+        return chainAt(g, static_cast<std::int64_t>(beats * kPpq));
+    };
     const float loud = (100.0F / 127.0F * 2.0F) - 1.0F;
     const float soft = (40.0F / 127.0F * 2.0F) - 1.0F;
     CHECK(std::abs(vAt(0.5) - loud) < 1e-4F);
-    CHECK(std::abs(vAt(4.0) - loud) < 1e-4F);                // the glide starts at the note
+    CHECK(std::abs(vAt(4.0) - loud) < 1e-4F);                    // the glide starts at the note
     CHECK(std::abs(vAt(4.25) - ((loud + soft) / 2.0F)) < 1e-3F); // half way a quarter-beat in
     CHECK(std::abs(vAt(4.5) - soft) < 1e-4F);
     destroySnapshot(snapshot);
@@ -378,7 +375,7 @@ TARGET=macro.Both
 SHAPE=triangle
 PERIOD=1:0:0
 )");
-    Project& project = loaded->project;
+    const Project& project = loaded->project;
     SnapshotBuilder builder{48000, 512};
     Snapshot* snapshot = builder.build(project, 1, dirty::kAll).snapshot;
     REQUIRE(snapshot != nullptr);
@@ -428,7 +425,8 @@ Y=0.25
     Snapshot* snapshot = builder.build(project, 1, dirty::kAll).snapshot;
     REQUIRE(snapshot != nullptr);
     // X straight onto pan's -1..1; Y moves the macro, which moves the Lead's volume.
-    CHECK(std::abs(snapshot->params[indexOf(*snapshot, project, "channel.Bass.pan")] - 0.5F) < 1e-6F);
+    CHECK(std::abs(snapshot->params[indexOf(*snapshot, project, "channel.Bass.pan")] - 0.5F) <
+          1e-6F);
     CHECK(std::abs(snapshot->params[indexOf(*snapshot, project, "channel.Lead.volume")] - 0.45F) <
           1e-6F);
     destroySnapshot(snapshot);
@@ -440,7 +438,8 @@ Y=0.25
     loaded->stack.execute(std::make_unique<SetController>(moved.id, moved), project);
     snapshot = builder.build(project, 2, dirty::kAll).snapshot;
     REQUIRE(snapshot != nullptr);
-    CHECK(std::abs(snapshot->params[indexOf(*snapshot, project, "channel.Bass.pan")] + 1.0F) < 1e-6F);
+    CHECK(std::abs(snapshot->params[indexOf(*snapshot, project, "channel.Bass.pan")] + 1.0F) <
+          1e-6F);
     CHECK(std::abs(snapshot->params[indexOf(*snapshot, project, "channel.Lead.volume")] - 1.2F) <
           1e-6F);
     destroySnapshot(snapshot);
@@ -480,7 +479,7 @@ INSERT 1 name="Master"
 TYPE=xy
 TARGET=channel.Lead.pan
 )");
-    Project& project = loaded->project;
+    const Project& project = loaded->project;
     SnapshotBuilder builder{48000, 512};
     Snapshot* snapshot = builder.build(project, 1, dirty::kAll).snapshot;
     REQUIRE(snapshot != nullptr);
@@ -520,8 +519,8 @@ FORMULA="sin(t) +* 2"
 )",
                     true);
     const auto items = bad->diagnostics.all();
-    const auto found = std::ranges::find(items, adx::format::code::kFormulaSyntax,
-                                         &adx::format::Diagnostic::code);
+    const auto found =
+        std::ranges::find(items, adx::format::code::kFormulaSyntax, &adx::format::Diagnostic::code);
     REQUIRE(found != items.end());
     CHECK(found->message.find("formula:") == 0);
     CHECK(found->span.column > 0);
@@ -566,16 +565,14 @@ SOURCE=insert.1
     Snapshot* snapshot = builder.build(loaded->project, 1, dirty::kAll).snapshot;
     REQUIRE(snapshot != nullptr);
     const auto& nodes = builder.graphBuild()->graph.nodes();
-    const auto first = std::ranges::find(nodes, std::string("controller.Follow.1"),
-                                         &adx::graph::GraphNode::label);
-    const auto second = std::ranges::find(nodes, std::string("controller.Follow.2"),
-                                          &adx::graph::GraphNode::label);
+    const auto first =
+        std::ranges::find(nodes, std::string("controller.Follow.1"), &adx::graph::GraphNode::label);
+    const auto second =
+        std::ranges::find(nodes, std::string("controller.Follow.2"), &adx::graph::GraphNode::label);
     REQUIRE(first != nodes.end());
     REQUIRE(second != nodes.end());
-    CHECK(first->modulates ==
-          indexOf(*snapshot, loaded->project, "channel.Lead.volume"));
-    CHECK(second->modulates ==
-          indexOf(*snapshot, loaded->project, "channel.Bass.volume"));
+    CHECK(first->modulates == indexOf(*snapshot, loaded->project, "channel.Lead.volume"));
+    CHECK(second->modulates == indexOf(*snapshot, loaded->project, "channel.Bass.volume"));
     CHECK(first->node != second->node);
     destroySnapshot(snapshot);
 
@@ -584,8 +581,8 @@ SOURCE=insert.1
     snapshot = builder.build(loaded->project, 2, dirty::kAll).snapshot;
     REQUIRE(snapshot != nullptr);
     const auto& again = builder.graphBuild()->graph.nodes();
-    const auto same = std::ranges::find(again, std::string("controller.Follow.1"),
-                                        &adx::graph::GraphNode::label);
+    const auto same =
+        std::ranges::find(again, std::string("controller.Follow.1"), &adx::graph::GraphNode::label);
     REQUIRE(same != again.end());
     CHECK(same->node == keep1);
     destroySnapshot(snapshot);

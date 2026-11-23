@@ -671,30 +671,28 @@ void addPeakControllers(const project::Project& project, Graph& graph, const Par
             if (target == layout.index.end() || !(target->ref == destination.target)) {
                 continue;
             }
-            PeakConfig config{.attackMs = controller.attackMs,
-                              .releaseMs = controller.releaseMs,
-                              .gain = static_cast<float>(dsp::dbToGain(controller.gainDb)),
-                              .depth = controller.depth,
-                              .center = controller.center};
-            if (destination.range.maximum > destination.range.minimum) {
-                config.minimum = destination.range.minimum;
-                config.maximum = destination.range.maximum;
-                config.logarithmic = destination.range.logarithmic;
-            }
-            if (destination.through != nullptr) {
-                config.throughMacro = true;
-                config.logarithmic = false;
-                config.macroMinimum = destination.through->minimum;
-                config.macroMaximum = destination.through->maximum;
-                config.curve = destination.through->curve;
-            }
+            const bool ranged = destination.range.maximum > destination.range.minimum;
+            const bool through = destination.through != nullptr;
+            const PeakConfig config{.attackMs = controller.attackMs,
+                                    .releaseMs = controller.releaseMs,
+                                    .gain = static_cast<float>(dsp::dbToGain(controller.gainDb)),
+                                    .depth = controller.depth,
+                                    .center = controller.center,
+                                    .minimum = ranged ? destination.range.minimum : 0.0F,
+                                    .maximum = ranged ? destination.range.maximum : 1.0F,
+                                    .logarithmic =
+                                        ranged && !through && destination.range.logarithmic,
+                                    .throughMacro = through,
+                                    .macroMinimum = through ? destination.through->minimum : 0.0F,
+                                    .macroMaximum = through ? destination.through->maximum : 1.0F,
+                                    .curve = through ? destination.through->curve : core::Curve{}};
             std::string label = "controller." + controller.name;
             if (destinations.size() > 1) {
                 label += "." + std::to_string(part + 1);
             }
-            const NodeId id = graph.add(
-                nodes.controller(controller.id, config, static_cast<std::uint32_t>(part)),
-                std::move(label));
+            const NodeId id =
+                graph.add(nodes.controller(controller.id, config, static_cast<std::uint32_t>(part)),
+                          std::move(label));
             graph.find(id)->modulates = target->index;
             graph.connect(source->second, kPortPost, id, kPortMain);
         }

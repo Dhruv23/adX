@@ -51,9 +51,9 @@ MacroOffsets foldMacros(const Project& project,
         if (!index || *index >= params.size()) {
             return;
         }
-        offsets[*index] = MacroOffset{
-            .range = range,
-            .offset = normalisedIn(range, value) - normalisedIn(range, params[*index])};
+        offsets[*index] =
+            MacroOffset{.range = range,
+                        .offset = normalisedIn(range, value) - normalisedIn(range, params[*index])};
         params[*index] = value;
     };
     for (const Macro& macro : project.macros) {

@@ -353,7 +353,8 @@ void addControllerLanes(const Project& project, const graph::ParamLayout& layout
         for (const auto& [index, destination] : destinations) {
             LaneRange lane{.points = storage.points.size(), .knots = storage.knots.size()};
             for (const Knot& knot : unit) {
-                storage.knots.push_back(Knot{.tick = knot.tick, .value = destination.map(knot.value)});
+                storage.knots.push_back(
+                    Knot{.tick = knot.tick, .value = destination.map(knot.value)});
             }
             lane.knotCount = unit.size();
             storage.lanes.push_back(

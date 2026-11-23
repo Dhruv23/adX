@@ -6,6 +6,7 @@
 #include <charconv>
 #include <cmath>
 #include <limits>
+#include <numbers>
 #include <utility>
 
 #include "engine/dsp/Math.h"
@@ -48,7 +49,10 @@ double power(double base, double exponent) noexcept {
         return dsp::pow(base, exponent);
     }
     if (base == 0.0) {
-        return exponent > 0.0 ? 0.0 : (exponent == 0.0 ? 1.0 : kInfinity);
+        if (exponent > 0.0) {
+            return 0.0;
+        }
+        return exponent == 0.0 ? 1.0 : kInfinity;
     }
     // A negative base has a real power only for a whole exponent.
     if (dsp::floorExact(exponent) != exponent) {
@@ -78,7 +82,16 @@ double random01(double x) noexcept {
     return static_cast<double>(z >> 11U) * 0x1.0p-53;
 }
 double clamp3(double v, double lo, double hi) noexcept {
-    return v < lo ? lo : (v > hi ? hi : v);
+    if (v < lo) {
+        return lo;
+    }
+    return v > hi ? hi : v;
+}
+double signOf(double v) noexcept {
+    if (v > 0.0) {
+        return 1.0;
+    }
+    return v < 0.0 ? -1.0 : 0.0;
 }
 
 using Fn = double (*)(const double* args) noexcept;
@@ -89,8 +102,9 @@ struct Function {
     Fn fn;
 };
 
-// NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic) - args points at `arity`
-// values on the evaluation stack.
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic,modernize-use-designated-initializers)
+// - args points at `arity` values on the evaluation stack, and a table reads best as
+// name, arity, function.
 constexpr std::array kFunctions = std::to_array<Function>({
     {"sin", 1, [](const double* v) noexcept { return sinRadians(v[0]); }},
     {"cos", 1, [](const double* v) noexcept { return cosRadians(v[0]); }},
@@ -123,8 +137,7 @@ constexpr std::array kFunctions = std::to_array<Function>({
     {"ceil", 1, [](const double* v) noexcept { return -dsp::floorExact(-v[0]); }},
     {"round", 1, [](const double* v) noexcept { return dsp::floorExact(v[0] + 0.5); }},
     {"frac", 1, [](const double* v) noexcept { return fraction(v[0]); }},
-    {"sign", 1,
-     [](const double* v) noexcept { return v[0] > 0.0 ? 1.0 : (v[0] < 0.0 ? -1.0 : 0.0); }},
+    {"sign", 1, [](const double* v) noexcept { return signOf(v[0]); }},
     {"lerp", 3, [](const double* v) noexcept { return v[0] + ((v[1] - v[0]) * v[2]); }},
     {"step", 2, [](const double* v) noexcept { return v[1] < v[0] ? 0.0 : 1.0; }},
     {"smoothstep", 3,
@@ -142,7 +155,7 @@ constexpr std::array kFunctions = std::to_array<Function>({
     {"sq", 1, [](const double* v) noexcept { return fraction(v[0]) < 0.5 ? 1.0 : -1.0; }},
     {"rand", 1, [](const double* v) noexcept { return random01(v[0]); }},
 });
-// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic,modernize-use-designated-initializers)
 
 /// How deep parentheses and unary operators may nest before compile gives up, so a
 /// hostile formula cannot overflow the compiler's own stack.
@@ -193,7 +206,8 @@ private:
 
     std::optional<FormulaError> fail(std::size_t offset, std::size_t length, std::string message) {
         if (!m_error) {
-            m_error = FormulaError{.offset = offset, .length = length, .message = std::move(message)};
+            m_error =
+                FormulaError{.offset = offset, .length = length, .message = std::move(message)};
         }
         return m_error;
     }
@@ -297,14 +311,12 @@ private:
         return binaryLevel(&FormulaCompiler::relational, {{"==", Op::Equal}, {"!=", Op::NotEqual}});
     }
     bool relational() {
-        return binaryLevel(&FormulaCompiler::additive, {{"<=", Op::LessEqual},
-                                                        {">=", Op::GreaterEqual},
-                                                        {"<", Op::Less},
-                                                        {">", Op::Greater}});
+        return binaryLevel(
+            &FormulaCompiler::additive,
+            {{"<=", Op::LessEqual}, {">=", Op::GreaterEqual}, {"<", Op::Less}, {">", Op::Greater}});
     }
     bool additive() {
-        return binaryLevel(&FormulaCompiler::multiplicative,
-                           {{"+", Op::Add}, {"-", Op::Subtract}});
+        return binaryLevel(&FormulaCompiler::multiplicative, {{"+", Op::Add}, {"-", Op::Subtract}});
     }
     bool multiplicative() {
         return binaryLevel(&FormulaCompiler::unary,
@@ -388,8 +400,9 @@ private:
         const char* last = m_text.data() + m_pos;
         const auto [end, error] = std::from_chars(first, last, value);
         if (error != std::errc{} || end != last) {
-            return failed(start, m_pos - start, "'" + std::string(m_text.substr(start, m_pos - start)) +
-                                                    "' is not a number");
+            return failed(start, m_pos - start,
+                          "'" + std::string(m_text.substr(start, m_pos - start)) +
+                              "' is not a number");
         }
         return emit(Formula::Instruction{.op = Op::Number, .function = 0, .number = value}, 0);
     }
@@ -424,10 +437,9 @@ private:
                         0);
         }
         if (name == "e") {
-            return emit(Formula::Instruction{.op = Op::Number,
-                                             .function = 0,
-                                             .number = 2.71828182845904523536},
-                        0);
+            return emit(
+                Formula::Instruction{.op = Op::Number, .function = 0, .number = std::numbers::e},
+                0);
         }
         return failed(start, name.size(),
                       "unknown name '" + std::string(name) + "' (variables are t s p a b c)");

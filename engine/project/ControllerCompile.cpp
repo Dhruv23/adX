@@ -116,8 +116,7 @@ ParamRef padTarget(const Controller& pad, std::uint16_t axis) noexcept {
     return axis == kAxisX ? pad.target : pad.targetY;
 }
 
-std::vector<ControllerDestination> controllerDestinations(const Project& project,
-                                                          ParamRef target) {
+std::vector<ControllerDestination> controllerDestinations(const Project& project, ParamRef target) {
     std::vector<ControllerDestination> out;
     if (target.kind == ParamKind::ControllerAxis) {
         // Whatever the pad's axis drives - never another pad's axis, so this stops.
@@ -156,7 +155,8 @@ std::vector<ControllerDestination> controllerDestinations(const Project& project
             range.minimum = std::min(each.minimum, each.maximum);
             range.maximum = std::max(each.minimum, each.maximum);
         }
-        out.push_back(ControllerDestination{.target = each.target, .range = range, .through = &each});
+        out.push_back(
+            ControllerDestination{.target = each.target, .range = range, .through = &each});
     }
     return out;
 }
@@ -281,12 +281,8 @@ void compileFormula(std::vector<Knot>& out, const Controller& controller, const 
         return;
     }
     const auto period = static_cast<double>(std::max<std::int64_t>(1, controller.period.value));
-    FormulaInputs inputs{.t = 0.0,
-                         .s = 0.0,
-                         .p = 0.0,
-                         .a = controller.a,
-                         .b = controller.b,
-                         .c = controller.c};
+    FormulaInputs inputs{
+        .t = 0.0, .s = 0.0, .p = 0.0, .a = controller.a, .b = controller.b, .c = controller.c};
     const auto valueAt = [&](std::int64_t tick) {
         inputs.t = static_cast<double>(tick) / static_cast<double>(core::kPpq);
         inputs.s = tempo.secondsAt(core::Ticks{tick});

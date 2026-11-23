@@ -47,8 +47,9 @@ void PeakControllerNode::process(ProcessContext& context) noexcept {
     const double normalised = std::clamp(
         static_cast<double>(m_config.center + (m_config.depth * std::min(level, 1.0F))), 0.0, 1.0);
     if (m_config.throughMacro) {
-        const float value = core::interpolate(m_config.curve, m_config.macroMinimum,
-                                              m_config.macroMaximum, static_cast<float>(normalised));
+        const float value =
+            core::interpolate(m_config.curve, m_config.macroMinimum, m_config.macroMaximum,
+                              static_cast<float>(normalised));
         m_output = m_config.maximum > m_config.minimum
                        ? std::clamp(value, m_config.minimum, m_config.maximum)
                        : value;
