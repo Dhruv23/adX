@@ -12,6 +12,7 @@
 
 #include <cstdint>
 
+#include "engine/core/Curve.h"
 #include "engine/graph/Node.h"
 
 namespace adx::graph {
@@ -29,6 +30,12 @@ struct PeakConfig {
     float minimum{0.0F};
     float maximum{1.0F};
     bool logarithmic{false};
+    /// Through a macro's target (Macro.h): the follower's 0..1 becomes that target's
+    /// `macroMinimum + (macroMaximum - macroMinimum) * curve(n)`, clamped to the range.
+    bool throughMacro{false};
+    float macroMinimum{0.0F};
+    float macroMaximum{1.0F};
+    core::Curve curve;
 
     [[nodiscard]] friend bool operator==(const PeakConfig&, const PeakConfig&) noexcept = default;
 };

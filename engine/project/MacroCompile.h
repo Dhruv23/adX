@@ -38,9 +38,14 @@ struct MacroOffset {
 /// By parameter index in the snapshot's storage.
 using MacroOffsets = std::unordered_map<std::uint32_t, MacroOffset>;
 
-/// Writes every resolvable macro target's value into `params` and returns the offset a
-/// lane on each one takes. `indexOf` gives a parameter's index in `params`, or nothing
-/// when no node reads it. Two macros on one target: the later one wins.
+/// A macro's value as the snapshot plays it: its own, or the position of an X-Y pad axis
+/// that drives it (the last such, when there are several).
+[[nodiscard]] float macroValue(const Project& project, const Macro& macro) noexcept;
+
+/// Writes every resolvable macro target's value into `params`, then every X-Y pad
+/// axis's value into the parameter it drives, and returns the offset a lane on each one
+/// takes. `indexOf` gives a parameter's index in `params`, or nothing when no node reads
+/// it. Two macros (or pads) on one target: the later one wins.
 [[nodiscard]] MacroOffsets
 foldMacros(const Project& project,
            const std::function<std::optional<std::uint32_t>(ParamRef)>& indexOf,

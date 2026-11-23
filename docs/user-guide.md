@@ -106,6 +106,21 @@ effect slots, and sends. Click an empty slot to add an effect; click a full one 
 it in the **Effect** panel. Right-click a knob anywhere for *Create automation*, which
 puts a lane for it on the playlist.
 
+To move a parameter without drawing a lane, add a controller on the **Controllers** tab of
+the Automation panel:
+
+- **LFO**: a tempo-synced wave (sine, triangle, saw up or down, square, or a random
+  level each cycle, held or smoothed).
+- **Envelope**: an ADSR that fires on each note of a channel.
+- **Peak**: follows an insert's level. Use it to duck a pad under the kick.
+- **Formula**: you type the curve, e.g. `sin(2 * pi * p)` or `p < a ? 1 : -1`.
+- **Keyboard**: follows a channel's key or velocity, so a filter can track what you play.
+- **X-Y pad**: drag a dot to move two parameters at once. Its `controller.<name>.x` and
+  `.y` can be automated or MIDI-learned like any knob.
+
+Aim a controller at a macro (`macro.<name>`) to drive every parameter the macro moves.
+The full key list is in the format reference, §7.7.1.
+
 Plugins (VST3 and CLAP) are scanned in the **Plugins** panel. Each runs in a separate
 process, so a plugin that crashes leaves the rest of the song playing; Edit > Restart
 crashed plugins brings it back with its last state. Mark a plugin *isolated* to give it a

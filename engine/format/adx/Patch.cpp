@@ -140,6 +140,7 @@ public:
             project::Controller copy = controller;
             copy.id = m_controllers.at(controller.id.value);
             copy.target = param(controller.target);
+            copy.targetY = param(controller.targetY);
             copy.sourceChannel = channel(controller.sourceChannel);
             m_goal.controllers.push_back(copy);
         }
@@ -311,6 +312,11 @@ private:
         case project::ParamKind::Macro: {
             const auto found = m_macros.find(ref.owner);
             ref.owner = found != m_macros.end() ? found->second.value : 0U;
+            break;
+        }
+        case project::ParamKind::ControllerAxis: {
+            const auto found = m_controllers.find(ref.owner);
+            ref.owner = found != m_controllers.end() ? found->second.value : 0U;
             break;
         }
         default:

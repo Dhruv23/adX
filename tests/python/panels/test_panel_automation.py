@@ -137,3 +137,64 @@ def test_controller_lfo_editor(studio: MainWindow) -> None:
     assert len(info) == 1
     assert str(info[0]["kind"]) == "lfo"
     assert controllers.findChildren(QWidget)
+
+
+def test_controller_new_kinds_each_one_command(studio: MainWindow) -> None:
+    controllers = studio.automation.controllers
+    for kind in ("formula", "keyboard", "xy"):
+        depth = studio.project.undo_depth()
+        assert controllers.add(kind, "channel.Lead.volume")
+        assert studio.project.undo_depth() == depth + 1
+    kinds = [str(c["kind"]) for c in studio.project.controllers_info()]
+    assert kinds == ["formula", "keyboard", "xy"]
+    keyboard = studio.project.controllers_info()[1]
+    assert (int(keyboard["low"]), int(keyboard["high"])) == (0, 127)
+    assert int(keyboard["source_channel"]) == int(studio.project.channels_info()[0]["id"])
+
+
+def test_controller_formula_shows_its_error(studio: MainWindow) -> None:
+    controllers = studio.automation.controllers
+    assert controllers.add("formula", "channel.Lead.volume")
+    studio.automation.refresh()
+    controllers.list.setCurrentRow(0)
+    cid = int(studio.project.controllers_info()[0]["id"])
+    controllers.set(cid, {"formula": "sin(t) +* 2"})
+    controllers.refresh()
+    info = studio.project.controllers_info()[0]
+    assert str(info["formula"]) == "sin(t) +* 2"
+    assert str(info["formula_error"])
+    status = controllers.findChild(QWidget, "formula_status")
+    assert status is not None
+    assert "unexpected" in status.text()
+    controllers.set(cid, {"formula": "p < a ? 1 : -1"})
+    controllers.refresh()
+    assert not str(studio.project.controllers_info()[0]["formula_error"])
+
+
+def test_controller_xy_pad_drag_is_one_step(studio: MainWindow) -> None:
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+
+    controllers = studio.automation.controllers
+    assert controllers.add("xy", "channel.Lead.volume")
+    studio.automation.refresh()
+    controllers.list.setCurrentRow(0)
+    controllers.refresh()
+    pad = controllers.pad
+    assert pad is not None
+    pad.resize(200, 200)
+    depth = studio.project.undo_depth()
+    QTest.mousePress(pad, Qt.MouseButton.LeftButton, pos=QPoint(50, 150))
+    for x, y in ((80, 120), (120, 90), (150, 50)):
+        QTest.mouseMove(pad, QPoint(x, y))
+    QTest.mouseRelease(pad, Qt.MouseButton.LeftButton, pos=QPoint(150, 50))
+    info = studio.project.controllers_info()[0]
+    assert abs(float(info["x"]) - 0.75) < 0.02
+    assert abs(float(info["y"]) - 0.75) < 0.02
+    assert studio.project.undo_depth() == depth + 1
+    # The pad's axes are parameters: the same value through the path.
+    name = str(info["name"])
+    assert abs(float(studio.project.param_value(f"controller.{name}.x")) - float(info["x"])) < 1e-6
+    # The form came back after the drag, with the pad where it was left.
+    assert controllers.pad is not None
+    assert abs(controllers.pad.position[0] - float(info["x"])) < 1e-6

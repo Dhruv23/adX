@@ -51,6 +51,7 @@ constexpr auto kCodes = std::to_array<DiagnosticCode>({
     {code::kDuplicateNoteClip, Severity::Error, "Two note clips for one channel in one pattern."},
     {code::kZeroId, Severity::Error, "Entity id is zero, which is the null id."},
     {code::kMiniSyntax, Severity::Error, "Mini-notation does not parse."},
+    {code::kFormulaSyntax, Severity::Error, "A formula controller's expression does not parse."},
 
     {code::kUnresolvedParamPath, Severity::Error, "Parameter path does not resolve."},
     {code::kUnknownChannelRef, Severity::Error, "Reference to an unknown channel."},

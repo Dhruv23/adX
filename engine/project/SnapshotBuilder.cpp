@@ -214,6 +214,29 @@ bool addLane(const Project& project, ParamRef target, const std::vector<Breakpoi
     if (!target.valid() || points.empty()) {
         return false;
     }
+    if (target.kind == ParamKind::ControllerAxis) {
+        // A lane drawn on an X-Y pad's axis: the same lane on whatever the axis drives,
+        // every point put through that parameter's range (or, for a macro, left 0..1 for
+        // the macro's own expansion below).
+        const Controller* pad = project.find(core::ControllerId{target.owner});
+        if (pad == nullptr || pad->kind != ControllerKind::Xy) {
+            return false;
+        }
+        const ParamRef driven = padTarget(*pad, target.index);
+        if (!driven.valid() || driven.kind == ParamKind::ControllerAxis) {
+            return false;
+        }
+        std::vector<Breakpoint> mapped = points;
+        if (driven.kind != ParamKind::Macro) {
+            const ControllerRange range =
+                ControllerRange::of(ParamRegistry::descriptorFor(driven, project));
+            for (Breakpoint& point : mapped) {
+                point.value = range.map(point.value);
+            }
+        }
+        return addLane(project, driven, mapped, window, endTick, lastTick, layout, storage, ranges,
+                       macros);
+    }
     if (target.kind == ParamKind::Macro) {
         // A lane drawn on a macro: the same lane on each of its targets, every point
         // put through that target's range and curve.
@@ -268,9 +291,11 @@ bool addLane(const Project& project, ParamRef target, const std::vector<Breakpoi
     return true;
 }
 
-/// Appends the lanes of the LFO and envelope controllers. Last, so a controller wins
-/// over drawn automation on the parameter it drives - it is the more deliberate act.
-/// `eventsOf` gives a channel's flattened events, for an envelope's triggers.
+/// Appends the lanes of the controllers that compile to one (Controller.h's
+/// compilesToLane). Last, so a controller wins over drawn automation on the parameter it
+/// drives - it is the more deliberate act. `eventsOf` gives a channel's flattened
+/// events, for an envelope's or a keyboard controller's notes. A controller aimed at a
+/// macro writes one lane on each of the macro's targets.
 template<class EventsOf>
 void addControllerLanes(const Project& project, const graph::ParamLayout& layout,
                         SnapshotStorage& storage, std::vector<LaneRange>& ranges,
@@ -281,33 +306,64 @@ void addControllerLanes(const Project& project, const graph::ParamLayout& layout
         std::max(project.contentLength().value,
                  project.meta.loopEnabled ? project.meta.loopEnd.value : std::int64_t{0}) +
         (core::kPpq * 4 * 64);
+    std::vector<Knot> unit;
     for (const Controller& controller : project.controllers) {
-        if (controller.kind == ControllerKind::Peak || !controller.target.valid()) {
+        if (!compilesToLane(controller.kind) || !controller.target.valid()) {
             continue;
         }
-        const std::uint32_t index = paramIndexOf(layout, controller.target);
-        if (index == graph::kNone) {
+        std::vector<std::pair<std::uint32_t, ControllerDestination>> destinations;
+        for (const ControllerDestination& each :
+             controllerDestinations(project, controller.target)) {
+            const std::uint32_t index = paramIndexOf(layout, each.target);
+            if (index != graph::kNone) {
+                destinations.emplace_back(index, each);
+            }
+        }
+        if (destinations.empty()) {
             continue;
         }
-        const ControllerRange range =
-            ControllerRange::of(ParamRegistry::descriptorFor(controller.target, project));
-        LaneRange lane{.points = storage.points.size(), .knots = storage.knots.size()};
-        if (controller.kind == ControllerKind::Lfo) {
-            compileLfo(storage.knots, controller, range, end);
-        } else {
-            compileEnvelope(storage.knots, controller, range, eventsOf(controller.sourceChannel),
+        // Compiled once, 0..1; each destination maps it onto its own range.
+        unit.clear();
+        const ControllerRange normalised{};
+        switch (controller.kind) {
+        case ControllerKind::Lfo:
+            compileLfo(unit, controller, normalised, end);
+            break;
+        case ControllerKind::Envelope:
+            compileEnvelope(unit, controller, normalised, eventsOf(controller.sourceChannel),
                             project.tempo);
+            break;
+        case ControllerKind::Formula: {
+            std::optional<FormulaError> error;
+            const Formula formula = Formula::compile(controller.formula, error);
+            compileFormula(unit, controller, formula, normalised, end, project.tempo);
+            break;
         }
-        lane.knotCount = storage.knots.size() - lane.knots;
-        if (lane.knotCount == 0) {
+        case ControllerKind::Keyboard:
+            compileKeyboard(unit, controller, normalised, eventsOf(controller.sourceChannel),
+                            project.tempo);
+            break;
+        case ControllerKind::Peak:
+        case ControllerKind::Xy:
+            break;
+        }
+        if (unit.empty()) {
             continue;
         }
-        storage.lanes.push_back(AutomationLane{.paramIndex = index,
-                                               .startTick = 0,
-                                               .endTick = std::numeric_limits<std::int64_t>::max(),
-                                               .points = {},
-                                               .knots = {}});
-        ranges.push_back(lane);
+        for (const auto& [index, destination] : destinations) {
+            LaneRange lane{.points = storage.points.size(), .knots = storage.knots.size()};
+            for (const Knot& knot : unit) {
+                storage.knots.push_back(Knot{.tick = knot.tick, .value = destination.map(knot.value)});
+            }
+            lane.knotCount = unit.size();
+            storage.lanes.push_back(
+                AutomationLane{.paramIndex = index,
+                               .startTick = 0,
+                               .endTick = std::numeric_limits<std::int64_t>::max(),
+                               .points = {},
+                               .knots = {}});
+            ranges.push_back(lane);
+        }
     }
 }
 

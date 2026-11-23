@@ -765,6 +765,90 @@ offset, in the parameter's normalised range, by how far the macro moves the targ
 the value the file gives it. A macro left at that value changes nothing. A target that
 does not resolve is `ADX3001` and is kept; a target that names another macro is the same.
 
+### 7.7.1 `[CONTROLLER <name>]`
+
+A controller is an automation source rather than a drawn curve: it drives `TARGET`, a
+parameter path. The target may be a macro, and the controller then moves every one of the
+macro's targets, each through its own range and curve, which is how one controller drives
+several parameters.
+
+```
+[CONTROLLER Wobble]
+TYPE=lfo
+TARGET=channel.Lead.filter.cutoff
+SHAPE=triangle
+PERIOD=0:2:0
+DEPTH=0.25
+
+[CONTROLLER Gate]
+TYPE=formula
+TARGET=macro."Pad/Level"
+FORMULA="p < a ? 1 : -1"
+PERIOD=0:1:0
+A=0.75
+
+[CONTROLLER Track]
+TYPE=keyboard
+TARGET=channel.Bass.filter.cutoff
+SOURCE=channel.Lead
+RANGE=36..84
+GLIDE=40
+CENTER=0
+DEPTH=1
+
+[CONTROLLER Pad]
+TYPE=xy
+TARGET=insert.3.slot.4.mix
+TARGET_Y=channel.Lead.pan
+X=0.3
+Y=0.8
+```
+
+Every kind except `xy` produces `CENTER + DEPTH * shape` in the target's normalised range
+(0..1 of its span, logarithmic where the parameter is), clamped. `DEPTH` defaults to
+`0.5` and `CENTER` to `0.5`. What `shape` is depends on `TYPE`:
+
+| `TYPE` | `shape` | Keys |
+|---|---|---|
+| `lfo` | -1..1, tempo-synced | `SHAPE` (`sine` `triangle` `saw` `square` `saw-down` `random` `smooth-random`), `PERIOD` (a duration, default `0:1:0`), `PHASE` (0..1), `SEED` (the random shapes' sequence, default `1`) |
+| `envelope` | 0..1, an ADSR retriggered by each note of `SOURCE=channel.<name>` | `ATTACK` `DECAY` `RELEASE` (ms), `SUSTAIN` (0..1) |
+| `peak` | 0..1, the post-fader level of `SOURCE=insert.N` | `ATTACK` `RELEASE` (ms), `GAIN` (dB, before shaping) |
+| `formula` | the value of `FORMULA` | `FORMULA` (a quoted expression), `PERIOD`, `PHASE`, `A` `B` `C` |
+| `keyboard` | 0..1 over `RANGE`, from each note of `SOURCE=channel.<name>` | `INPUT` (`pitch` or `velocity`, default `pitch`), `RANGE` (`low..high`, default `36..84`), `GLIDE` (ms) |
+| `xy` | none: `X` drives `TARGET`, `Y` drives `TARGET_Y`, each 0..1 straight onto that target's range | `TARGET_Y`, `X`, `Y` (default `0.5`) |
+
+`random` holds one level per cycle and `smooth-random` draws a straight line from each
+cycle's level to the next; both are fixed by `SEED`, so a render always plays the same
+levels. A keyboard controller holds the last note's value until the next note (a chord is
+its highest key, or its loudest note), and before the first note it already has that
+note's value.
+
+**Formulas.** One line of arithmetic over position. Variables: `t` beats (quarter notes)
+since the start, `s` seconds, `p` 0..1 through `PERIOD`, `a` `b` `c` the controller's
+`A` `B` `C`, and the constants `pi` and `e`. Operators, loosest first: `?:`, `||`, `&&`,
+`==` `!=`, `<` `<=` `>` `>=`, `+` `-`, `*` `/` `%` (floored), unary `-` `+` `!`, and `^`
+(power, right-associative, so `-2^2` is -4). A comparison or a logical operator is 1 or 0.
+Functions: `sin cos tan asin acos atan atan2 sinh cosh tanh abs sqrt cbrt exp log log2
+log10 pow min max clamp floor ceil round frac sign lerp step smoothstep hypot`, the LFO
+shapes `tri saw sq` (one cycle per unit, -1..1), and `rand(x)`, a fixed 0..1 for each
+whole value of `x`. Trigonometry is in radians. A NaN or an infinity counts as 0. The
+formula is sampled every 1/64 note; one that reads none of `t`, `s` or `p` is a single
+value. A formula that does not parse is `ADX2016`, reported at the character that broke
+it; it is kept verbatim and plays nothing.
+
+**X-Y pads.** A pad's position is two parameters of its own, `controller.<name>.x` and
+`controller.<name>.y`, so a lane can be drawn on it, a knob or a MIDI control can be
+learned to it, and another controller can drive it. A lane on an axis becomes a lane on
+whatever that axis drives. Either axis may target a macro. No other kind of controller has
+a parameter path.
+
+How each kind runs: `lfo`, `envelope`, `formula` and `keyboard` are compiled into
+automation lanes when the engine builds its snapshot, and a controller lane wins over a
+drawn lane on the same parameter. `peak` is a node in the audio graph that writes its
+target once per block (one node per target when it drives a macro). An `xy` pad is folded
+into its targets' values, the way a macro is. A target or `TARGET_Y` that does not resolve
+is `ADX3001` and is kept.
+
 ---
 
 ### 7.8 Racks: `.adxrack`
@@ -960,6 +1044,7 @@ a CI failure (`diagnostics_all_codes_documented`).
 | `ADX2013` | Error | More than one note clip for the same channel in one pattern. |
 | `ADX2014` | Error | An entity's id is zero, which is the null id. |
 | `ADX2015` | Error | Mini-notation does not parse; the message says where and why ([mininotation.md](mininotation.md)). |
+| `ADX2016` | Error | A formula controller's expression does not parse; the message says where and why (§7.7.1). |
 
 ### 10.4 Reference resolution — `3xxx`
 

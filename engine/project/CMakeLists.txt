@@ -7,6 +7,7 @@ target_sources(adx_engine_static PRIVATE
     CurveCompile.cpp
     Diff.cpp
     EventCompile.cpp
+    Formula.cpp
     Macro.cpp
     MacroCompile.cpp
     MidiSettings.cpp

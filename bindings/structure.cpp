@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -27,6 +28,8 @@
 #include "engine/core/Curve.h"
 #include "engine/format/adx/Value.h"
 #include "engine/format/adx/Writer.h"
+#include "engine/project/ControllerCompile.h"
+#include "engine/project/Formula.h"
 #include "engine/project/ParamRegistry.h"
 #include "engine/project/TypeCatalog.h"
 #include "engine/project/commands/ChannelCommands.h"
@@ -533,6 +536,24 @@ py::list controllersInfo(const ProjectHandle& handle) {
         d["sustain"] = c.sustain;
         d["release"] = c.releaseMs;
         d["gain"] = c.gainDb;
+        d["seed"] = c.seed;
+        d["formula"] = c.formula;
+        d["a"] = c.a;
+        d["b"] = c.b;
+        d["c"] = c.c;
+        d["input"] = std::string(project::toString(c.input));
+        d["low"] = c.low;
+        d["high"] = c.high;
+        d["glide"] = c.glideMs;
+        d["x"] = c.x;
+        d["y"] = c.y;
+        d["target_y"] = pathOrWritten(handle.project, c.targetY, c.targetYPath);
+        d["valid_y"] = c.targetY.valid();
+        std::optional<project::FormulaError> error;
+        if (c.kind == project::ControllerKind::Formula) {
+            static_cast<void>(project::Formula::compile(c.formula, error));
+        }
+        d["formula_error"] = error ? error->message : std::string{};
         out.append(d);
     }
     return out;
@@ -584,6 +605,9 @@ py::object paramValue(const ProjectHandle& handle, const std::string& path) {
         return py::float_(p.mixer.findSend(adx::core::SendId{ref.owner})->level);
     case project::ParamKind::Macro:
         return py::float_(p.find(adx::core::MacroId{ref.owner})->value);
+    case project::ParamKind::ControllerAxis:
+        return py::float_(
+            project::padValue(*p.find(adx::core::ControllerId{ref.owner}), ref.index));
     case project::ParamKind::None:
         return py::none();
     }

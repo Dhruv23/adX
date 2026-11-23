@@ -599,7 +599,45 @@ void writeController(Emitter& emitter, const Project& project,
             emitter.line(keyValue("PERIOD", formatDuration(controller.period, project.tempo)));
         }
         number("PHASE", controller.phase, defaults.phase);
+        if (controller.seed != defaults.seed) {
+            emitter.line(keyValue("SEED", std::to_string(controller.seed)));
+        }
         break;
+    case ControllerKind::Formula:
+        emitter.line(keyValue("FORMULA", quoteAlways(controller.formula)));
+        if (controller.period != defaults.period) {
+            emitter.line(keyValue("PERIOD", formatDuration(controller.period, project.tempo)));
+        }
+        number("PHASE", controller.phase, defaults.phase);
+        number("A", controller.a, defaults.a);
+        number("B", controller.b, defaults.b);
+        number("C", controller.c, defaults.c);
+        break;
+    case ControllerKind::Keyboard:
+        if (const project::Channel* source = project.find(controller.sourceChannel)) {
+            emitter.line(keyValue("SOURCE", "channel." + quoteIfNeeded(source->name)));
+        }
+        if (controller.input != defaults.input) {
+            emitter.line(keyValue("INPUT", project::toString(controller.input)));
+        }
+        if (controller.low != defaults.low || controller.high != defaults.high) {
+            emitter.line(keyValue("RANGE", std::to_string(controller.low) + ".." +
+                                               std::to_string(controller.high)));
+        }
+        number("GLIDE", controller.glideMs, defaults.glideMs);
+        break;
+    case ControllerKind::Xy: {
+        std::string targetY = project::ParamRegistry::pathOf(controller.targetY, project);
+        if (targetY.empty()) {
+            targetY = controller.targetYPath;
+        }
+        if (!targetY.empty()) {
+            emitter.line(keyValue("TARGET_Y", targetY));
+        }
+        number("X", controller.x, defaults.x);
+        number("Y", controller.y, defaults.y);
+        break;
+    }
     case ControllerKind::Envelope:
         if (const project::Channel* source = project.find(controller.sourceChannel)) {
             emitter.line(keyValue("SOURCE", "channel." + quoteIfNeeded(source->name)));

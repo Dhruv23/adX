@@ -56,4 +56,6 @@ def automated_paths(session: Session) -> dict[str, str]:
     for controller in session.project.controllers_info():
         if bool(controller["valid"]):
             out.setdefault(str(controller["target"]), LANE_COLORS[0])
+        if bool(controller.get("valid_y")):
+            out.setdefault(str(controller["target_y"]), LANE_COLORS[0])
     return out

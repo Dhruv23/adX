@@ -132,7 +132,29 @@ project::Controller controllerFrom(const project::Project& p, const py::dict& fi
     if (has("source_insert")) {
         base.sourceInsert = core::InsertId{fields["source_insert"].cast<std::uint32_t>()};
     }
-    const std::array<std::pair<const char*, float*>, 8> numbers{{
+    if (has("target_y")) {
+        base.targetYPath = fields["target_y"].cast<std::string>();
+        base.targetY =
+            base.targetYPath.empty() ? project::ParamRef{} : resolveOrThrow(p, base.targetYPath);
+    }
+    if (has("formula")) {
+        // Kept even when it does not compile, as the file keeps it; it plays nothing.
+        base.formula = fields["formula"].cast<std::string>();
+    }
+    if (has("input") &&
+        !project::keyboardInputFromString(fields["input"].cast<std::string>(), base.input)) {
+        throw std::invalid_argument("unknown keyboard input");
+    }
+    if (has("seed")) {
+        base.seed = fields["seed"].cast<std::uint32_t>();
+    }
+    if (has("low")) {
+        base.low = static_cast<std::uint8_t>(std::clamp(fields["low"].cast<int>(), 0, 127));
+    }
+    if (has("high")) {
+        base.high = static_cast<std::uint8_t>(std::clamp(fields["high"].cast<int>(), 0, 127));
+    }
+    const std::array<std::pair<const char*, float*>, 14> numbers{{
         {"depth", &base.depth},
         {"center", &base.center},
         {"phase", &base.phase},
@@ -141,6 +163,12 @@ project::Controller controllerFrom(const project::Project& p, const py::dict& fi
         {"sustain", &base.sustain},
         {"release", &base.releaseMs},
         {"gain", &base.gainDb},
+        {"a", &base.a},
+        {"b", &base.b},
+        {"c", &base.c},
+        {"glide", &base.glideMs},
+        {"x", &base.x},
+        {"y", &base.y},
     }};
     for (const auto& [key, field] : numbers) {
         if (has(key)) {
@@ -1029,7 +1057,8 @@ void projectCommands(py::module_& c) {
         },
         py::arg("fields"),
         "A controller from a dict of name, kind, target, depth, center, shape, period, phase, "
-        "source_channel, source_insert, attack, decay, sustain, release, gain.");
+        "seed, source_channel, source_insert, attack, decay, sustain, release, gain, formula, "
+        "a, b, c, input, low, high, glide, x, y, target_y.");
     // GIL: trivial - builds a closure
     c.def(
         "RemoveController",

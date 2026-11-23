@@ -194,7 +194,7 @@ constexpr auto kNamedParams = std::to_array<ParamDescriptor>({
 });
 
 /// One descriptor per fixed ParamKind, indexed by the enum's value.
-constexpr std::array<ParamDescriptor, 14> kKindDescriptors{{
+constexpr std::array<ParamDescriptor, 15> kKindDescriptors{{
     {"", 0.0F, 1.0F, 0.0F, Unit::Normalized, ScaleKind::Linear},
     {"volume", 0.0F, 2.0F, 1.0F, Unit::Ratio, ScaleKind::Logarithmic},
     {"pan", -1.0F, 1.0F, 0.0F, Unit::Normalized, ScaleKind::Linear},
@@ -209,6 +209,7 @@ constexpr std::array<ParamDescriptor, 14> kKindDescriptors{{
     {"", -1e9F, 1e9F, 0.0F, Unit::Normalized, ScaleKind::Linear},
     {"level", 0.0F, 1.0F, 0.0F, Unit::Normalized, ScaleKind::Linear},
     {"macro", 0.0F, 1.0F, 0.5F, Unit::Normalized, ScaleKind::Linear},
+    {"axis", 0.0F, 1.0F, 0.5F, Unit::Normalized, ScaleKind::Linear},
 }};
 // NOLINTEND(modernize-use-designated-initializers)
 
@@ -347,6 +348,23 @@ ParamResolution ParamRegistry::resolve(std::string_view path, const Project& pro
         }
         return success(ParamKind::Macro, macro->id.value, 0);
     }
+    if (segments.front().text == "controller") {
+        // controller.<name>.x | .y: an X-Y pad's axis. No other kind has a parameter.
+        if (segments.size() != 3) {
+            return failure(ResolveError::MalformedPath, segments.back());
+        }
+        const Controller* controller = project.findControllerByName(segments[1].text);
+        if (controller == nullptr || controller->kind != ControllerKind::Xy) {
+            return failure(ResolveError::UnknownParameter, segments[1]);
+        }
+        if (segments[2].text == "x") {
+            return success(ParamKind::ControllerAxis, controller->id.value, kAxisX);
+        }
+        if (segments[2].text == "y") {
+            return success(ParamKind::ControllerAxis, controller->id.value, kAxisY);
+        }
+        return failure(ResolveError::UnknownParameter, segments[2]);
+    }
     return failure(ResolveError::MalformedPath, segments.front());
 }
 
@@ -421,6 +439,13 @@ std::string ParamRegistry::pathOf(ParamRef ref, const Project& project) {
     case ParamKind::Macro: {
         const Macro* macro = project.find(core::MacroId{ref.owner});
         return macro == nullptr ? std::string{} : "macro." + quoteSegment(macro->name);
+    }
+    case ParamKind::ControllerAxis: {
+        const Controller* controller = project.find(core::ControllerId{ref.owner});
+        if (controller == nullptr || ref.index > kAxisY) {
+            return {};
+        }
+        return "controller." + quoteSegment(controller->name) + (ref.index == kAxisX ? ".x" : ".y");
     }
     }
     return {};

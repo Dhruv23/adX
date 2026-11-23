@@ -138,7 +138,9 @@ public:
     /// The node a frozen channel plays through instead of its instrument.
     [[nodiscard]] std::shared_ptr<Node> frozenChannel(core::ChannelId id);
     /// A peak controller's node (PeakControllerNode.h), remade when its config changes.
-    [[nodiscard]] std::shared_ptr<Node> controller(core::ControllerId id, const PeakConfig& config);
+    /// `part` numbers the nodes of one controller that drives a macro, one per target.
+    [[nodiscard]] std::shared_ptr<Node> controller(core::ControllerId id, const PeakConfig& config,
+                                                   std::uint32_t part = 0);
 
     /// The node of a slot, for the UI (an EQ's spectrum tap). Null when there is none.
     [[nodiscard]] std::shared_ptr<const Node> findSlot(core::SlotId id) const;
@@ -194,6 +196,7 @@ private:
         Controller,
         AudioTrack,
         FrozenChannel,
+        ControllerPart,
     };
     using Key = std::pair<Kind, std::uint32_t>;
 

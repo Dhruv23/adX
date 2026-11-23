@@ -55,6 +55,7 @@ adx_add_cpp_test(adx_tests
         project/test_edit_notes.cpp
         project/test_validate.cpp
         project/test_phase6_commands.cpp
+        project/test_controllers_more.cpp
         geometry/test_geometry_buffer.cpp
         geometry/test_hittest.cpp
         geometry/test_peak_cache.cpp
@@ -120,6 +121,7 @@ adx_add_cpp_test(adx_tests
         sync/test_incremental.cpp
         render/test_snapshot.cpp
         render/test_phase6_engine.cpp
+        render/test_controllers_more_engine.cpp
         clip/ClipFixtures.cpp
         clip/test_audio_clips.cpp
         clip/test_clip_edits.cpp

@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "engine/project/Project.h"
+#include "engine/project/commands/ArrangeCommands.h"
 #include "engine/project/commands/ChannelCommands.h"
 #include "engine/project/commands/CommandStack.h"
 #include "engine/project/commands/MixerCommands.h"
@@ -233,6 +234,17 @@ std::unique_ptr<project::Command> commandFor(const project::Project& project, pr
         // A macro's knob: the whole list with this one's value changed (SetMacros).
         return std::make_unique<project::SetMacros>(
             project::macrosWithValue(project, core::MacroId{ref.owner}, value));
+    case ParamKind::ControllerAxis: {
+        // An X-Y pad's axis: the controller with that coordinate moved (SetController,
+        // which coalesces a drag or a knob sweep into one undo step).
+        const project::Controller* controller = project.find(core::ControllerId{ref.owner});
+        if (controller == nullptr) {
+            return nullptr;
+        }
+        project::Controller moved = *controller;
+        (ref.index == project::kAxisX ? moved.x : moved.y) = std::clamp(value, 0.0F, 1.0F);
+        return std::make_unique<project::SetController>(controller->id, std::move(moved));
+    }
     case ParamKind::ChannelArpGate:
     case ParamKind::None:
         return nullptr;

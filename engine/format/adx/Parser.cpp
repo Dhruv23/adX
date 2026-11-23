@@ -17,6 +17,7 @@
 #include "engine/format/adx/V1Shim.h"
 #include "engine/format/adx/Value.h"
 #include "engine/format/mininotation/PatternCompiler.h"
+#include "engine/project/Formula.h"
 #include "engine/project/ParamRegistry.h"
 #include "engine/project/Project.h"
 #include "engine/project/SourceMap.h"
@@ -1713,6 +1714,18 @@ void V2Parser::parseController(Section& section) {
                        "'" + controller.targetPath + "' does not name a parameter that exists");
         }
     }
+    if (Line* line = keys.take(lines(), "TARGET_Y")) {
+        controller.targetYPath = line->value;
+        const project::ParamResolution resolved =
+            project::ParamRegistry::resolve(controller.targetYPath, m_project);
+        if (resolved.ok()) {
+            controller.targetY = resolved.ref;
+        } else {
+            m_diag.add(code::kUnresolvedParamPath,
+                       subSpan(line->valueSpan, resolved.segmentOffset, resolved.segmentLength),
+                       "'" + controller.targetYPath + "' does not name a parameter that exists");
+        }
+    }
     if (Line* line = keys.take(lines(), "SOURCE")) {
         parseControllerSource(controller, *line);
     }
@@ -1722,6 +1735,35 @@ void V2Parser::parseController(Section& section) {
                        "unknown LFO shape '" + line->value + "'; using sine");
         }
     }
+    if (Line* line = keys.take(lines(), "SEED")) {
+        std::int64_t seed = 0;
+        if (parseInt64(line->value, line->valueSpan, m_diag, seed)) {
+            controller.seed = static_cast<std::uint32_t>(seed);
+        }
+    }
+    if (Line* line = keys.take(lines(), "FORMULA")) {
+        controller.formula = decodeValue(line->value);
+        std::optional<project::FormulaError> error;
+        static_cast<void>(project::Formula::compile(controller.formula, error));
+        if (error) {
+            // Kept verbatim, like a mini-notation pattern that does not parse; it plays
+            // nothing until it is fixed.
+            const std::uint32_t quote = line->value.starts_with('"') ? 1U : 0U;
+            m_diag.add(code::kFormulaSyntax,
+                       subSpan(line->valueSpan, static_cast<std::uint32_t>(error->offset) + quote,
+                               static_cast<std::uint32_t>(std::max<std::size_t>(1, error->length))),
+                       "formula: " + error->message);
+        }
+    }
+    if (Line* line = keys.take(lines(), "INPUT")) {
+        if (!project::keyboardInputFromString(line->value, controller.input)) {
+            m_diag.add(code::kUnknownKey, line->valueSpan,
+                       "unknown keyboard input '" + line->value + "'; using pitch");
+        }
+    }
+    if (Line* line = keys.take(lines(), "RANGE")) {
+        static_cast<void>(parseByteRange(*line, controller.low, controller.high));
+    }
     if (Line* line = keys.take(lines(), "PERIOD")) {
         core::Ticks period;
         if (parseDuration(line->value, m_project.tempo, line->valueSpan, m_diag, period) &&
@@ -1729,7 +1771,7 @@ void V2Parser::parseController(Section& section) {
             controller.period = period;
         }
     }
-    const std::array<std::pair<std::string_view, float*>, 8> numbers{{
+    const std::array<std::pair<std::string_view, float*>, 14> numbers{{
         {"PHASE", &controller.phase},
         {"ATTACK", &controller.attackMs},
         {"DECAY", &controller.decayMs},
@@ -1738,6 +1780,12 @@ void V2Parser::parseController(Section& section) {
         {"GAIN", &controller.gainDb},
         {"DEPTH", &controller.depth},
         {"CENTER", &controller.center},
+        {"A", &controller.a},
+        {"B", &controller.b},
+        {"C", &controller.c},
+        {"GLIDE", &controller.glideMs},
+        {"X", &controller.x},
+        {"Y", &controller.y},
     }};
     for (const auto& [key, field] : numbers) {
         if (Line* line = keys.take(lines(), key)) {
@@ -2261,6 +2309,9 @@ void V2Parser::run() {
     // Before the patterns: a lane may be drawn on `macro.<name>`. After the channels
     // and the mixer, which a macro's targets name.
     forEach("MACRO", [this](Section& s) { parseMacro(s); });
+    // After the macros, which a controller may drive; before the patterns, because a lane
+    // may be drawn on an X-Y pad's `controller.<name>.x`.
+    forEach("CONTROLLER", [this](Section& s) { parseController(s); });
 
     for (std::size_t i = 0; i < m_doc.sections().size(); ++i) {
         Section& section = m_doc.sections()[i];
@@ -2278,7 +2329,6 @@ void V2Parser::run() {
 
     forEach("PLAYLIST", [this](Section& s) { parsePlaylist(s); });
     forEach("ARRANGEMENT", [this](Section& s) { parseArrangement(s); });
-    forEach("CONTROLLER", [this](Section& s) { parseController(s); });
     forEach("MARKERS", [this](Section& s) { parseMarkers(s); });
     // After channels and patterns, which its cells name.
     forEach("SESSION", [this](Section& s) { parseSession(s); });

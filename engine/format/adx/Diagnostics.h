@@ -105,6 +105,7 @@ inline constexpr std::uint16_t kBadNameCharacter = 2012;
 inline constexpr std::uint16_t kDuplicateNoteClip = 2013;
 inline constexpr std::uint16_t kZeroId = 2014;
 inline constexpr std::uint16_t kMiniSyntax = 2015;
+inline constexpr std::uint16_t kFormulaSyntax = 2016;
 
 // 3xxx - reference resolution.
 inline constexpr std::uint16_t kUnresolvedParamPath = 3001;

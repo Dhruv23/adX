@@ -35,6 +35,10 @@ enum class ParamKind : std::uint16_t {
     /// `owner` is a MacroId: the macro's own 0..1 value (Macro.h). It is in no node's
     /// parameter slice; a lane on it becomes lanes on its targets.
     Macro,
+    /// `owner` is a ControllerId, `index` kAxisX or kAxisY: an X-Y pad's position, 0..1
+    /// (Controller.h). Like a macro it is in no node's slice; a lane on it becomes a lane
+    /// on that axis's target.
+    ControllerAxis,
 };
 
 /// A resolved parameter. POD, eight bytes, trivially copyable - which is what lets
